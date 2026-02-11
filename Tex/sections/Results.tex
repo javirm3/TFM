@@ -1,0 +1,72 @@
+\documentclass[../main.tex]{subfiles}
+\graphicspath{{\subfix{../plots/}}}
+\begin{document}
+\section{Results}
+In order to assess how well our model captures the animals' behavior, we directly compare its outcome from numerical simulations to the experimental data from mice performing the three-choice delayed response (3CDR) task. 
+
+
+We begin comparing the model predictions of accuracy –fraction of correct responses– as a function of trial difficulty with the behavioral data. To do so, we ran 1000 simulated trials and computed mean choice accuracy per condition. We defined choice accuracy as the fraction of trials in which the model decision matched the stimulus location. To mimic the various trial types used in the experiment (Figure \ref{fig:trial-types}) we used a range of stimulus offsets from 0s to 2s in 0.1s increments, while keeping the rest of parameters fixed ($S_{onset} = 0$). We explicitly included the offsets 0.35s, 0.7s and 1.05s that correspond to Hard, Medium and Easy trials (Figure \ref{fig:trial-types}). Figure~\ref{fig:sim-trial-types} shows the representation of each trial in the task and the model (a,b), and side by side the behavioral data (c) with the model results (d). As expected, making the stimulus duration progressively shorter causes the model to yield a progressively worse accuracy. We set the amplitude of the noise, such that the maximum accuracy in trials where the stimulus lasted the entire trial (Visual) was comparable to the experimental data (i.e. lower than one).  The close correspondence between model and data shows that the model reproduces the main trend in accuracy as a function of trial difficulty.  
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{plots/sim-trial-types.png}
+    \caption{
+    \textbf{a):} Representation of the conditions in the task.
+    \textbf{b):} Representation of the conditions in the model.
+    \textbf{c):} Behavioral accuracy in the 3CDR task (mean±SEM, \(n=28\) mice) for Visual, Easy (1.05s), Medium (0.70s) and Hard (0.35s) trials.  Small points are individual subjects; Shaded band indicates chance performance.  
+    \textbf{d):} Model choice accuracy as a function of stimulus offset \(t_{\mathrm{off}}^S\) (0–2s), computed from 1000 simulations per offset.  Purple markers indicate the offsets corresponding to the Easy, Medium and Hard conditions.}
+    
+  \label{fig:sim-trial-types}
+\end{figure}
+
+
+To isolate the impact of stimulus duration alone, we recreated the Variable–Stimulus trials in the simulations by fixing \(t_{\mathrm{off}}^S=1.05\)\,s and varying \(t_{\mathrm{onset}}^S\) from 0s to 1s in 0.05s increments.  At each onset we simulated 1000 trials and computed the fraction of correct responses as a function of the Stimulus onset.  Figure~\ref{fig:sim-stim-dur} (right) juxtaposes these model predictions with the behavioral data for Short/Med/Long stimulus duration (left).  The model not only reproduces the empirical accuracy for Short, Medium and Long Stimulus durations, but—because it can explore durations beyond the task’s range—also predicts that performance falls toward chance for very brief stimuli.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{plots/sim-stim-dur.png}
+  \caption{
+  \textbf{a):} Representation of the conditions in the task.
+  \textbf{b):} Representation of the conditions in the model.
+  \textbf{c):} Behavioral accuracy for Short (0.35s), Medium (0.70s) and Long (1.05s) stimulus durations (mean±SEM, \(n=28\) mice). Small points are individual subjects; Shaded band indicates chance performance. 
+  \textbf{d):} Model performance as a function of stimulus duration.  We fixed \(t_{\mathrm{off}}^S=1.05\)\,s and varied \(t_{\mathrm{on}}^S\) from 0 to 1s in 0.05s steps (1000 trials each).  Orange markers highlight Short/Med/Long stimulus durations.}
+  \label{fig:sim-stim-dur}
+\end{figure}
+
+
+Similarly, to isolate delay‐specific effects (Figure \ref{fig:trial-design} right), we ran “Variable–Delay” simulations by fixing the stimulus duration, i.e. \(t_{offset}=t_{onset} + 0.35\)s, and sweeping the stimulus onset \(t_{\mathrm{on}}^S\) from 0s to 2s in 0.1s steps, thereby varying the  delay duration before response.  For each stimulus onset condition we simulated 1000 trials and plotted the choice accuracy versus the resulting delay interval.  Figure~\ref{fig:sim-delay-dur} shows the representation of the trials in the task and the model (a,b) and presents the model results (d) alongside the behavioral points (c). The model's choice accuracy shows a non-monotonic behavior with stimulus onset: when the stimulus is presented too early \((t_{onset} = 0\), the accuracy is close to chance, as the impact of the stimulus on the targeted rate is vanished by the time the system makes a decision. As the stimulus onset is delayed, its impact on the decision increases and accuracy improves. When the stimulus falls just before the bifurcation crossing time, accuracy peaks. Stimuli presented after this time point, have a decreasing impact, as the system is already falling into the basins of attraction of one of the choices.  When comparing the onset times used in the experiment (Figure~\ref{fig:sim-delay-dur}, color dots in (d)),  the model reproduces relatively well the observed drop in accuracy as stimulus is presented earlier and the delay lengthens.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\textwidth]{plots/sim-delay-dur.png}
+  \caption{
+  \textbf{a):} Representation of the conditions in the task.
+  \textbf{b):} Representation of the conditions in the model.
+  \textbf{c):} Behavioral accuracy for Short, Medium and Long delay durations (mean±SEM across 18 mice). Small points are individual subjects; Shaded band indicates chance performance. 
+  \textbf{d):} Model performance as a function of delay duration. We fixed the stimulus duration by making \(t_{\mathrm{onset}}^S=0\)\,s and varied \(t_{\mathrm{offset}}^S\) from 0 to 2s in 0.1s steps, including in purple the three conditions that account for Short/Medium/Long delay, i.e. stimulus turning off at 0.35/0.7/1.05s.}
+  \label{fig:sim-delay-dur}
+\end{figure}
+
+Taken together, our simulations (Figures~\ref{fig:sim-trial-types}, \ref{fig:sim-stim-dur} and~\ref{fig:sim-delay-dur}) suggest that a possible explanation for choice errors in the 3CDR task is the temporal misalignment between sensory input and the crossing of the bifurcation – caused by the non‐selective urgency signal –, rather than memory decay during the delay interval. In particular:
+
+\begin{itemize}
+  \item \textbf{Early stimulus:}  If the stimulus ends before \(U(t)\) has crossed zero, the stimulus does not impact which attractor is chosen  (see the right‐most portion of the model curve in Figure~\ref{fig:sim-trial-types} (d)).
+  \item \textbf{Late stimulus onset:}  When the stimuli arrives after \(U(t)\) has already exceeded the threshold, the network has effectively “committed” to a choice. As a result, late-arriving evidence has little influence on changing the decision, causing accuracy to drop back toward chance levels (the left‐most portion of Figure~\ref{fig:sim-delay-dur} (d)).
+\end{itemize}
+
+
+
+To illustrate these two failure modes directly, Figure~\ref{fig:timing_illustration} compares aligned, early‐offset and late‐onset stimulus timing.  Each line shows the mean firing rate for a different offset. Only correct trials for the Left population are considered. The \emph{bottom} plot displays the urgency signal \(U(t)\) and the stimulus temporal profile \(S(t)\) for each onset. This figure shows an increase in the firing rate when the stimulus is presented (green line 0-0.5s). However, as this increase is not aligned with the moment U turns positive, it is attenuated and does not influence the choice. Likewise, if the stimulus is presented late, the rates are already over the decision threshold, and consequently, the effect of the stimulus on the decision is null.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.7\linewidth]{plots/avg_rates_onset0.png}
+  \caption{\textbf{Top of each panel:} Mean firing rate of the \(r_L\) population for trials where the choice was left. Each line represents trials with a different onset, \(t_{onset}^S = 0\) (green), \(t_{onset}^S = 0.7\) (orange) and \(t_{onset}^S = 1.5\) (blue). Shaded area represents 95 \% confidence intervals. Dashed horizontal line marks the decision threshold. Vertical dashed line represents the end of the corridor time which coincides with the moment in which the system crosses the bifurcation.   
+  \textbf{Bottom:} \(S(t)\) with different onsets, \(t_{onset}^S = 0\) (green), \(t_{onset}^S = 0.7\) (orange) and \(t_{onset}^S = 1.5\) (blue); dashed vertical line marks when \(U(t)\) crosses zero.}
+  \label{fig:timing_illustration}
+\end{figure}
+
+
+Thus, according to this model, it would be the \emph{alignment} of the stimulus window with the urgency dynamics what governed choice accuracy: errors reflect a mismatch between when sensory evidence is available and when the network is most sensitive to it.  
+
+\end{document}

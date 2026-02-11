@@ -1,0 +1,124 @@
+\documentclass[../main.tex]{subfiles}
+\begin{document}
+\section{Introduction}
+Neuroscience studies how the brain and the rest of the nervous system generate perception, cognition, and guide behavior. This process spans multiple spatial and temporal scales—from electrophysiological properties of individual neurons to the collective behavior of large networks across brain regions. Computational models reflect this hierarchical organization: they range from models with detailed biophysical descriptions of individual neurons,  including ion channel dynamics and synaptic interactions, to population-level models that use mean firing rate equations or mean-field approximations to capture the emergent behavior of neuronal ensembles. Some approaches even reduce the system dynamics to a low-dimensional manifold. For example, representing them within an energy landscape that captures the network’s macroscopic behavior along some relevant dimensions relevant for the studied task. A major goal in computational neuroscience is to find the simplest yet mechanistically informative description that links neural dynamics to observed behavior.
+
+
+One of the most studied processes in neuroscience is decision-making. Decisions are easy to measure —~animals and humans make choices all the time~— but the underlying neural mechanisms are inherently noisy and complex. To bridge this gap, researchers use mathematical and statistical tools to build models that predict how decision evidence is gathered over time and how it leads to a final choice. In particular, models such as drift‐diffusion models \cite{ratcliff2016, hanks2017} or attractor network models have helped explain how correct and erroneous decisions are made \cite{hopfield1982} (see Section \ref{sec:DM}).
+
+In many decision-making experiments, sensory input and the final action are separated by a delay period. During this interval, the brain must hold relevant information in working memory before executing the action. Understanding how neural circuits maintain and transform that information during the delay is essential for linking circuit dynamics to behavior.
+
+In this study, we investigate a simple decision-making task with a delayed response in which mice are presented with one of three possible visual signals, followed by a brief delay, after which they make their choice (see Section \ref{sec:MCDR}). To model their behavior, we use a network‐level firing‐rate model: a set of ordinary differential equations that track the average activity of each neuronal population over time according to its inputs and connectivity. Under conditions analogous to the task, the model generates choice predictions that can be compared directly with the mice’s behavioral data. Once this model reproduces the key behavioral results, we obtain a reduced description in terms of an energy‐landscape framework to capture its dynamical features.
+
+Thus, the aim of this work is to extend the two‐choice attractor network model proposed in \cite{inagaki2019} to a three‐choice circuit (see Section \ref{sec:Mechanisticmodel}). To achieve this, we develop a mechanistic network model that replicates mice behavior and map its dynamics onto an energy landscape to explain how decisions emerge.
+
+
+
+\subsection{Multiple-Choice Delayed Response task}
+\label{sec:MCDR}
+From an experimental point of view, the most common way to study behavior during decision-making is through two-alternative choice (2AFC) tasks. For example, a classical 2AFC task is the interaural level difference (ILD) task, where participants listen to tones presented simultaneously in both ears through headphones and are asked to indicate which side they perceive as louder \cite{hermoso-mendizabal2020}. However, tasks with only two alternatives may not capture the full casuistic of decision-making, which in natural settings typically involves multiple options (e.g. in two-choice tasks there is an artificial symmetry which causes that, independently of whether a choice is correct or incorrect, the correct answer is always known). This was the motivation to extend the traditional tasks with two choices and their associated models, to a paradigm with more options (e.g $N = 3$).
+
+If we specifically want to probe short-term memory, we can use a delayed response task, where the timing of the presented stimulus is not synchronized with the time of the response. Instead of responding immediately, subjects are presented with a mnemonic period between the stimulus presentation and the response, during which they must maintain the upcoming response in short-term memory. The longer the duration of this mnemonic period (also called delay), the more likely subjects are to make errors caused by instabilities in the memory maintenance during the delay period. 
+
+At the \href{www.braincircuitsbehavior.org}{Brain Circuits and Behavior lab (BCB)} in IDIBAPS, a well studied task is the \textbf{Three Choice Delayed Response (3CDR) Task} (see Figure \ref{fig:3CDR-task}).
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\linewidth]{figures/3cdrtask.png}
+    \caption{Diagram of the 3CDR task.}
+    \label{fig:3CDR-task}
+\end{figure}
+
+In this task, mice are trained to run through a corridor while a stimulus is displayed at a touchscreen at one of three possible positions: on the Left, Center, or Right part of the screen. When the mouse reaches a certain point in the corridor, the stimulus disappears, and mice have to briefly maintain the stimulus location in memory until they reach the screen where they report the remembered location by nose-poking. Correct responses are signaled by an auditory cue and rewarded with water with sucrose at the other end of the corridor, that is, opposite to the screen (Figure \ref{fig:3CDR-task}).
+
+Depending on the point of the corridor where the stimulus is turned off, we define 5 trial types (see Figure \ref{fig:trial-types}), which for modeling purposes we assume to have the following durations:
+\begin{enumerate}
+    \item Visually guided trials: The stimulus is present throughout the entire trial, resulting in no mnemonic period (assumed duration: 2.10 s). %We will mark them in this color: \colorbox[HTML]{FF5733}{\makebox[0.2cm][l]{\rule{0pt}{0.2cm}}}
+    \item Easy trials: The stimulus is present for the entire corridor (assumed duration: 1.05 s).
+    \item Medium trials: The stimulus is present from the beginning to $2/3$ of the corridor (assumed duration: 0.7 s).
+    \item Hard trials: The stimulus is present from the beginning to $1/3$ of the corridor (assumed duration: 0.35 s).
+    \item No stimulus trials: The stimulus is not presented.
+\end{enumerate}
+
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.375\linewidth}
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/trial-types.png}
+  \end{minipage}%
+  \hspace{0.25\linewidth}%
+  \begin{minipage}{0.375\linewidth}
+    \centering
+    \includegraphics[width=0.83\linewidth]{figures/task-times.png}
+  \end{minipage}
+  \caption{(\emph{left}) Trial types of the 3CDR task, with the stimulus presentation interval highlighted in color. The four trial types, Visual, Easy, Medium and Hard, are build by varying in each trial both the stimulus and the delay duration. (\emph{right}) Timepoints assumed for each trial type in the model. }
+    \label{fig:trial-types}
+\end{figure}
+
+However, using the five original trial types confounds two factors (stimulus duration and delay duration), making it impossible to disentangle their individual contributions to choice behavior.  To isolate the contribution of each factor, we introduced two new families of trials:
+
+\begin{enumerate}
+  \item \textbf{Variable-Stimulus duration Trials}: The delay duration is held constant by fixing the stimulus offset time, while the stimulus onset is varied to generate one of three possible durations (Short, Medium or Long stimulus; see Figure~\ref{fig:trial-design} left).
+  \item \textbf{Variable-Delay Trials}: The stimulus is presented for a fixed duration, and the subsequent delay interval (categorized as Short, Medium or Long) is imposed by varying the stimulus onset time (see Figure~\ref{fig:trial-design} right).
+\end{enumerate}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.375\linewidth}
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/stim_type.png}
+  \end{minipage}%
+  \hspace{0.05\linewidth}%
+  \begin{minipage}{0.375\linewidth}
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/delay_type.png}
+  \end{minipage}
+  \caption{(\emph{left}) Variable–Stimulus trials: delay fixed while cue duration varies across Short/Medium/Long. (\emph{right}) Variable–Delay trials: stimulus duration fixed while delay varies across Short/Medium/Long.}
+  \label{fig:trial-design}
+\end{figure}
+
+
+This design allows us to measure, independently, how the length of sensory evidence and the length of retention affect behavior.
+
+\subsection{Network Models of Decision Making}\label{sec:DM}
+Although choices seem instantaneous, they emerge from underlying neural activity. But how does this neural activity shape our decisions?
+
+Neurons, the primary computational units of the brain, are characterized by their membrane potential, which varies in response to synaptic inputs from other neurons. The membrane potential is polarized at rest, excitatory inputs depolarize it, while inhibitory inputs hyperpolarize it. When this potential reaches a certain threshold, the neuron emits an action potential, a fast and stereotyped voltage depolarization followed by a brief hyperpolarization, also called \textit{spike}. The number of spikes per unit time defines its firing rate.
+
+A central hypothesis in Neuroscience is that the minimal unit that encodes information and drives behavior is the neural ensemble (or neural population) –a group of neurons that fire together– since a single neuron on its own is too small to have an effect in behavior. To study this collective dynamics, it is often useful to describe the activity of the entire population using macroscopic variables. One such variable is the mean firing rate, which quantifies the average number of action potentials (or "spikes") generated per unit time by the neurons within that population. Rather than tracking each individual neuron, the mean firing rate captures the population-averaged collective dynamics.
+
+In this project, we consider neuronal networks consisting of different populations of excitatory and inhibitory neurons connected in a specific circuit architecture. Each excitatory population can receive inputs from other populations in the same network, or external excitatory inputs coming from outside (e.g. some sensory areas). Moreover, excitatory populations also receive self-excitation, creating strong positive feed-back loops that can self-sustain their activity over time in the absence of inputs.
+Inhibitory populations receive synaptic inputs from the different excitatory populations and send back inhibitory inputs. This creates a negative feedback loop that promotes the overall stability of the network (i.e. prevents runaway excitation) as well as, in for certain parameter, generate  a \emph{winner-take-all} dynamical regime. In this regime, once an excitatory population’s firing rate crosses a critical threshold, that we call the \textit{decision threshold}, it accelerates further reaching a high-activity state while the other populations are suppressed by the inhibition. This competitive dynamics has been proposed as the mechanism underlying the emergence of a decision.
+
+Mathematically, the network's activity can be described by a system of ordinary differential equations (ODEs) governing the dynamics of each population's firing rate.
+
+
+\subsection{Why We Develop a Mechanistic Model Integrating Urgency, Energy-Landscape and Choice Biases?} %% Instead of Motivation? 
+\label{sec:Mechanisticmodel}
+It has been observed in the 3CDR task that even in trials with no stimuli, animals answer. In classical models of decision-making, the stimulus is the only input to the populations, thus they cannot account for these observations. However, some studies suggest the existence of a common input to all populations, called an urgency signal, driving the decision in 2 choice tasks \cite{inagaki2019}.  This urgency signal is modeled as a ramping input that reaches its maximum before the decision is taken (see Figure \ref{fig:scheme-inagaki}). In this formulation, performance in the task is mainly dependent on the timing of the stimulus relative to the saturation of the urgency signal, which could explain the choices during no-stimulus trials.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/inagaki.png}
+    \caption{Decision-making network model with two excitatory populations and one inhibitory population featuring a non-selective input on top of the selective input. Arrows depict the input signals, where the colored ones show selective inputs and the black one indicates non-selective ramping input. Figure adapted from \cite{inagaki2019}.}
+    \label{fig:scheme-inagaki}
+\end{figure}
+
+
+To represent the dynamics of this decision-making models based on firing rate equations, we can treat them as a drift diffusion model (DDM). A common way to intuitively explain these dynamics is using the analogy of an energy landscape \cite{wong2006}. As shown in Figure \ref{fig:landscape2d}, the dynamics involved in a decision-making process can be visualized as the Brownian motion of a particle moving over a potential landscape (with 2 attractors in the case of a network with 2 excitatory populations). The position of the particle in the potential landscape at the end of the trial corresponds to the decision made.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.3
+    \linewidth]{figures/wong2006.png}
+    \caption{Diagram of a dynamic potential landscape and its evolution during a trial as a function of the stimulus inputs. Figure adapted from \cite{wong2006}.}
+    \label{fig:landscape2d}
+\end{figure}
+
+We will make use of the energy landscape notion to better understand the dynamics in our model with 3 populations with activities coding for each possible choice. 
+
+Additionally, it has been observed that animals in the 3CDR task tend to have a natural individual preference for some locations over others, which we call \emph{idiosyncratic choice biases}. We can explore this biased behavior in a neural network model for decision-making by introducing asymmetries in some of the network parameters.
+
+Thus, the aim of this work is to develop a mechanistic model featuring an urgency signal and parameters specific for each population to reproduce the experimental behavioral results and be able to explain the underlying network mechanisms in the 3CDR task developed in the BCB Lab. Once the firing rate model is established, we will derive an expression that captures the dynamics through an energy landscape framework.
+
+\end{document}

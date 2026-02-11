@@ -1,0 +1,118 @@
+[
+	{
+		"id": "ashwood2022",
+		"type": "article-journal",
+		"container-title": "Nature Neuroscience",
+		"DOI": "10.1038/s41593-021-01007-z",
+		"ISSN": "1097-6256, 1546-1726",
+		"issue": "2",
+		"journalAbbreviation": "Nat Neurosci",
+		"language": "en",
+		"page": "201-212",
+		"source": "DOI.org (Crossref)",
+		"title": "Mice alternate between discrete strategies during perceptual decision-making",
+		"URL": "https://www.nature.com/articles/s41593-021-01007-z",
+		"volume": "25",
+		"author": [
+			{
+				"family": "Ashwood",
+				"given": "Zoe C."
+			},
+			{
+				"family": "Roy",
+				"given": "Nicholas A."
+			},
+			{
+				"family": "Stone",
+				"given": "Iris R."
+			},
+			{
+				"literal": "The International Brain Laboratory"
+			},
+			{
+				"family": "Urai",
+				"given": "Anne E."
+			},
+			{
+				"family": "Churchland",
+				"given": "Anne K."
+			},
+			{
+				"family": "Pouget",
+				"given": "Alexandre"
+			},
+			{
+				"family": "Pillow",
+				"given": "Jonathan W."
+			}
+		],
+		"accessed": {
+			"date-parts": [
+				[
+					"2026",
+					1,
+					16
+				]
+			]
+		},
+		"issued": {
+			"date-parts": [
+				[
+					"2022",
+					2
+				]
+			]
+		}
+	},
+	{
+		"id": "mohammadi2025",
+		"type": "article-journal",
+		"abstract": "Abstract\n            Traditional models of perceptual decision-making fail to capture dynamic strategy switching in non-stationary environments, and the factors governing these switches remain unknown. To address this gap, we developed an advanced internal state model with input-driven transitions and observations. Our approach employs a hidden Markov model (HMM) coupled with two sets of per-state generalized linear models (GLMs): a Bernoulli GLM for state- and stimulus-dependent choices, and a multinomial GLM for input-dependent transitions between states. We applied our model to a decision-making task in a non-stationary environment, analyzing hundreds of thousands of trials from a cohort of mice, and found that their behavior can be accurately described by a four-state model. This model identified two engaged states with low biases relative to the stimulus and two disengaged states with pronounced biases relative to the stimulus. Our analyses revealed that mice preferentially used left-bias strategies during left-bias stimulus blocks, and right-bias strategies during right-bias stimulus blocks, achieving high performance even in disengaged states by biasing choices toward the side with greater prior probability. Our model showed that past choices and past stimuli predicted transitions between left- and right-bias states, while past rewards predicted transitions between engaged and disengaged states. In particular, greater past reward predicted transition to disengaged states, suggesting that disengagement may be associated with satiety. Our approach uncovers links between animal behavior, input regressors, and state transitions, highlighting the complexity of adaptive strategies. This provides a foundation for future research in dynamic decision-making models.",
+		"container-title": "Nature Communications",
+		"DOI": "10.1038/s41467-025-66738-0",
+		"ISSN": "2041-1723",
+		"issue": "1",
+		"journalAbbreviation": "Nat Commun",
+		"language": "en",
+		"page": "11684",
+		"source": "DOI.org (Crossref)",
+		"title": "Identifying the factors governing internal state switches during nonstationary sensory decision-making",
+		"URL": "https://www.nature.com/articles/s41467-025-66738-0",
+		"volume": "16",
+		"author": [
+			{
+				"family": "Mohammadi",
+				"given": "Zeinab"
+			},
+			{
+				"family": "Ashwood",
+				"given": "Zoe C."
+			},
+			{
+				"literal": "The International Brain Laboratory"
+			},
+			{
+				"family": "Pillow",
+				"given": "Jonathan W."
+			}
+		],
+		"accessed": {
+			"date-parts": [
+				[
+					"2026",
+					1,
+					16
+				]
+			]
+		},
+		"issued": {
+			"date-parts": [
+				[
+					"2025",
+					11,
+					27
+				]
+			]
+		}
+	}
+]

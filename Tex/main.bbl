@@ -1,0 +1,53 @@
+\begin{thebibliography}{10}
+
+\bibitem{ratcliff2016}
+Roger Ratcliff, Philip~L. Smith, Scott~D. Brown, and Gail McKoon.
+\newblock Diffusion {{Decision Model}}: {{Current Issues}} and {{History}}.
+\newblock {\em Trends in Cognitive Sciences}, 20(4):260--281, April 2016.
+
+\bibitem{hanks2017}
+Timothy~D. Hanks and Christopher Summerfield.
+\newblock Perceptual {{Decision Making}} in {{Rodents}}, {{Monkeys}}, and {{Humans}}.
+\newblock {\em Neuron}, 93(1):15--31, January 2017.
+
+\bibitem{hopfield1982}
+J~J Hopfield.
+\newblock Neural networks and physical systems with emergent collective computational abilities.
+\newblock {\em Proceedings of the National Academy of Sciences}, 79(8):2554--2558, April 1982.
+
+\bibitem{inagaki2019}
+Hidehiko~K. Inagaki, Lorenzo Fontolan, Sandro Romani, and Karel Svoboda.
+\newblock Discrete attractor dynamics underlies persistent activity in the frontal cortex.
+\newblock {\em Nature}, 566(7743):212--217, February 2019.
+
+\bibitem{hermoso-mendizabal2020}
+Ainhoa {Hermoso-Mendizabal}, Alexandre Hyafil, Pavel~E. {Rueda-Orozco}, Santiago Jaramillo, David Robbe, and Jaime De~La~Rocha.
+\newblock Response outcomes gate the impact of expectations on perceptual decisions.
+\newblock {\em Nature Communications}, 11(1):1057, February 2020.
+
+\bibitem{wong2006}
+Kong-Fatt Wong and Xiao-Jing Wang.
+\newblock A recurrent network mechanism of time integration in perceptual decisions.
+\newblock {\em The Journal of Neuroscience: The Official Journal of the Society for Neuroscience}, 26(4):1314--1328, January 2006.
+
+\bibitem{roxin2019}
+Alex Roxin.
+\newblock Drift--diffusion models for multiple-alternative forced-choice decision making.
+\newblock {\em The Journal of Mathematical Neuroscience}, 9(1):5, December 2019.
+
+\bibitem{roxin2008}
+Alex Roxin and Anders Ledberg.
+\newblock Neurobiological {{Models}} of {{Two-Choice Decision Making Can Be Reduced}} to a {{One-Dimensional Nonlinear Diffusion Equation}}.
+\newblock {\em PLoS Computational Biology}, 4(3):e1000046, March 2008.
+
+\bibitem{golubitsky1988}
+Martin Golubitsky, Ian Stewart, and David~G. Schaeffer.
+\newblock {\em Singularities and {{Groups}} in {{Bifurcation Theory}}}, volume~69 of {\em Applied {{Mathematical Sciences}}}.
+\newblock Springer New York, New York, NY, 1988.
+
+\bibitem{aubie2014}
+Brandon Aubie, Riziq Sayegh, Thane Fremouw, Ellen Covey, and Paul~A. Faure.
+\newblock Decoding stimulus duration from neural responses in the auditory midbrain.
+\newblock {\em Journal of Neurophysiology}, 112(10):2432--2445, November 2014.
+
+\end{thebibliography}

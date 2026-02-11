@@ -1,0 +1,717 @@
+\documentclass[../main.tex]{subfiles}
+\begin{document}
+\section{Mathematical model}
+To develop the mechanistic model for the 3CDR task we start from a classical population rate model, with 3 excitatory populations of neurons competing through global inhibition, with the activity of each representing the accumulated evidence for a specific decision outcome. An schematic representation of the architecture of this model is shown in Figure \ref{fig:model-rates}. The equations of the model are:
+\begin{subequations}
+\label{eq:rates}
+\begin{align}
+  \tau\,\dot{r}_L &= -r_L + \phi\bigl(s_L\,r_L - c\,r_I + I_L \bigr) + \xi_L(t) ,  \label{eq:rL}\\[1mm]
+  \tau\,\dot{r}_C &= -r_C + \phi\bigl(s_C\,r_C - c\,r_I + I_C \bigr) + \xi_C(t), \label{eq:rC}\\[1mm]
+  \tau\,\dot{r}_R &= -r_R + \phi\bigl(s_R\,r_R - c\,r_I + I_R \bigr) + \xi_R(t), 
+  \label{eq:rR}\\[1mm]
+  \tau_I\,\dot{r}_I &= -r_I + \phi_I\Bigl(\tfrac{g}{3}(r_L+r_C+r_R) + I_I\Bigr) + \xi_I(t). \label{eq:rI}
+\end{align}
+\end{subequations}
+
+In a summarized form we will write them as:
+\begin{subequations}
+\label{eq:rates-summarized}
+\begin{align}
+  \tau\,\dot{r}_\kk &= -r_\kk + \phi\Bigl(s_\kk\,r_\kk - c\,r_I + I_\kk \Bigr)+\xi_\kk(t), \quad \kk=L,C,R, \label{eq:exc}\\[1mm]
+  \tau_I\,\dot{r}_I &= -r_I + \phi_I\Bigl(\frac{g}{3}(r_L+r_C+r_R)+I_I\Bigr)+\xi_I(t), \label{eq:inh}
+\end{align}
+\end{subequations}
+where:
+\begin{itemize}
+  \item \(r_\kk\) is the firing rate of excitatory population $\kk$.
+  \item $r_I$ is the firing rate of the inhibitory population.
+  \item $s_\kk$ is the strength of excitatory self-coupling (which may differ among populations).\\ Changes in this parameter can  account for biases in behavior.
+  \item $c$ is the strength of global inhibition.
+  \item $I_\kk$ is the external input to population $\kk$.
+  \item $\xi_\kk$ is a Gaussian white‐noise process with zero mean and variance $\sigma^{2}$ (where $\sigma$ is the noise amplitude parameter).
+  \item $g$ is the strength of excitatory to inhibitory synaptic coupling.
+  \item $\phi$ is a nonlinear transfer function. We take $\phi$ as specified in \cite{roxin2019}: 
+  \[\displaystyle \phi(x)=\begin{cases}0,&x<0,\\x^2,&0\le x\le1,\\2\sqrt{x}-\tfrac34,&x>1.\end{cases}\].
+  \item $\tau$ and $\tau_I$ are the time constants for the excitatory and inhibitory populations, respectively.
+\end{itemize}
+
+
+
+\begin{figure}[H]
+\centering
+\includestandalone[width=.38\textwidth]{figures/scheme}
+\caption{Schematic representation of the network architecture of the rate model for a 3-choice task. The choices are represented by the activity of three excitatory populations labeled L (Left), C (Center), and R (Right), which receive external inputs ($I_L$, $I_C$, and $I_R$, respectively) and exhibit self-excitation with strengths $s_L$, $s_C$, and $s_R$. Each excitatory population provides drive to an inhibitory population (I) with strength $g/3$, and the inhibitory population provides feedback with strength $c$ to all excitatory populations. An external input $I_I$ is also applied to the inhibitory neural population.}
+\label{fig:model-rates}
+\end{figure}
+
+\subsection{Derivation of the Drift Diffusion Model}
+The mathematical formalism presented in this section follows the approach described in \cite{roxin2019}, which explains the general procedure for deriving a DDM for multiple alternatives. Here, we apply the methodology presented therein to derive the DDM from system \eqref{eq:rates}, based on the unfolding of the normal form associated with the bifurcation occurring at the symmetric equilibrium point (for which the three competing populations have the same firing rate, and so $I_R = I_C = I_L = I_0$). We emphasize that in our derivation, we have included variability across populations in the self-excitation coefficient $s_\kk$.
+
+To derive the normal form, we start by ignoring the noise terms in system \eqref{eq:rates}, and considering perturbations of the system around the equilibrium point, defined by $r = (R, R, R, R_I)$, where $I_R = I_C = I_L = I_0$ and $s_R = s_C = s_L = s_0$.
+
+To identify the bifurcation point, we impose that the Jacobian of the system at the equilibrium point has null determinant, 
+\smallskip
+\[
+J(X_0)=
+\begin{pmatrix}
+\frac{-1 + s_0\,\phi'}{\tau}& 0 & 0 & \frac{-c\,\phi'}{\tau}
+\\[1em]
+0 & \frac{-1 + s_0\,\phi'}{\tau}& 0 & \frac{-c\,\phi'}{\tau}
+\\[1em]
+0 & 0 & \frac{-1 + s_0\,\phi'}{\tau}& \frac{-c\,\phi'}{\tau}
+\\[1em]
+\frac{g\,\phi'_I}{3\,\tau_I}& \frac{g\,\phi'_I}{3\,\tau_I}& \frac{g\,\phi'_I}{3\,\tau_I}& -\frac{1}{\tau_I}
+\end{pmatrix}
+\qquad
+\det J(X_0)
+=\frac{\bigl(-1 + s_0\phi'\bigr)^2}{\tau^3\,\tau_I}
+\Bigl[\,-1 + s_0\phi' + g\,c\,\phi'\,\phi'_I\Bigr].
+\]
+\bigskip
+Where $\phi'$ is evaluated at the equilibrium point
+
+Thus, we obtain a condition for the bifurcation to happen:
+\begin{equation}
+  s_0\,\phi' = 1
+  \label{eq:bifurcation_condition}
+\end{equation}
+Notice that, if \eqref{eq:bifurcation_condition} is satisfied, the linearized matrix at the equilibrium point has two eigenvalues identically equal to 0 and two stable eigenvalues. 
+
+To derive the normal form we assume that the inputs for the excitatory populations have a small difference,  $I_\kk  = I_0 + \varepsilon^2\bar{I}_\kk $. We also assume that the self-coupling strength varies slightly across populations $s = s_0 +\varepsilon^2 \bar{s_\kk}$. The scaling of these terms is forced by the solvability conditions that arise at each order, as we will see later. Hence, if one chooses an scaling with more terms, only this would remain. 
+Similarly, we express the firing rates  $r(T) = (r_L(T),r_C(T),r_R(T), r_I(T))$ as an expansion in terms of $\varepsilon$ that vary on a slow time defined as $T = \varepsilon^2 t$:
+\begin{subequations}
+\label{eq:exp}
+\begin{align}
+  r_\kk (T) &= R + \varepsilon\,r_{1,\kk }(T) + \varepsilon^2\,r_{2,\kk }(T) + O(\varepsilon^3), \quad \kk =L,C,R, \label{eq:exp_ex}\\[1mm]
+  r_I(T) &= R_I + \varepsilon\,r_{1,I}(T) + \varepsilon^2\,r_{2,I}(T) + O(\varepsilon^3). \label{eq:exp_inh}
+\end{align}
+\end{subequations}
+For each order $i \in \mathbb{N}$, we will denote $r_i := (r_{i,L},\, r_{i,C},\,r_{i,R})$.
+
+We expand \eqref{eq:rates} in orders of $\varepsilon$.
+
+The fixed point is determined at \(O(1)\):
+\begin{equation}
+\begin{aligned}
+  R &= \phi\Bigl(s_0\,R - c\,R_I + I_0  \Bigr)
+  \\[1mm]
+  R_I &= \phi_I\Bigl({g}R+I_I\Bigr). \label{eq:order0}
+\end{aligned}
+\end{equation}
+
+At this point we already have 3 constraints (\cref{eq:bifurcation_condition,eq:order0}) that impose a relationship between the parameters $I_0, I_I, s_0, R$ and $R_I$.
+We will treat $s_0$ and $I_I$ as free parameters when we impose values for the model.
+\bigskip
+
+For the next orders, we first show that the system can be written in the form:
+\begin{equation}
+(L_0 + \varepsilon L_1)(\varepsilon r_1 + \varepsilon^2 r_2 + \varepsilon^3 r_3) = \varepsilon^2N_2 + \varepsilon^3N_3
+\label{eq:system-matrix}
+\end{equation}
+Next we provide details of how expression \eqref{eq:system-matrix} is obtained.
+
+
+For ease of notation we define:
+\begin{equation}
+  X_k = s_\kk r_\kk \, - c\,r_I + I_\kk , \quad \kk  = L,C,R
+  \label{eq:argument}
+\end{equation}
+Substituting the expansions \eqref{eq:exp} in \eqref{eq:argument} we obtain :
+\[
+X_\kk  = (s_0+ \varepsilon^2 \bar{s}_\kk )\,(R + \varepsilon\,r_{1,\kk } +\varepsilon^2 r_{2,\kk } \cdots) - c\,(R_I + \varepsilon\,r_{1,I}+\varepsilon^2 r_{2,I} +\cdots) + I_0 +\varepsilon^2 \bar{I}_i .
+\]
+We then group terms by powers of $\varepsilon$ and retain terms up to third order:
+\begin{itemize}
+  \item Order \(O(1)\):
+    \[
+X_{0,\kk } := X_{0} = s_0 R - c R_I +I_0
+    \]
+  \item Order \(O(\varepsilon)\):
+    \[
+   X_{1,\kk } =[s_0 r_{1,\kk }- cr_{1,I}]
+    \]
+  \item Order \(O(\varepsilon^2)\): 
+\[
+X_{2,\kk } =  [s_0 r_{2,\kk }+ R\bar{s_\kk } + \bar{I_\kk } - cr_{2,I}]
+\]
+  \item Order \(O(\varepsilon^3)\): 
+\[
+X_{3,\kk } =  [s_0 r_{3,\kk }+ r_{1,\kk }\bar{s_\kk }-cr_{3,I}]
+\]
+\end{itemize}
+
+
+We define analogous variables for the inhibitory population:
+\begin{equation}
+  X_I = \frac g3 (r_L+r_C+r_L)+I_I
+  \label{eq:argument_I}
+\end{equation}
+
+Again, substituting the expansions \eqref{eq:exp} in \eqref{eq:argument_I} we obtain:
+
+\[
+  X_I = gR+I_I + \varepsilon\frac g3 (r_{1,L}+ r_{1,C}+r_{1,R}) + \varepsilon^2 \frac g3 (r_{2,L} + r_{2,C}+ r_{2,R})
+  \label{eq:argument_I_exp}
+\]
+
+We then group terms by powers of $\varepsilon$ and retain terms up to third order:
+
+\begin{itemize}
+  \item Order \(O(1)\):
+    \[
+X_{0,I} := gR+ I_I 
+    \]
+  \item Order \(O(\varepsilon)\):
+    \[
+   X_{1, I} =[\frac g3(r_{1,L}+ r_{1,C}+r_{1,R})]
+    \]
+  \item Order \(O(\varepsilon^2)\): 
+\[
+   X_{2, I} =[\frac g3(r_{2,L}+ r_{2,C}+r_{2,R})]
+\]
+  \item Order \(O(\varepsilon^3)\): 
+\[
+X_{3,I} =  [\frac g3(r_{3,L}+ r_{3,C}+r_{3,R})]
+\]
+\end{itemize}
+
+We write
+\[
+X_\kk = X_0 + \Delta X_\kk, \text{ where } \Delta X_\kk = \sum_{i=1}^\infty\varepsilon^i X_{i,\kk}
+\]
+
+The terms $N_i$ in \eqref{eq:system-matrix} come from the Taylor expansion of $\phi$ about $X_{0}$ (or $\phi_I$ about $X_{0,I}$):
+\begin{equation}
+\phi(X_\kk ) = \phi(X_0) + \phi'(X_0) (\Delta X_\kk ) + \frac{1}{2}\,\phi''(X_0) (\Delta X_\kk )^2 +\frac{1}{6}\,\phi'''(X_0) (\Delta X_\kk )^3+ O(\left|\Delta X_\kk ^4\right|)
+\end{equation}
+
+
+From this point on, we will exclude the dependence of $\phi(X_0)$ ($\phi_I(X_{0,I})$) and its derivatives and write them as $\phi, \phi'...$ ($\phi_I, \phi_I'...$). Replacing the terms $\Delta X_\kk$ until $O(\varepsilon^3)$ in expression above and grouping terms by powers of $\varepsilon$ we obtain:
+
+\begin{equation} % Version without dependence on X0
+\phi(X_\kk )  = \phi + \varepsilon \phi' X_{\kk ,1} + \varepsilon^2 [\phi' X_{\kk ,2} + \frac12 \phi'' X_{\kk ,1}^2]+ \varepsilon^3 [\phi' X_{\kk ,3} + \phi'' X_{\kk ,1}X_{\kk ,2} +\frac16 \phi''' X_{\kk ,1}^3]
+\label{eq:taylor_exp}
+\end{equation}
+\bigskip 
+
+Substituting the Taylor expansions \eqref{eq:exp_ex}-\eqref{eq:exp_inh} in the firing rate equations \eqref{eq:rates} and collecting terms at each order in $\varepsilon$ using the expansion provided in \eqref{eq:taylor_exp}, we can obtain the matrices specified at equation \eqref{eq:system-matrix}:
+
+
+
+In \(O(\varepsilon)\):
+\begin{equation}
+\begin{aligned}
+0 & = \underbrace{(-1+s_{0} \phi'(X_0))}_{0 \text{ because of (\ref{eq:bifurcation_condition})}} r_{1,\kk } - c\phi'(X_0)r_{1,I}\\
+0 & = -r_{1,I} + \phi_I'X_{1,I}
+  \end{aligned}
+\end{equation}
+Which account for the term $O(\varepsilon)$ in \eqref{eq:system-matrix}:
+\begin{equation}
+L_0\,r_1 = 0,
+\label{eq:o1-matrix}
+\end{equation}
+where, 
+\begin{equation}
+  L_0 = \begin{pmatrix}
+    0 & 0 & 0 & c\,\phi' \\[2mm]
+    0 & 0 & 0 & c\,\phi' \\[2mm]
+    0 & 0 & 0 & c\,\phi' \\[2mm]
+    \dfrac{g}{3}\,\phi_I' & \dfrac{g}{3}\,\phi_I' & \dfrac{g}{3}\,\phi_I' & -1
+  \end{pmatrix}
+  \label{eq:L0_matrix}
+\end{equation}
+
+
+As r varies in the slow-time, applying the chain rule, $O(\varepsilon^2)$ equation is written as:
+
+\begin{equation}
+\begin{aligned}
+\tau\frac{\partial r_{1,\kk}}{\partial T} =\tau \dot{r}_{2,\kk } & = - r_{2,\kk}+ \phi'X_{2,\kk}+\frac 12 \phi'' X_{1,\kk}^2 \\ &= r_{2,\kk}\underbrace{(1-\phi's_0)}_{0 \text{ because of }\ref{eq:bifurcation_condition}} + \phi' (R\bar{s_\kk}+ \bar{I_k})- \phi'cr_{2,I} + \frac12 \phi''(s_0r_{1,\kk}-cr_{2,I})   \\
+  \tau\frac{\partial r_{1,I}}{\partial T} =\tau_I\,\dot{r}_{2,I} & = -r_{2,I} + \phi'_I X_{2,I}+ \frac 12 \phi''_IX_{2,I}^2  \\&= -r_{2,I} + \frac g3\phi'_I\sum_{\kk = L,C,R}r_{2,k} + \frac 12 \phi''_I \frac{g^2}{9}(r_{1,L}+r_{1,C}+r_{1,R})
+  \end{aligned}
+  \label{eq:order1}
+\end{equation}
+
+Thus, in \eqref{eq:system-matrix} represents the term $O(\varepsilon)$:
+\begin{equation}
+  L_0\,r_2 + L_1\,r_1 = N_2,
+  \label{eq:o2-matrix}
+\end{equation}
+
+where,
+
+\begin{equation}
+  L_1 = \begin{pmatrix}
+    \tau\,\partial_T & 0 & 0 & 0 \\[2mm]
+    0 & \tau\,\partial_T & 0 & 0 \\[2mm]
+    0 & 0 & \tau\,\partial_T & 0 \\[2mm]
+    0 & 0 & 0 & \tau_I\,\partial_T
+  \end{pmatrix}.
+  \label{eq:L1_matrix}
+\end{equation}
+\begin{equation}
+N_2 = \phi'\begin{pmatrix}
+\bar{I}_L + R\bar{s}_L \\\bar{I}_C  + R\bar{s}_C \\ 
+\bar{I}_R + R\bar{s}_R \\ 
+0
+\end{pmatrix} + \frac{1}{2} 
+\begin{pmatrix}\phi'' (s_0r_{1,L} - cr_{1,I})^2\\  
+\phi''(s_0r_{1,C} - cr_{1,I})^2\\  
+\phi''(s_0r_{1,R} - cr_{1,I})^2 \\ 
+\phi''_I \frac{g^2}{9}(r_{1,L} +r_{1,C} + r_{1,R})^2 
+\end{pmatrix}
+\label{eq:N2}
+\end{equation}
+
+
+
+\bigskip
+
+Now we can solve the equations order by order.
+
+We start solving for order $\varepsilon$ \eqref{eq:o1-matrix}. Since \(L_0\) has a nontrivial null space, we can write the solution in terms of a basis of this null space, for example, we choose:
+\[
+e_1 = (1, -1, 0, 0), \quad e_2 = (1, 1, -2, 0).
+\]
+
+Therefore, the $O(\varepsilon)$ solution can be written as:
+\[
+r_1 = e_1\,x(T) + e_2\,y(T),
+\]
+Where x and y are variables that evolve on the slow time:
+\begin{equation}
+\begin{aligned}
+x &= \frac 12(r_{1,L}-r_{1,C}),\\
+y &=  \frac 16 (r_{1,L}+r_{1,C}-2r_{1,R}).
+\end{aligned}
+\label{eq:x-y-definition}
+\end{equation}
+
+
+In consequence, we have that:
+\begin{equation}
+r_{1} = \begin{pmatrix}x+y\\-x+y\\-2y\\0 \end{pmatrix} 
+\label{eq:r1-definition}
+\end{equation}
+
+
+For $O(\varepsilon^2)$ we have:
+\begin{equation}
+  L_0\,r_2 + L_1\,r_1 = N_2,
+  \label{eq:o2-matrix}
+\end{equation}
+
+We can now rewrite $N_2$ \eqref{eq:N2} in terms of $x, y$ as:
+
+\begin{equation}
+N_2 = \phi'\begin{pmatrix}
+\bar{I}_L + R\bar{s}_L  \\
+\bar{I}_C  + R\bar{s}_C \\ 
+\bar{I}_R + R\bar{s}_R \\ 
+0
+\end{pmatrix} + \frac{s_0^2 \phi''}{2} 
+\begin{pmatrix}
+(x +y)^2\\  
+(-x + y)^2\\  
+4y^2\\ 
+0
+\end{pmatrix}
+\label{eq:N2-xy}
+\end{equation}
+
+
+Since any component of \(r_2\) in \(\ker(L_0)\) is annihilated by \(L_0\) (i.e.\ \(L_0r_2=0\) on that subspace), the inhomogeneity \(N_2\) cannot project onto \(\ker(L_0)\).  Projecting equation \eqref{eq:o2-matrix} onto each basis vector \(e_i\) of the left‐nullspace of \(L_0\) then gives, for \(i=1,2\),  
+\[
+e_i\cdot\bigl(L_0r_2\bigr) + e_i\cdot\bigl(L_1r_1\bigr)
+= e_i\cdot\!N_2
+\quad\Longrightarrow\quad
+e_i\cdot\!(L_1r_1)=e_i\cdot\!N_2,
+\]
+since \(e_i\cdot(L_0r_2)=0\).  These are the two solvability conditions:
+\[
+\begin{aligned}
+e_1\cdot(L_1r_1)&=e_1\cdot N_2,\\
+e_2\cdot(L_1r_1)&=e_2\cdot N_2.
+ \label{eq:solvability1}
+\end{aligned}
+\]
+
+Substituting the values of $L_1$ and $N_2$ (specified in equations \eqref{eq:L1_matrix} and \eqref{eq:N2-xy}): 
+\begin{align*}
+\tau \dot{x} &= \frac{\phi'}{2}(\bar{I}_L -  \bar{I}_C + R (\bar{s}_L - \bar{s}_C)) + s_0^2\phi''(xy)\\[8pt]
+\tau \dot{y} &= \frac{\phi'}{6}(\bar{I}_L +  \bar{I}_C - 2 \bar{I}_R +  R (\bar{s}_L+ \bar{s}_C -2\bar{s}_R) ) + \frac{s_0^2\phi''}{6}(x^2-3y^2) 
+\end{align*}
+
+We can include again the noise in terms of $x$, $y$ respecting the correlation between these terms that the definition of x and y imposes:
+\[\begin{aligned}
+\xi_{x} &= \frac{\xi_{L}(t)-\xi_{C}(t)}{2}\\
+\xi_{y} &= \frac{\xi_{L}(t)+\xi_{C}(t)-2\xi_{R}(t)}{6}
+\end{aligned}
+\]
+
+This results in the \textbf{second order normal form} equations:
+\begin{subequations}
+\begin{align}
+\tau \dot{x} &= \underbrace{\frac{\phi'}{2}(\bar{I}_L -  \bar{I}_C + R (\bar{s}_L - \bar{s}_C))}_{\text{drift term}} + s_0^2\phi''(xy) + \frac{1}{2}(\xi_L(t)-\xi_C(t)) \label{eq:system-o2-x}\\[8pt]
+\tau \dot{y} &= \underbrace{\frac{\phi'}{6}(\bar{I}_L +  \bar{I}_C - 2 \bar{I}_R +  R (\bar{s}_L+ \bar{s}_C -2\bar{s}_R) )}_{\text{drift term}} + \frac{s_0^2\phi''}{6}(x^2-3y^2) + \frac{1}{6}(\xi_L(t)+\xi_C(t)-2\xi_R(t))\label{eq:system-o2-y}
+\end{align}
+\label{eq:system-o2}
+\end{subequations}
+
+
+However, the resulting normal form equations, do not have any linear term, only drift terms and nonlinear terms. Without these terms, we \textbf{cannot describe the growth rate away from the point where we unfolded the bifurcation}. In terms of the energy landscape described in the introduction, the wells defined by the attractors have no outer part (see section \ref{sec:derivation-potential}: Derivation of the potential). We can go up to \textbf{third order} to obtain the terms we need.
+
+We start by solving equation \eqref{eq:o2-matrix} for $r_2$. Taking into account that $r_2$ cannot have components in the directions $e_1$, $e_2$ we arbitrarily select a base of the complementary space of $e_1,e_2$ to write $r_2$. We take $e_c = \begin{pmatrix}
+1,1,1,0\\
+\end{pmatrix}$ and $e_I = \begin{pmatrix}0,0,0,1\\\end{pmatrix}$, that represent the common and inhibition mode respectively. 
+
+Thus:
+\begin{equation}
+r_2 = e_CR_{2C} + e_IR_{2I} 
+ \implies
+r_{2} = \begin{pmatrix}R_{2C}\\R_{2C}\\R_{2C}\\R_{2I} \end{pmatrix}
+\label{eq:def-r2}
+\end{equation}
+
+
+As we did before, we project equation \eqref{eq:o2-matrix}. This time we will project onto the common and inhibitory modes. As $e_c, e_I \in \overline{ker(L_0)}$ and $r_1\in ker(L_0)$, we have that $e_C\cdot(L_1r_1)=L_1(e_C\cdot r_1) = 0$ and $e_I\cdot (L_1r_1)=0$. In consequence, projecting we obtain:
+
+\begin{equation}
+\begin{aligned}
+ e_c \cdot (L_0r_2 ) =  e_c \cdot  N_2\\[8pt]
+ e_I  \cdot  (L_0r_2 )=  e_I \cdot  N_2
+\end{aligned}
+\end{equation}
+
+%Then as, \[L_0r_2 = \begin{pmatrix}
+%c\phi'R_{2I}\\c\phi'R_{2I}\\c\phi'R_{2I}\\ -g\phi'_IR_{2C} +R_{2I}\\
+%\end{pmatrix}\]
+
+Substituting the expression above using \eqref{eq:L0_matrix}, \eqref{eq:N2} and \eqref{eq:def-r2} we obtain the system of equations:
+
+\begin{equation}
+\begin{aligned}
+3c\phi'R_{2I}  &= \phi'(\bar{I}_L+\bar{I}_C+\bar{I}_R + R(\bar{s}_L+ \bar{s}_C+ \bar{s}_R) )+ \frac{s_0^2\phi''}{2}\left(2x^2+6y^2 \right)\\[8pt]
+-g\phi'_I R_{2C} +R_{2I} &= 0
+\end{aligned}
+\label{eq:}
+\end{equation}
+
+
+Isolating, we find:
+\[
+R_{2C} = \frac{1}{g\phi'_I}R_{2I} \qquad R_{2I} = \frac{1}{3c}(\bar{I}_L+\bar{I}_C+\bar{I}_R + R(\bar{s}_L+ \bar{s}_C+ \bar{s}_R))+ \frac{s_0^2\phi''}{3c\phi'}(x^2+3y^2)
+\]
+
+Going to next order, the equations up to $O(\varepsilon^3)$ are:
+\begin{equation}
+L_0r_3 + L _{1} r_{2} = N _{3}
+\label{eq:o3-matrix}
+\end{equation}
+
+
+Where we can find $N_3$ substituting the $O(\varepsilon^3)$ in the Taylor expansion of equation \ref{eq:taylor_exp} \, 
+\[
+N_3 = 
+\phi'\begin{pmatrix}
+\bar{s}_L(x+y)\\
+\bar{s}_C(-x+y)\\ 
+\bar{s}_R(-2y)\\ 
+0
+\end{pmatrix} +\phi''s_0\begin{pmatrix}
+(x+y)(R\bar{s_L} + \underbrace{s_0R_{2C} - cR_{2I}}_{(s_0-cg\phi'_I)R_{2C}}+ \bar{I}_L)\\
+(-x+y)(R\bar{s_C} +(s_0-cg\phi'_I)R_{2C}+ \bar{I}_C)\\ 
+(-2y)(R\bar{s_R} +(s_0-cg\phi'_I)R_{2C} + \bar{I}_R)\\ 
+0
+\end{pmatrix} + \frac{\phi'''s_0^3}{6} 
+\begin{pmatrix}
+(x + y)^3\\  
+(-x + y)^3\\  
+-8y^3 \\ 
+ 0
+\end{pmatrix}
+\]
+
+As before, projecting equation \eqref{eq:o3-matrix} onto each left‐nullspace vector \(e_i\) (for \(i=1,2\)) and using \(e_i\cdot(L_0r_3)=0\) gives the solvability conditions
+\[
+e_i\!\cdot\!(L_1r_2)\;=\;e_i\!\cdot\!N_3,
+\qquad i=1,2.
+\]
+
+Solving, we find the third order terms:
+\begin{equation}
+\begin{aligned}
+0 = & \; \phi'(x(\bar{s}_L+ \bar{s}_C)+y(\bar{s}_L -\bar{s}_C))\\
+&+ s_0 \phi'' \Bigl( x(R(\bar{s}_L+\bar{s}_C)+2(s_0-cg\phi'_I)R_{2C}   + \bar{I}_L + \bar{I}_C)  + y\bigl(R(\bar{s}_L-\bar{s}_C) + \bar{I}_L - \bar{I}_C\bigr)\Bigr)\\
+&+ \frac{\phi'''s_0^3}{3}  x\bigl(x^2+3y^2\bigr)\\[2em]
+0 = &\; \phi'(x(\bar{s}_L- \bar{s}_C)+y(\bar{s}_L +\bar{s}_C+4\bar{s}_R))\\ 
+& + s_0\phi'' \Bigl(x(R(\bar{s}_L-\bar{s}_C) + \bar{I}_L - \bar{I}_C) + y(R(\bar{s}_L+\bar{s}_C+ 4\bar{s}_R)+ 6(s_0-cg\phi'_I)R_{2C}  + (\bar{I}_L + \bar{I}_C + 4\bar{I}_R))\Bigr)\\
+&+ \phi'''s_0^3 y\bigl(x^2+3y^2\bigr)
+\notag
+\end{aligned}
+\end{equation}
+
+Writing in terms of $x, y$ and adding the third order terms to the equations that we found at $O(\varepsilon^2)$  \eqref{eq:system-o2}, we obtain the expression of the DDM:
+
+
+\begin{subequations}\label{eq:system-o3} % prueba
+
+\begin{align}
+\tau \dot{x} &=\frac{\phi'}{2}(\bar{I}_L -  \bar{I}_C + x(\bar{s}_L+ \bar{s}_C)+(R+y) (\bar{s}_L - \bar{s}_C))  \notag\\
+&+ \frac{s_0\phi''}{2}\Bigl(R(\bar{s}_L+\bar{s}_C) +\bar{I}_L + \bar{I}_C + \frac{2(s_0-cg\phi'_I)}{3cg\phi'_I}\bigl(\bar{I}_L+\bar{I}_C+\bar{I}_R + R(\bar{s}_L+ \bar{s}_C+ \bar{s}_R)\bigr)\Bigr)x \notag\\
+&+ \frac{s_0\phi''}{2}\bigl(R(\bar{s}_L-\bar{s}_C) + \bar{I}_L - \bar{I}_C\bigr)y 
+  + s_0^2\phi''\,xy 
+  + \frac{(s_0-cg\phi'_I)}{3cg\phi'_I} s_0^3(\phi'')^2 x(x^2+3y^2) \label{eq:system-o3-x}\\
+&+ \frac{\phi'''s_0^3}{6}  x(x^2+3y^2) 
+  + \frac12(\xi_L(t)-\xi_C(t))\notag\\[2em]
+\tau \dot{y} &= \frac{\phi'}{6}\bigl(x(\bar{s}_L- \bar{s}_C)+y(\bar{s}_L +\bar{s}_C+4\bar{s}_R)
+  +\bar{I}_L +  \bar{I}_C - 2 \bar{I}_R +  R(\bar{s}_L+ \bar{s}_C -2\bar{s}_R)\bigr) \notag\\
+&+ \frac{s_0\phi''}{6}\Bigl(R(\bar{s}_L+\bar{s}_C+4\bar{s}_R) + (\bar{I}_L + \bar{I}_C + 4\bar{I}_R) 
+  + \frac{(s_0-cg\phi'_I)}{2cg\phi'_I}(\bar{I}_L+\bar{I}_C+\bar{I}_R + R(\bar{s}_L+ \bar{s}_C+\bar{s}_R))\Bigr)y \notag\\
+&+ \frac{s_0\phi''}{6}(R(\bar{s}_L-\bar{s}_C) + \bar{I}_L - \bar{I}_C)\,x
+  + \frac{s_0^2\phi''}{6}(x^2-3y^2) + \frac{(s_0-cg\phi'_I)}{3cg\phi'_I}s_0^3(\phi'')^2\,y(x^2+3y^2) \label{eq:system-o3-y}\\
+& + \frac{\phi'''s_0^3}{6}y(x^2+3y^2)
+  + \frac16(\xi_L(t)+\xi_C(t)-2\xi_R(t))\notag
+\end{align}
+
+\end{subequations}
+
+
+\subsection{Derivation of a potential}\label{sec:derivation-potential}
+As stated in \cite{roxin2008}, we can think of the evolution of the DDM described in equations \ref{eq:system-o3} as the Brownian motion of a particle in a potential $\psi(x,y)$, understood as an energy landscape.\\ 
+As explained in the introduction, this analogy is very useful to visually explain the dynamics of winner-take-all models. The behavior of the system when we enter the winner-take-all regime can be thought as the particle falling into a minimum of this potential.
+
+
+
+Consider the vector field that defines the DDM up to order 2 in \eqref{eq:system-o2}, that is,  $F(x,y):= (F_1(x,y),F_2(x,y)) = (\dot{x}, \dot{y})$. We define the vector field, $\bar{F} = (F_1,3F_2)$
+
+The field $\bar{F}$  is irrotational as:
+\begin{equation}
+\begin{aligned}
+ \frac{\partial {\bar F_1}}{\partial y}& = x \phi{''} s_{0}^{2} \\[8pt]
+ \frac{\partial{ \bar F_2}}{\partial x} & = x \phi{''} s_{0}^{2} 
+\end{aligned}
+\end{equation}
+
+Therefore, we can define a potential $\psi$ such that the dynamics of the equations (\ref{eq:system-o2-x}) - (\ref{eq:system-o2-y}) are equivalent to the motion of a particle on the potential $\psi$. Concretely,
+
+\begin{equation}
+    \begin{aligned}
+        \dot{x} &= -\frac{\partial\psi}{\partial x} + \sigma \frac{\xi_L-\xi_C}{2}\\
+        \dot{y} &= -\frac 13\frac{\partial\psi}{\partial y} + \sigma \frac{\xi_L+\xi_C-2\xi_R}{6}
+    \end{aligned}
+\end{equation}
+Integrating, we obtain:
+
+\begin{equation}
+\begin{aligned}
+\psi(x,y) &= -\frac{1}{2}( x^{2} y \phi'' s_{0}^{2} - x \phi' \left(I_C - I_L +R  (s_C - s_L)\right)- y^{3} \phi'' s_{0}^{2} \\&+ y \phi' \left(I_C + I_L - 2 I_R + R(s_C + s_L - 2 s_R)\right))
+\end{aligned}
+\end{equation}
+
+
+Now, if we plot the potential, we can see how, as stated before, the shape does not represent the wells completely (see Figure \ref{fig:potential-o2}).
+
+\begin{figure}[H]
+\begin{center}
+\includegraphics[width = 0.45\textwidth]{plots/potencial2.png}
+\caption{Potential obtained from the normal form up to order 2 equations \eqref{eq:system-o2}. We are fixing the parameters $s_0 = 1,\; I_L = I_C = I_R = 1$, $c = 1$, $R = 1$, $g = 1$, $s_L = s_C = s_R = 0$.}
+\label{fig:potential-o2}
+\end{center}
+\end{figure}
+
+To obtain the energy landscape we  were looking for, we can follow the same procedure for the third order DDM \eqref{eq:system-o3}:
+
+
+\begin{equation}
+\begin{aligned}
+\psi(x,y)&= \frac{1}{24 c g \phi_I'} x^{4} s_{0}^{3} (- 2 c g \phi_I' \phi''^{2} + c g \phi_I' \phi''' + 2 \phi''^{2} s_{0}) + 2 x^{2} (I_{C} c g \phi_I' \phi'' s_{0}\\
+&+ 2 I_{C} \phi'' s_{0}^{2} + I_{L} c g \phi_I' \phi'' s_{0} + 2 I_{L} \phi'' s_{0}^{2} - 2 I_{R} c g \phi_I' \phi'' s_{0} + 2 I_{R} \phi'' s_{0}^{2} + R c g \phi_I' \phi'' s_{0} s_{C}  \\
+&+ R c g \phi_I' \phi'' s_{0} s_{L} - 2 R c g \phi_I' \phi'' s_{0} s_{R} + 2 R \phi'' s_{0}^{2} s_{C} + 2 R \phi'' s_{0}^{2} s_{L} + 2 R \phi'' s_{0}^{2} s_{R}\\
+& - 6 y^{2} c g \phi_I' \phi''^{2} s_{0}^{3} + 3 y^{2} c g \phi_I' \phi''' s_{0}^{3} + 6 y^{2} \phi''^{2} s_{0}^{4} + 6 y c g \phi_I' \phi'' s_{0}^{2}  \\
+& + 3 c g \phi_I' \phi' s_{C} + 3 c g \phi_I' \phi' s_{L}) + 9 y^{4} s_{0}^{3} (- 2 c g \phi_I' \phi''^{2} + c g \phi_I' \phi''' + 2 \phi''^{2} s_{0}) \\
+& + 3 y^{2} (I_{C} c g \phi_I' \phi'' s_{0} + I_{C} \phi'' s_{0}^{2} + I_{L} c g \phi_I' \phi'' s_{0} + I_{L} \phi'' s_{0}^{2} + 7 I_{R} c g \phi_I' \phi'' s_{0}  \\
+& +   I_{R} \phi'' s_{0}^{2} + R c g \phi_I' \phi'' s_{0} s_{C} + R c g \phi_I' \phi'' s_{0} s_{L} + 7 R c g \phi_I' \phi'' s_{0} s_{R} + R \phi'' s_{0}^{2} s_{C} \\
+& + R \phi'' s_{0}^{2} s_{L} + R \phi'' s_{0}^{2} s_{R} + 2 c g \phi_I' \phi' s_{C} + 2 c g \phi_I' \phi' s_{L} + 8 c g \phi_I' \phi' s_{R}) + 12 c g \phi_I' (- x (I_{C} y \phi'' s_{0}\\
+& + I_{C} \phi' - I_{L} y \phi'' s_{0} - I_{L} \phi' + R y \phi'' s_{0} s_{C} - R y \phi'' s_{0} s_{L} + R \phi' s_{C} - R \phi' s_{L} + y \phi' s_{C}  \\
+& - y \phi' s_{L}) - y^{3} \phi'' s_{0}^{2} + y \phi' (I_{C} + I_{L} - 2 I_{R} + R s_{C} + R s_{L} - 2 R s_{R}))
+\end{aligned}
+\label{eq:potential-o3}
+\end{equation}
+This time, for certain parameters, that will be discussed in the Results section, the energy landscape has the 3 attractors that represent each choice (see Figure \ref{fig:potential-o3}).
+
+\begin{figure}[H]
+\begin{center}
+\includegraphics[width = 0.75\textwidth]{plots/potencial3.png}
+\caption{Trimmed representation of the potential obtained from the order 3 normal equations. We only represent the values $-20<Z<5$ in order to make the wells visible. We are fixing the parameters $s_0 = 1,\; I_L = I_C = I_R = 1$, $c = 1$, $R = 1$, $g = 1$, $s_L = s_C = s_R = 0$ and $I_I = \frac 13$.}
+\label{fig:potential-o3}
+\end{center}
+\end{figure}
+
+An interactive plot of this potential where the parameters can be changed is uploaded in \href{https://javirm.com/plots/potential/}{my website}.
+\newpage
+
+\subsection{Bifurcation analysis}
+
+To study the stable states of the DDM, that represent a taken decision, we will start by doing a bifurcation analysis of the system in equation \eqref{eq:system-o3} for different values of $I_I$. We will do it in terms of the perturbation of the input $\bar{I}$ that will be the same for all populations. 
+
+Following \cite{roxin2019}, we first choose the parameter $I_I = \frac14$ and we compute the bifurcation diagrams of the DDM.\\ In Figure \ref{fig:bif-1/4} we show both the $x$ and $y$ coordinates (left and right panels, respectively) of the equilibrium points. There are 4 equilibrium points: the origin $(0,0)$, which at the beginning is stable and turns unstable, and 3 saddle points $(x_1,y_1), (-x_1, y_1)$ and $(0, y_2)$. Because of the coincidence in the coordinates, some points overlap in the diagrams.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{plots/equilibria_stability_I_I_0.25.png}
+        \caption{Bifurcation diagrams in terms of the bifurcation parameter $\bar{I}$. Input of the inhibitory population $I_I$ fixed to $I_I = \frac 14$. Solid curves correspond to stable equilibrium points while dashed curves to unstable equilibrium points (see legend), the unstable equilibrium points of saddle type are dashed purple.}
+    \label{fig:bif-1/4}
+\end{figure}
+
+
+To have a better understanding of what is happening at the bifurcation, we can plot the evolution of the eigenvalues of the system's Jacobian matrix over each branch of fixed points (see Figure \ref{fig:eigs-1/4}).
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{plots/I_I_0.25_eigenvalues_branches.png}
+    \caption{Evolution of the eigenvalues of the Jacobian matrix of the DDM \eqref{eq:system-o3} in each branch of fixed points in terms of $\bar{I}$. Input of the inhibitory population $I_I$ fixed to $I_I = \frac 14$. Branch 1 corresponds to the origin \((0,0)\), branch 2  to \((0,y_2)\); branches 3 and 4 to \((x_1,y_1)\) and \((-x_1,y_1)\) }
+    \label{fig:eigs-1/4}
+\end{figure}
+\newpage
+In terms of the bifurcation parameter $\bar{I}$, we observe:
+\begin{itemize}
+  \item $\bar{I}<0$: 
+    1 stable node at $(0,0)$ and 3 symmetric saddle points.
+  \item $\bar{I}=0$: 
+    All 4 fixed points collide at the origin, the Jacobian has both null eigenvalues.
+  \item $\bar{I}>0$: 
+    The origin transforms into an unstable point and the 3 symmetric saddle points reappear.
+\end{itemize}
+The exchange of stability at $\bar I = 0$, where the origin equilibrium and the three symmetric branches swap their stability, is characteristic of a symmetric transcritical bifurcation. For more details on bifurcations of equilibrium points for systems with symmetries (as it is our case) we refer the reader to \cite{golubitsky1988}.
+
+However, this is not how we want the model to behave. This version of the system can be useful to run simulations, as we put an end to them at some point and it is not needed that the system reaches a minimum. But with this choice of $I_I$, the three stable attracting equilibrium points representing each choice do not appear.
+
+Trying other values of $I_I$, we find that if we pick parameters below $I_I = \frac 14$, we get a symmetric saddle-node bifurcation (see Figure \ref{fig:bif-1/5}). Here, we have 7 equilibrium points, $(0,0)$ remains stable initially but at a given point loses stability, there also are 3 unstable repellers points at $(x_1,y_1), (-x_1,y_1),(0,y_2)$, and 3 saddle points at $(x_3,y_3), (-x_3,y_3)$ and $(0,y_4)$. 
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{plots/equilibria_stability_I_I_0.20.png}
+    \caption{Bifurcation diagram in terms of the bifurcation parameter $\bar{I}$. Input of the inhibitory population $I_I$ fixed to $I_I = \frac 15$.}
+    \label{fig:bif-1/5}
+\end{figure}
+
+Again, this case is not relevant for our model, we do not find the three attractors that represent the choices, but 3 unstable repellers. 
+
+
+Picking a value of $I_I$ above $\frac 14$, for example $I_I = \frac 13$, we obtain another case of a saddle-node symmetric bifurcation (figure \ref{fig:bif-1/3}); We have 7 equilibrium points, $(0,0)$ that remains unstable initially but then gains stability, 3 stable points that appear at $(x_1,y_1), (-x_1,y_1),(0,y_2)$, and 3 saddle points at $(x_3,y_3), (-x_3,y_3)$ and $(0,y_4)$. We can also plot the eigenvalues of the system's Jacobian matrix over each branch of fixed points as we did before to reassure our analysis (figure \ref{fig:eigs-1/3}).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{plots/equilibria_stability_I_I_0.33.png}
+        \caption{Bifurcation diagram in terms of the bifurcation parameter $\bar{I}$. Input of the inhibitory population $I_I$ fixed to $I_I = \frac 13$. }
+    \label{fig:bif-1/3}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{plots/I_I_0.33_eigenvalues_branches.png}
+    \caption{Evolution of the eigenvalues of the Jacobian of the system in each branch of fixed points in terms of $\bar{I}$. Input of the inhibitory population $I_I$ fixed to $I_I = \frac 13$. Branch 1 corresponds to the origin \((0,0)\), branch 2, 3 and 4 to $(x_1,y_1), (-x_1,y_1)$ and $(0,y_2)$; branches 5 and 6 and 7 to $(x_3,y_3), (-x_3,y_3)$ and $(0,y_4)$}
+    \label{fig:eigs-1/3}
+\end{figure} 
+
+In terms of the bifurcation parameter $\bar{I}$, we observe:
+\begin{itemize}
+  \item $\bar{I}<\bar{I}_{bif}\approx -0.2$: 
+    1 stable trivial node at $(0,0)$
+    \item $\bar I_{bif}<\bar{I}<0 $: 
+    The equilibrium at \((0,0)\) is still a stable node, and six fixed points appear, three symmetric saddle points and three symmetric stable nodes.  
+  \item $\bar{I}=0$: 
+   The saddle points collide in the origin, where the saddle-node bifurcation originates.
+  \item $\bar{I}>0$: 
+    The origin transforms into an unstable point, the 3 symmetric saddle points and 3 symmetric stable points continue existing.
+\end{itemize}
+This scenario matches the desired dynamics: for negative inputs, the system has a single stable attractor at the origin, corresponding to the "no-decision" state. As inputs become positive, this central attractor transitions into an unstable fixed point, and three symmetric attractors appear, each representing one of the three possible choices. Figure~\ref{fig:potential-o3} illustrates the corresponding energy potential for the selected parameter \(I_I = \frac{1}{3}\), clearly revealing three distinct wells , each one corresponding to a choice, as at each well a different population has the greatest value. Henceforth, all analyses and simulations will use this chosen value of \(I_I = \frac{1}{3}\).
+
+Our bifurcation analysis thus has a clear physiological interpretation: the inhibitory input parameter \(I_I\) sets the global inhibition level in the circuit. When \(I_I\) is low, inhibition is insufficient to suppress competing populations, preventing \textit{winner‐take‐all} dynamics. Conversely, at higher levels of \(I_I\), inhibitory feedback strongly suppresses losing populations, thereby enabling the expected dynamics.
+
+
+In summary, below the bifurcation point, the central attractor at the origin corresponds to the "no-decision" state, characterized by firing rates that remain low, never crossing the decision threshold. As the input grows beyond the bifurcation point, this attractor loses stability, becoming a local maximum, while three new stable attractors form in a triangular arrangement around it. Because these peripheral attractors lie beyond the decision threshold in rate-space, trajectories moving toward them necessarily drive the firing rates of their corresponding population above the decision criterion, effectively enforcing a choice. In summary, negative inputs maintain the network within the no-decision basin, whereas positive inputs drive the network state toward one of the choice attractors, implementing a robust decision-making process.
+
+
+
+\subsection{Studying the parameters effect on the simulations}
+Having established the normal‐form reduction and the bifurcation structure of our decision‐making network model, we now explore its stochastic dynamic behavior via numerical simulations in which we include the noise terms.  Our goal here is to try to reproduce with the model some of the mouse behavioral results observed in the experiments.
+
+For all simulations, we set the model time‐constant to \(\tau=0.1\)s and integrate the DDM \eqref{eq:system-o3} using the Euler–Maruyama scheme with \(\Delta t = \tau/40\).  We adopt the parameter values from \cite{roxin2019}: \(s_{0}=c=g=1\) and additionally take \(I_{I}=1/3\), which yields the saddle node bifurcation with 3 stable points. To preserve symmetry we use an unbiased network with \(s_{L}=s_{C}=s_{R}\). The more general case in which this asymmetry is broken by introducing differences in these parameters, can be also simulated and the results resemble some of the idiosyncratic choice biases exhibited by the mice (simulations not shown). To compare with the experiments, we numerically simulate trials with the same temporal structure as in the animal task. Each trial lasts for \(T=2.1\)s, with the mouse reaching the end of the corridor at \(t=1.05\)s; each third of the corridor, representing the points where the stimulus can be turned on or off (Figure \ref{fig:trial-types}) therefore corresponds to 0.35 s.  
+
+To realize the input decomposition described in the introduction, we split the external input onto the excitatory populations \(I_k\) into two distinct components:
+\begin{itemize}
+  \item A common non‐selective \emph{urgency signal} \(U(t)\), 
+  \item A location‐specific \emph{stimulus} \(S_{\kk}(t)\), with \(\kk\in\{L,C,R\}\), corresponding to the side on which the cue appears in the 3CDR task.
+\end{itemize}
+For simplicity, we always apply the stimulus to the left population (\(S_L\)), and take the decision threshold value directly from \cite{roxin2019}, $r_{threshold} = 0.5$.
+
+The urgency signal is readily implemented as a linear ramp that begins with an initial value below zero—so that the network initially remains in the ``no‐decision'' attractor regime — and crosses the bifurcation into the positive regime over the course of the trial (Figure \ref{fig:input-parameters}):
+\[
+U(t) \;=\;
+\begin{cases}
+-1 + A_U\,\dfrac{t - t_{\mathrm{on}}^U}{t_{\mathrm{off}}^U - t_{\mathrm{on}}^U}, 
+& t_{\mathrm{on}}^U \le t \le t_{\mathrm{off}}^U,\\[6pt]
+-1, & \text{otherwise},
+\end{cases}
+\]
+
+We set the urgency ramp so that it crosses zero exactly at the end of the corridor ($t=1.05\,$s), and use these values as the baseline for all simulations:
+\[
+t_{\mathrm{on}}^U = 0.0\ \mathrm{s}, 
+\quad
+t_{\mathrm{off}}^U = 2.10\ \mathrm{s}, 
+\quad
+A_U = 2,
+\]
+
+To implement the stimuli we have to take into account that physiologically, the neural response to a brief sensory cue persists longer than its physical presentation due to membrane and synaptic dynamics, as well as recurrent circuit reverberation of sensory areas \cite{aubie2014}. To capture this extended impact, we model the stimulus \(S_{\kk}(t)\) as a constant step current of amplitude \(S_{\mathrm{amp}}\) and duration matching the stimulus duration, but followed by an exponential decay to zero (Figure \ref{fig:input-parameters}):
+\[
+S_{\kk}(t) = 
+\begin{cases}
+S_{\mathrm{amp}}, 
+& t_{\mathrm{on}}^S \le t \le t_{\mathrm{off}}^S,\\[3pt]
+S_{\mathrm{amp}}\;\exp\!\bigl[-3\,\tfrac{t - t_{\mathrm{off}}^S}{\tau}\bigr], 
+& t_{\mathrm{off}}^S \le t \le t_{\mathrm{off}}^S + d_S,\\[3pt]
+0, & \text{otherwise},
+\end{cases}
+\]
+
+
+Likewise, we fix the stimulus amplitude at 
+\[
+S_{\mathrm{amp}} = 0.1. 
+\quad
+d_S = 0.35
+\]
+These baseline parameters will remain constant throughout the subsequent simulation experiments, where we will then explore the effects of varying the stimulus timing.
+
+
+Figure~\ref{fig:input-parameters} summarizes our baseline parameterization of the urgency ramp and the stimulus waveform for a give trial condition (i.e. \textit{medium} in Figure \ref{fig:trial-types}).
+\smallskip
+
+\tikzexternaldisable
+\begin{figure}[H]
+\centering
+\includestandalone[width=\textwidth]{figures/scheme_U_2}
+\caption{Urgency signal input $U(t)$ (purple; common to all populations) and stimulus $S(t)$ (orange; injected onto one of the populations). Black dashed vertical lines mark stimulus onset and offset which in this example illustrte a trial of medium difficulty (i.e. short delay). The double‐headed arrow indicates stimulus duration. The blue dashed line at $t=1.05\,$s shows when $U(t)$ crosses zero and the system crosses the bifurcation  triggering the decision.}
+\label{fig:input-parameters}
+\end{figure}
+\tikzexternalenable
+
+We can then run a simulation of the DDM on an easy trial, recover the rate values using equation \eqref{eq:r1-definition} and inspect the stochastic dynamics across the trial, (see Figure~\ref{fig:single-trial} (a)). The top panel shows the firing rates \(r_L\) (red), \(r_C\) (green) and \(r_R\) (blue), with the horizontal dash–dot line marking the decision threshold.  In this trial, the model ends up "correctly" making a Left choice as the left‐population rate \(r_L\) exceeds threshold. This increase in firing by one of the choice populations occurs when the urgency signal \(U(t)\) has grown sufficiently large (purple, bottom panel).  The stimulus waveform \(S_L(t)\) (orange) remains at its full amplitude until the end of the corridor time (1.05s) and then decays exponentially. The impact of the stimulus is to transiently increase the rate \(r_R\) such that, when the model crosses the bifurcation, the system evolves to the associated attractor state. 
+
+\begin{figure}[htbp]
+  \centering
+  %\includegraphics[width=0.75\textwidth]{plots/rates_1.05.png}
+  \includegraphics[width=\textwidth]{plots/potential_rates.png}
+  \caption{Model dynamics during an Easy trial.
+  \textbf{a):}
+  \emph{Top:} firing rates \(r_L\), \(r_C\), \(r_R\), and decision threshold (dash–dot).  \emph{Bottom:} urgency signal \(U(t)\) and stimulus temporal profile \(S_L(t)\). Vertical dashed line represents the end of the corridor time which coincides with the moment in which the system crosses the bifurcation. 
+  \textbf{b):} Potential landscape at the end of the trial (\(t=2.1\)\,s). Contour lines show energy levels; red, green and blue circles denote the unstable repeller, saddle points and stable attractors, respectively. The solid blue curve is the \((x(t),y(t))\) trajectory from the central basin into the left‐choice well.}
+  \label{fig:single-trial}
+\end{figure}
+
+The dynamics of the rates in this trial can also be visualized in the reduced two‐dimensional state‐space by plotting the trajectory \(x(t), y(t)\) on the potential landscape (see Figure~\ref{fig:single-trial} (b)). Contour lines represent the energy function; red markers indicate the unstable repeller at the origin, green markers the saddle points, and blue markers the stable attractor points. The blue curve traces the evolution of \((x(t),y(t))\) as the system escapes the central basin and converges into the left‐choice well.
+
+\end{document}

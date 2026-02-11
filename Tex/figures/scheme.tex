@@ -1,0 +1,46 @@
+\documentclass[tikz,border=2pt]{standalone}
+\usetikzlibrary{arrows.meta, positioning, calc}
+\usepackage{amsmath}
+   % ColorBrewer Set1 - Gray
+\begin{document}
+\tikzexternaldisable
+\begin{tikzpicture}[>=Stealth,
+  neuron/.style={draw, circle, minimum size=2.0cm, inner sep=4pt, font=\Huge},
+  arrowlabel/.style={draw=none, fill=none, font=\Huge}]
+
+  % Define positions for the excitatory neurons (L, C, R)
+  % For an equilateral triangle of side 8:
+  % L at (-4, 0), R at (4, 0), C at (0, 6.928)
+  \node[neuron, fill=cb1] (L) at (-4,0) {L};
+  \node[neuron, fill=cb2] (C) at (0,6.928) {C};
+  \node[neuron, fill=cb3] (R) at (4,0) {R};
+  
+  % The inhibitory neuron (I) is placed at the centroid:
+  % Centroid of triangle with vertices (-4,0), (4,0), (0,6.928) is at (0, (0+0+6.928)/3) = (0,2.309)
+  \node[neuron, fill=gray!50] (I) at (0,2.309) {I};
+
+  % Draw self-loops (representing self-excitation) for each excitatory neuron.
+  \draw[->, thick] (L) edge[loop left] node[arrowlabel, left] {$s_L$} (L);
+  \draw[->, thick] (C) edge[loop above] node[arrowlabel, above] {$s_C$} (C);
+  \draw[->, thick] (R) edge[loop right] node[arrowlabel, right] {$s_R$} (R);
+
+  % Draw connections from each excitatory neuron to the inhibitory neuron.
+  \draw[->, thick, bend left=20] (L) edge node[arrowlabel, above] {$\tfrac{g}{3}$} (I);
+  \draw[->, thick, bend left=20] (C) edge node[arrowlabel, right] {$\tfrac{g}{3}$} (I);
+  \draw[->, thick, bend left=20] (R) edge node[arrowlabel, left, xshift = -5pt, yshift = -7.5pt] {$\tfrac{g}{3}$} (I);
+
+  % Draw feedback connections from the inhibitory neuron to each excitatory neuron.
+  \draw[->, thick, bend left=20] (I) edge node[arrowlabel, right, xshift = 5pt] {$c$} (L);
+  \draw[->, thick, bend left=20] (I) edge node[arrowlabel, left] {$c$} (C);
+  \draw[->, thick, bend left=20] (I) edge node[arrowlabel, right, xshift = 10pt, yshift = 10pt] {$c$} (R);
+
+  % Draw external input arrows (dashed) to each excitatory neuron.
+  \draw[->, dashed, thick] ($(L)+(0,3)$) -- (L) node[arrowlabel, pos = 0, yshift = 15pt ] {$I_L$};
+  \draw[->, dashed, thick] ($(C)+(3,0)$) -- (C) node[arrowlabel, right,pos = 0] {$I_C$};
+  \draw[->, dashed, thick] ($(R)+(0,3)$) -- (R) node[arrowlabel, pos = 0, yshift = 15pt ]  {$I_R$};
+  % Draw external input arrow to the inhibitory neuron.
+  \draw[->, dashed, thick] ($(I)+(0,-3)$) -- (I) node[arrowlabel, pos = 0, below] {$I_I$};
+
+\end{tikzpicture}
+\tikzexternalenable
+\end{document}

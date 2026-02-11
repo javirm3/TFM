@@ -1,0 +1,119 @@
+\documentclass[12,twoside]{TFG-GM}
+%\usepackage[active]{srcltx}
+\usepackage{amsthm,amsmath,amssymb,amsfonts,amscd}
+\usepackage{graphicx}
+\usepackage{pdfpages}
+\usepackage{enumerate}
+\usepackage[all]{xy}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{cleveref}
+\usepackage{pgfplots}
+\usepackage{tikz}
+\usepackage{fontspec}
+\usepackage[default,scale=0.95]{opensans}
+% \usepackage[utopia,expert]{mathdesign}
+% \usepackage{venturis}
+% \usepackage[normalem]{ulem}
+\usetikzlibrary{arrows.meta, positioning, calc, decorations.pathreplacing}
+\usetikzlibrary{external}
+\usepackage{standalone}
+\usepackage[svgnames]{xcolor}
+\usepackage{subfiles} 
+\definecolor{cb1}{HTML}{E41A1C}    % ColorBrewer Set1 - Red
+\definecolor{cb2}{HTML}{4DAF4A}    % ColorBrewer Set1 - Green
+\definecolor{cb3}{HTML}{377EB8}    % ColorBrewer Set1 - Blue
+\definecolor{cb4}{HTML}{999999}    % ColorBrewer Set1 - Gray
+\definecolor{lila}{RGB}{152,78,163}
+\definecolor{amarillo}{RGB}{255,127,0}
+\tikzexternalize[prefix=figures/]
+
+
+%\usepackage[usenames]{xcolor}
+%\usepackage{fancyhdr}
+
+%%%%%Author packages if necessary
+
+
+% Theorem Environments: add extra ones at the end if you need it.
+
+\newtheorem*{theoremA}{Theorem A}
+\newtheorem{theorem}{Theorem}[section]
+
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{conjecture}[theorem]{Conjecture}
+
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem*{remarknonumber}{Remark}
+\newtheorem{observation}[theorem]{Observation}
+
+
+
+
+%%%%%%%%%%%%%%%%%%
+% macros/abbreviations: Include here your own.
+%%%%%%%%%%%%%%%%%%
+
+\newcommand{\N}{\ensuremath{\mathbb{N}}}
+\newcommand{\kk}{\mathrm{k}}
+
+% Body of document
+
+\titol{Neural Network Models of Multi-choice decision making}
+\titolcurt{Neural Network Models of Decision Making}
+\authorStudent{F. Javier Rodríguez Martínez}
+\supervisors{Gemma Huguet and Jaime De la Rocha}
+\monthYear{May, 2025}
+
+%\msc[2010]{Primary  	55M25, 57P10, Secondary 55P15, 57R19, 57N15.}
+
+\paraulesclau{Decision making, neural circuit, multi-choice tasks, rate model, Drift‐diffusion model, energy potential}
+
+\input{sections/acknowledgements}
+
+\input{sections/abstract.tex}
+
+\setlength\parindent{0pt}
+%%%%%%%%%
+\begin{document}
+
+\includepdf[pages=1]{cover.pdf}
+\maketitle
+
+\tableofcontents    
+\newpage 
+
+\subfile{sections/Introduction.tex}
+
+\newpage
+\subfile{sections/Methods.tex}
+
+\newpage
+
+\subfile{sections/Results.tex}  
+
+\newpage
+\subfile{sections/Discussion.tex}
+\newpage
+\section{Bibliography}
+
+%\bibliographystyle{plain}
+\bibliographystyle{unsrt}
+\bibliography{TFG}
+%______________________________________________________________
+%\appendix
+%\vfill\newpage \section{Title of the appendix}
+%You can include here an appendix with details that can not be included %in the core of the document. You should reference the sections in this %appendix in the core document.
+%\vfill\newpage \section{Title of the appendix}
+%Second appendix.
+
+\end{document}
+
+

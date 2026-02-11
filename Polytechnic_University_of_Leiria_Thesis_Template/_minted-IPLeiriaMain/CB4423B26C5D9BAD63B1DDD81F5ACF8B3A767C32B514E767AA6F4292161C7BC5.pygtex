@@ -1,0 +1,40 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{p}{(}\PYG{n+nb}{defun}\PYG{+w}{ }\PYG{n+nv}{factorial}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{n}\PYG{p}{)}
+\PYG{+w}{  }\PYG{l+s}{\PYGZdq{}Calculate the factorial of a number.\PYGZdq{}}
+\PYG{+w}{  }\PYG{p}{(}\PYG{k}{if}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{zerop}\PYG{+w}{ }\PYG{n+nv}{n}\PYG{p}{)}
+\PYG{+w}{      }\PYG{p}{(}\PYG{n+nb}{*}\PYG{+w}{ }\PYG{n+nv}{n}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{factorial}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{1\PYGZhy{}}\PYG{+w}{ }\PYG{n+nv}{n}\PYG{p}{)))))}
+
+\PYG{p}{(}\PYG{n+nb}{defun}\PYG{+w}{ }\PYG{n+nv}{fibonacci}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{n}\PYG{p}{)}
+\PYG{+w}{  }\PYG{l+s}{\PYGZdq{}Calculate the nth Fibonacci number.\PYGZdq{}}
+\PYG{+w}{  }\PYG{p}{(}\PYG{n+nb}{cond}\PYG{+w}{ }\PYG{p}{((}\PYG{n+nb}{zerop}\PYG{+w}{ }\PYG{n+nv}{n}\PYG{p}{)}\PYG{+w}{ }\PYG{l+m+mi}{0}\PYG{p}{)}
+\PYG{+w}{        }\PYG{p}{((}\PYG{n+nb}{=}\PYG{+w}{ }\PYG{n+nv}{n}\PYG{+w}{ }\PYG{l+m+mi}{1}\PYG{p}{)}\PYG{+w}{ }\PYG{l+m+mi}{1}\PYG{p}{)}
+\PYG{+w}{        }\PYG{p}{(}\PYG{n+no}{t}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{+}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{fibonacci}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{1\PYGZhy{}}\PYG{+w}{ }\PYG{n+nv}{n}\PYG{p}{))}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{fibonacci}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nv}{n}\PYG{+w}{ }\PYG{l+m+mi}{2}\PYG{p}{))))))}
+
+\PYG{p}{(}\PYG{n+nb}{defun}\PYG{+w}{ }\PYG{n+nb}{gcd}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{a}\PYG{+w}{ }\PYG{n+nv}{b}\PYG{p}{)}
+\PYG{+w}{  }\PYG{l+s}{\PYGZdq{}Calculate the greatest common divisor of a and b.\PYGZdq{}}
+\PYG{+w}{  }\PYG{p}{(}\PYG{k}{if}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{zerop}\PYG{+w}{ }\PYG{n+nv}{b}\PYG{p}{)}
+\PYG{+w}{      }\PYG{n+nv}{a}
+\PYG{+w}{      }\PYG{p}{(}\PYG{n+nb}{gcd}\PYG{+w}{ }\PYG{n+nv}{b}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{mod}\PYG{+w}{ }\PYG{n+nv}{a}\PYG{+w}{ }\PYG{n+nv}{b}\PYG{p}{))))}
+
+\PYG{p}{(}\PYG{n+nb}{defun}\PYG{+w}{ }\PYG{n+nv}{primes\PYGZhy{}up\PYGZhy{}to}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{limit}\PYG{p}{)}
+\PYG{+w}{  }\PYG{l+s}{\PYGZdq{}Return a list of all prime numbers up to LIMIT.\PYGZdq{}}
+\PYG{+w}{  }\PYG{p}{(}\PYG{k}{let}\PYG{+w}{ }\PYG{p}{((}\PYG{n+nv}{primes}\PYG{+w}{ }\PYG{o}{\PYGZsq{}}\PYG{p}{()))}
+\PYG{+w}{    }\PYG{p}{(}\PYG{n+nb}{loop}\PYG{+w}{ }\PYG{n+nv}{for}\PYG{+w}{ }\PYG{n+nv}{i}\PYG{+w}{ }\PYG{n+nv}{from}\PYG{+w}{ }\PYG{l+m+mi}{2}\PYG{+w}{ }\PYG{n+nv}{to}\PYG{+w}{ }\PYG{n+nv}{limit}
+\PYG{+w}{          }\PYG{n+nb}{unless}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{some}\PYG{+w}{ }\PYG{p}{(}\PYG{k}{lambda}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{p}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{zerop}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{mod}\PYG{+w}{ }\PYG{n+nv}{i}\PYG{+w}{ }\PYG{n+nv}{p}\PYG{p}{)))}\PYG{+w}{ }\PYG{n+nv}{primes}\PYG{p}{)}
+\PYG{+w}{          }\PYG{n+nb}{do}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{push}\PYG{+w}{ }\PYG{n+nv}{i}\PYG{+w}{ }\PYG{n+nv}{primes}\PYG{p}{))}
+\PYG{+w}{    }\PYG{p}{(}\PYG{n+nb}{nreverse}\PYG{+w}{ }\PYG{n+nv}{primes}\PYG{p}{)))}
+
+\PYG{p}{(}\PYG{n+nb}{defun}\PYG{+w}{ }\PYG{n+nv}{example\PYGZhy{}function}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{x}\PYG{p}{)}
+\PYG{+w}{  }\PYG{l+s}{\PYGZdq{}An example function to demonstrate Lisp capabilities.\PYGZdq{}}
+\PYG{+w}{  }\PYG{p}{(}\PYG{k}{let}\PYG{+w}{ }\PYG{p}{((}\PYG{n+nv}{result}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{list}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{factorial}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{p}{)}
+\PYG{+w}{                      }\PYG{p}{(}\PYG{n+nv}{fibonacci}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{p}{)}
+\PYG{+w}{                      }\PYG{p}{(}\PYG{n+nb}{gcd}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{+w}{ }\PYG{l+m+mi}{10}\PYG{p}{)}
+\PYG{+w}{                      }\PYG{p}{(}\PYG{n+nv}{primes\PYGZhy{}up\PYGZhy{}to}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{p}{))))}
+\PYG{+w}{    }\PYG{p}{(}\PYG{n+nb}{format}\PYG{+w}{ }\PYG{n+no}{t}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}Factorial of \PYGZti{}A: \PYGZti{}A\PYGZti{}\PYGZpc{}\PYGZdq{}}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{factorial}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{p}{))}
+\PYG{+w}{    }\PYG{p}{(}\PYG{n+nb}{format}\PYG{+w}{ }\PYG{n+no}{t}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}Fibonacci of \PYGZti{}A: \PYGZti{}A\PYGZti{}\PYGZpc{}\PYGZdq{}}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{fibonacci}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{p}{))}
+\PYG{+w}{    }\PYG{p}{(}\PYG{n+nb}{format}\PYG{+w}{ }\PYG{n+no}{t}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}GCD of \PYGZti{}A and 10: \PYGZti{}A\PYGZti{}\PYGZpc{}\PYGZdq{}}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{gcd}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{+w}{ }\PYG{l+m+mi}{10}\PYG{p}{))}
+\PYG{+w}{    }\PYG{p}{(}\PYG{n+nb}{format}\PYG{+w}{ }\PYG{n+no}{t}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}Primes up to \PYGZti{}A: \PYGZti{}A\PYGZti{}\PYGZpc{}\PYGZdq{}}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nv}{primes\PYGZhy{}up\PYGZhy{}to}\PYG{+w}{ }\PYG{n+nv}{x}\PYG{p}{))}
+\PYG{+w}{    }\PYG{n+nv}{result}\PYG{p}{))}
+
+\PYG{p}{(}\PYG{n+nv}{example\PYGZhy{}function}\PYG{+w}{ }\PYG{l+m+mi}{10}\PYG{p}{)}
+\end{Verbatim}
