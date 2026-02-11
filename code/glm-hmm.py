@@ -199,6 +199,30 @@ class SoftmaxGLMHMM(HMM):
             key3, method=method, emission_weights=emission_weights)
 
         return ParamsSoftmaxGLMHMM(**params), ParamsSoftmaxGLMHMM(**props)
+    
+    def predict_choice_probs(self, params, emissions, inputs):
+        """
+        Devuelve p(y_t=c | y_{1:t-1}, x_{1:t})
+        (one-step-ahead predictive distribution).
+        """
+
+        filt = self.filter(params=params, emissions=emissions, inputs=inputs)
+        alpha = filt.filtered_probs
+
+        T, K = alpha.shape
+        A = self.transition_component._compute_transition_matrices(params.transitions, inputs)
+
+        if A.ndim == 2:  # homogeneous transitions
+            A = jnp.broadcast_to(A[None, :, :], (T-1, K, K))
+
+        def emission_probs_t(t):
+            return jax.vmap(lambda k: self.emission_component.distribution(params.emissions, k, inputs[t]).probs_parameter())(jnp.arange(K))
+
+        p_y_given_z = jax.vmap(emission_probs_t)(jnp.arange(T))  # (T,K,C)
+        pi = params.initial.probs  # (K,)
+        pred_z = jnp.vstack([pi, jnp.einsum("tk,tkj->tj", alpha[:-1], A)])
+
+        return jnp.einsum("tk,tkc->tc", pred_z, p_y_given_z)
 
 class ParamsInputDrivenTransitions(NamedTuple):
     bias: Union[Float[Array, "num_states num_states"], ParameterProperties]
@@ -366,11 +390,11 @@ A = np.asarray(fitted_params.transitions.transition_matrix)
 print("Transition matrix A:")
 print(np.round(A, 3))
 
-gamma = np.asarray(posterior2.smoothed_probs)   # (T, K)
+gamma = np.asarray(posterior.smoothed_probs)   # (T, K)
 
 # 2) logits por estado y trial: logits[t,k,c] = W[k,c,:] @ X[t,:]
-W = np.asarray(fitted_params2.emissions.weights)  # (K, C, M)
-logits = np.einsum("kcm,tm->tkc", W, np.asarray(X)[:,1:])  # (T, K, C)
+W = np.asarray(fitted_params.emissions.weights)  # (K, C, M)
+logits = np.einsum("kcm,tm->tkc", W, X[:,1:])  # (T, K, C)
 
 # 3) softmax en C para obtener p(y|z=k,x)
 logits = logits - logits.max(axis=2, keepdims=True)     # estabilidad numérica
@@ -379,11 +403,14 @@ p_y_given_z = p_y_given_z / p_y_given_z.sum(axis=2, keepdims=True)  # (T,K,C)
 
 # 4) mezcla por gamma: p_pred[t,c] = sum_k gamma[t,k] * p_y_given_z[t,k,c]
 p_pred = np.einsum("tk,tkc->tc", gamma, p_y_given_z)    # (T, C)
-filt = model.filter(params=fitted_params2, emissions=y, inputs=X[:,1:])
+filt = model.filter(params=fitted_params, emissions=y, inputs=X[:,1:]
 alpha = np.asarray(filt.filtered_probs)   # (T, K)  p(z_t | y_{1:t})
 
 p_pred = np.einsum("tk,tkc->tc", alpha, p_y_given_z)
-# p_pred[:,0]=pL, p_pred[:,1]=pC, p_pred[:,2]=pR (según tu codificación)
+
+# p_pred = np.asarray(model3.predict_choice_probs(fitted_params3, y, jnp.concatenate([X[:, :1], X[:, 3:]], axis=1)))
+# p_pred = np.asarray(model.predict_choice_probs(fitted_params, y, X[:,1:]))
+
 pL, pC, pR = p_pred[:,0], p_pred[:,1], p_pred[:,2]
 
 df_sub = df.filter(pl.col("subject") == "A92").sort("trial_idx")
