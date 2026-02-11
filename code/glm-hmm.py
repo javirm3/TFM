@@ -80,7 +80,7 @@ def build_sequence_from_df(df_sub: pl.DataFrame):
 
     y = df_sub["response"].to_numpy()
 
-    X = df_sub.select(["bias", "biasC", "biasR", "delay", "SL", "SC", "SR", "previous_outcome"]).to_numpy().astype(np.float32)
+    X = df_sub.select(["bias", "biasL", "biasC", "biasR", "delay", "SL", "SC", "SR", "previous_outcome"]).to_numpy().astype(np.float32)
 
     return jnp.asarray(y), jnp.asarray(X)
 
@@ -287,13 +287,13 @@ class InputDrivenSoftmaxTransitions(HMMTransitions):
 
 num_states= 2         # nº estados
 emmision_dim = 3          # 3 choices
-input_dim = 7          # intercept + delay + stim_L + stim_C + stim_R + previous_outcome
+input_dim = 8          # intercept + delay + stim_L + stim_C + stim_R + previous_outcome
 
 model = SoftmaxGLMHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim, m_step_num_iters=100, transition_matrix_stickiness=10.0)
 
-model2 = CategoricalRegressionHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim-1, transition_matrix_stickiness=10.0, m_step_optimizer=optax.adam(1e-3), m_step_num_iters=500,)
+model2 = CategoricalRegressionHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim-2, transition_matrix_stickiness=10.0, m_step_optimizer=optax.adam(1e-3), m_step_num_iters=500,)
 
-model3 = SoftmaxGLMHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim-1, m_step_num_iters=100, transition_matrix_stickiness=10.0)
+model3 = SoftmaxGLMHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim-2, m_step_num_iters=100, transition_matrix_stickiness=10.0)
 
 key = jr.PRNGKey(12345)
 params, props = model.initialize(key=key)
@@ -303,16 +303,16 @@ params3, props3 = model3.initialize(key=key)
 df = pl.read_parquet(paths.DATA_PATH/"df_filtered.parquet")
 y, X = build_sequence_from_df(df.filter(pl.col("subject") == "A92"))
 
-At = action_trace(y, tau=50.0)
+# At = action_trace(y, tau=50.0)
 
 fitted_params, lps = model.fit_em(params=params, props=props, emissions=y, inputs=X[:,1:], num_iters=50)
-fitted_params2, lps2 = model2.fit_em(params=params2, props=props2, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 3:]], axis=1), num_iters=50)
-fitted_params3, lps3 = model3.fit_em(params=params3, props=props3, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 3:]], axis=1), num_iters=50)
+fitted_params2, lps2 = model2.fit_em(params=params2, props=props2, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1), num_iters=50)
+fitted_params3, lps3 = model3.fit_em(params=params3, props=props3, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1), num_iters=50)
 
 
 posterior = model.smoother(params=fitted_params, emissions=y, inputs=X[:,1:])
-posterior2 = model2.smoother(params=fitted_params2, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 3:]], axis=1))
-posterior3 = model3.smoother(params=fitted_params3, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 3:]], axis=1))
+posterior2 = model2.smoother(params=fitted_params2, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1))
+posterior3 = model3.smoother(params=fitted_params3, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1))
 
 T = int(y.shape[0])
 
@@ -390,25 +390,8 @@ A = np.asarray(fitted_params.transitions.transition_matrix)
 print("Transition matrix A:")
 print(np.round(A, 3))
 
-gamma = np.asarray(posterior.smoothed_probs)   # (T, K)
 
-# 2) logits por estado y trial: logits[t,k,c] = W[k,c,:] @ X[t,:]
-W = np.asarray(fitted_params.emissions.weights)  # (K, C, M)
-logits = np.einsum("kcm,tm->tkc", W, X[:,1:])  # (T, K, C)
-
-# 3) softmax en C para obtener p(y|z=k,x)
-logits = logits - logits.max(axis=2, keepdims=True)     # estabilidad numérica
-p_y_given_z = np.exp(logits)
-p_y_given_z = p_y_given_z / p_y_given_z.sum(axis=2, keepdims=True)  # (T,K,C)
-
-# 4) mezcla por gamma: p_pred[t,c] = sum_k gamma[t,k] * p_y_given_z[t,k,c]
-p_pred = np.einsum("tk,tkc->tc", gamma, p_y_given_z)    # (T, C)
-filt = model.filter(params=fitted_params, emissions=y, inputs=X[:,1:]
-alpha = np.asarray(filt.filtered_probs)   # (T, K)  p(z_t | y_{1:t})
-
-p_pred = np.einsum("tk,tkc->tc", alpha, p_y_given_z)
-
-# p_pred = np.asarray(model3.predict_choice_probs(fitted_params3, y, jnp.concatenate([X[:, :1], X[:, 3:]], axis=1)))
+p_pred = np.asarray(model3.predict_choice_probs(fitted_params3, y, jnp.concatenate([X[:, :1], X[:, 4:]], axis=1)))
 # p_pred = np.asarray(model.predict_choice_probs(fitted_params, y, X[:,1:]))
 
 pL, pC, pR = p_pred[:,0], p_pred[:,1], p_pred[:,2]
