@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import polars as pl
 import paths
 import jax.numpy as jnp
 import jax.random as jr
@@ -16,6 +17,8 @@ from dynamax.parameters import ParameterProperties
 from dynamax.hidden_markov_model.models.abstractions import HMM, HMMEmissions, HMMParameterSet, HMMPropertySet
 from dynamax.hidden_markov_model.models.initial import StandardHMMInitialState, ParamsStandardHMMInitialState
 from dynamax.hidden_markov_model.models.transitions import StandardHMMTransitions, ParamsStandardHMMTransitions
+from dynamax.hidden_markov_model.models.abstractions import HMMTransitions
+from dynamax.hidden_markov_model import CategoricalRegressionHMM
 from dynamax.types import IntScalar, Scalar
 from dynamax.utils.plotting import gradient_cmap
 
@@ -32,30 +35,31 @@ color_names = [
 colors = sns.xkcd_palette(color_names)
 cmap = gradient_cmap(colors)
 
-def build_sequence_from_df(df_sub):
-    # ordena por tiempo si tienes una columna trial_idx o timestamp
-    df_sub = df_sub.sort_values("trial_idx")
+def build_sequence_from_df(df_sub: pl.DataFrame):
+    df_sub = df_sub.sort("trial_idx")
 
-    # y en {0,1,2}
-    y = df_sub["response"].to_numpy().astype(int)
+    df_sub = df_sub.with_columns([
+        pl.col("response").cast(pl.Int32),
 
-    # diseño: intercept + delay + stimulus + delayxstim
-    delay = df_sub["delay_d"].to_numpy().astype(float)
-    stim  = df_sub["stim_d"].to_numpy().astype(float)
-    SL = df_sub[df_sub["x_c"] == 'L']["stim_d"].to_numpy().astype(float)
-    SL = (df_sub["x_c"] == 'L').astype(float) * df_sub["stim_d"].to_numpy().astype(float)
-    SC = (df_sub["x_c"] == 'C').astype(float) * df_sub["stim_d"].to_numpy().astype(float)
-    SR = (df_sub["x_c"] == 'R').astype(float) * df_sub["stim_d"].to_numpy().astype(float)
-   
-    delayxstim = delay * stim
-    previous_outcome = df_sub["performance"].shift(1).fillna(0).to_numpy().astype(float)
-    print(df_sub["delay_d"].describe())
-    print(df_sub["stim_d"].describe())
+        (pl.col("r_c") == "L").cast(pl.Float32).alias("biasL"),
+        (pl.col("r_c") == "C").cast(pl.Float32).alias("biasC"),
+        (pl.col("r_c") == "R").cast(pl.Float32).alias("biasR"),
 
-    X = np.column_stack([np.ones(len(df_sub)), delay, SL, SC, SR, previous_outcome]).astype(np.float32)
+        pl.col("delay_d").cast(pl.Float32).alias("delay"),
+        pl.col("stim_d").cast(pl.Float32).alias("stim"),
+
+        ((pl.col("x_c") == "L") * pl.col("stim_d")).cast(pl.Float32).alias("SL"),
+        ((pl.col("x_c") == "C") * pl.col("stim_d")).cast(pl.Float32).alias("SC"),
+        ((pl.col("x_c") == "R") * pl.col("stim_d")).cast(pl.Float32).alias("SR"),
+
+        pl.col("performance").shift(1).fill_null(0).cast(pl.Float32).alias("previous_outcome"),
+    ])
+
+    y = df_sub["response"].to_numpy()
+
+    X = df_sub.select(["biasL", "biasC", "biasR", "delay", "SL", "SC", "SR", "previous_outcome"]).to_numpy().astype(np.float32)
 
     return jnp.asarray(y), jnp.asarray(X)
-
 
 class ParamsSoftmaxGLMHMMEmissions(NamedTuple):
     # weights: (K, C, M)
@@ -173,22 +177,87 @@ class SoftmaxGLMHMM(HMM):
 
         return ParamsSoftmaxGLMHMM(**params), ParamsSoftmaxGLMHMM(**props)
 
+class ParamsInputDrivenTransitions(NamedTuple):
+    bias: Union[Float[Array, "num_states num_states"], ParameterProperties]
+    weights: Union[Float[Array, "num_states num_states input_dim"], ParameterProperties]
+
+class InputDrivenSoftmaxTransitions(HMMTransitions):
+    """
+    Transiciones no-homogéneas:
+      p(z_t=j | z_{t-1}=i, u_t) = softmax_j( bias[i,j] + <weights[i,j,:], u_t> )
+    Nota: la m_step base usa inputs[1:], así que u_t se alinea con transición (t-1)->t.
+    """
+
+    def __init__(self,
+                 num_states: int,
+                 input_dim: int,
+                 weight_scale: Scalar = 0.01,
+                 m_step_optimizer=None,
+                 m_step_num_iters: int = 50):
+        super().__init__(m_step_optimizer=m_step_optimizer, m_step_num_iters=m_step_num_iters)
+        self.num_states = num_states
+        self.input_dim = input_dim
+        self.weight_scale = weight_scale
+
+    def initialize(self, key: Optional[Array] = None, method: str = "prior", bias=None, weights=None):
+        if key is None:
+            key = jr.PRNGKey(0)
+        key1, key2 = jr.split(key, 2)
+        K, D = self.num_states, self.input_dim
+
+        if bias is None:
+            b = jnp.zeros((K, K), dtype=jnp.float32)
+        else:
+            b = jnp.asarray(bias, dtype=jnp.float32)
+
+        if weights is None:
+            W = self.weight_scale * jr.normal(key2, (K, K, D), dtype=jnp.float32)
+        else:
+            W = jnp.asarray(weights, dtype=jnp.float32)
+
+        params = ParamsInputDrivenTransitions(bias=b, weights=W)
+        props  = ParamsInputDrivenTransitions(
+            bias=ParameterProperties(),
+            weights=ParameterProperties()
+        )
+        return params, props
+
+    def log_prior(self, params: ParamsInputDrivenTransitions) -> Scalar:
+        return 0.0
+
+    def distribution(self,
+                     params: ParamsInputDrivenTransitions,
+                     state: IntScalar,
+                     inputs: Optional[Float[Array, " input_dim"]] = None
+                     ) -> tfd.Distribution:
+        # inputs: (D,)
+        # logits: (K,) para el siguiente estado
+        u = inputs
+        i = jnp.asarray(state, dtype=jnp.int32)
+        logits = params.bias[i] + jnp.einsum("kd,d->k", params.weights[i], u)
+        return tfd.Categorical(logits=logits)
+    
+
 num_states= 2         # nº estados
 emmision_dim = 3          # 3 choices
-input_dim = 6          # intercept + delay + stim_L + stim_C + stim_R + previous_outcome
+input_dim = 8          # intercept + delay + stim_L + stim_C + stim_R + previous_outcome
 
 model = SoftmaxGLMHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim, m_step_num_iters=100, transition_matrix_stickiness=10.0)
 
+model2 = CategoricalRegressionHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim, transition_matrix_stickiness=10.0, m_step_optimizer=optax.adam(1e-3), m_step_num_iters=500,)
+
 key = jr.PRNGKey(12345)
 params, props = model.initialize(key=key)
+params2, props2 = model2.initialize(key=key)
 
-df = pd.read_parquet(paths.DATA_PATH/"df_filtered.parquet")
-y, X = build_sequence_from_df(df[df["subject"] == "A92"])
+df = pl.read_parquet(paths.DATA_PATH/"df_filtered.parquet")
+y, X = build_sequence_from_df(df.filter(pl.col("subject") == "A92"))
 
 fitted_params, lps = model.fit_em(params=params, props=props, emissions=y, inputs=X, num_iters=50)
+fitted_params2, lps2 = model2.fit_em(params=params2, props=props2, emissions=y, inputs=X, num_iters=50)
 
 posterior = model.smoother(params=fitted_params, emissions=y, inputs=X)
-
+posterior2 = model2.smoother(params=fitted_params2, emissions=y, inputs=X)
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -196,9 +265,12 @@ import matplotlib.pyplot as plt
 T = int(y.shape[0])
 
 lps_np = np.asarray(lps)
+lps2_np = np.asarray(lps2)
 
 plt.figure(figsize=(6,3))
 plt.plot(lps_np / T, "-o", ms=3)
+plt.plot(lps2_np / T, "-o", ms=3)
+plt.legend(["SoftmaxGLMHMM", "CategoricalRegressionHMM"])
 plt.xlabel("EM Iteration")
 plt.ylabel("Avg log prob per trial")
 plt.title("EM log-likelihood")
@@ -299,14 +371,9 @@ p_pred = np.einsum("tk,tkc->tc", alpha, p_y_given_z)
 # p_pred[:,0]=pL, p_pred[:,1]=pC, p_pred[:,2]=pR (según tu codificación)
 pL, pC, pR = p_pred[:,0], p_pred[:,1], p_pred[:,2]
 
-df_sub = df[df["subject"] == "A92"].sort_values("trial_idx").copy()
+df_sub = df.filter(pl.col("subject") == "A92").sort("trial_idx")
 
-df_sub["pL"] = pL
-df_sub["pC"] = pC
-df_sub["pR"] = pR
+df_sub = df_sub.with_columns([pl.Series("pL", pL), pl.Series("pC", pC), pl.Series("pR", pR), pl.Series("pred_choice", np.argmax(p_pred, axis=1))])
 
-# (opcional) predicción de clase MAP
-df_sub["pred_choice"] = np.argmax(p_pred, axis=1)
-
-df_sub.to_parquet(paths.DATA_PATH / "predictions.parquet", index=False)
+df_sub.write_parquet(paths.DATA_PATH / "predictions.parquet")
 print("Saved:", paths.DATA_PATH / "predictions.parquet")
