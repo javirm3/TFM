@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import polars as pl
 import paths
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 from jaxtyping import Float, Array
@@ -35,16 +37,37 @@ color_names = [
 colors = sns.xkcd_palette(color_names)
 cmap = gradient_cmap(colors)
 
+def action_trace(r_c: jnp.ndarray, tau: float) -> jnp.ndarray:
+    """
+    r_c: (T,1) encoded as (L,C,R)
+    returns A: (T,3) with A_t^X = sum_{k>=1} r_{t-k}^X * exp(-k/tau)
+    using A_t = lam*A_{t-1} + r_{t-1}
+    """
+    
+    r_onehot = jax.nn.one_hot(r_c.squeeze(), 3).astype(jnp.float32)
+    lam = jnp.exp(-1.0 / tau).astype(jnp.float32)
+    r_prev = jnp.vstack([jnp.zeros((1, r_onehot.shape[1]), dtype=jnp.float32), r_onehot[:-1]])
+
+    def step(prev, current):
+        new = lam * prev + current
+        return new, new
+
+    _, A = jax.lax.scan(step, jnp.zeros((r_onehot.shape[1],), dtype=jnp.float32), r_prev)
+    return A
+
+
 def build_sequence_from_df(df_sub: pl.DataFrame):
     df_sub = df_sub.sort("trial_idx")
 
     df_sub = df_sub.with_columns([
         pl.col("response").cast(pl.Int32),
 
-        (pl.col("r_c") == "L").cast(pl.Float32).alias("biasL"),
-        (pl.col("r_c") == "C").cast(pl.Float32).alias("biasC"),
-        (pl.col("r_c") == "R").cast(pl.Float32).alias("biasR"),
-
+        (pl.col("x_c") == "L").cast(pl.Float32).alias("biasL"),
+        (pl.col("x_c") == "C").cast(pl.Float32).alias("biasC"),
+        (pl.col("x_c") == "R").cast(pl.Float32).alias("biasR"),
+        
+        pl.lit(1.0).cast(pl.Float32).alias("bias"),
+        
         pl.col("delay_d").cast(pl.Float32).alias("delay"),
         pl.col("stim_d").cast(pl.Float32).alias("stim"),
 
@@ -57,7 +80,7 @@ def build_sequence_from_df(df_sub: pl.DataFrame):
 
     y = df_sub["response"].to_numpy()
 
-    X = df_sub.select(["biasL", "biasC", "biasR", "delay", "SL", "SC", "SR", "previous_outcome"]).to_numpy().astype(np.float32)
+    X = df_sub.select(["bias", "biasC", "biasR", "delay", "SL", "SC", "SR", "previous_outcome"]).to_numpy().astype(np.float32)
 
     return jnp.asarray(y), jnp.asarray(X)
 
@@ -240,27 +263,32 @@ class InputDrivenSoftmaxTransitions(HMMTransitions):
 
 num_states= 2         # nº estados
 emmision_dim = 3          # 3 choices
-input_dim = 8          # intercept + delay + stim_L + stim_C + stim_R + previous_outcome
+input_dim = 7          # intercept + delay + stim_L + stim_C + stim_R + previous_outcome
 
 model = SoftmaxGLMHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim, m_step_num_iters=100, transition_matrix_stickiness=10.0)
 
-model2 = CategoricalRegressionHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim, transition_matrix_stickiness=10.0, m_step_optimizer=optax.adam(1e-3), m_step_num_iters=500,)
+model2 = CategoricalRegressionHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim-1, transition_matrix_stickiness=10.0, m_step_optimizer=optax.adam(1e-3), m_step_num_iters=500,)
+
+model3 = SoftmaxGLMHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim-1, m_step_num_iters=100, transition_matrix_stickiness=10.0)
 
 key = jr.PRNGKey(12345)
 params, props = model.initialize(key=key)
 params2, props2 = model2.initialize(key=key)
+params3, props3 = model3.initialize(key=key)
 
 df = pl.read_parquet(paths.DATA_PATH/"df_filtered.parquet")
 y, X = build_sequence_from_df(df.filter(pl.col("subject") == "A92"))
 
-fitted_params, lps = model.fit_em(params=params, props=props, emissions=y, inputs=X, num_iters=50)
-fitted_params2, lps2 = model2.fit_em(params=params2, props=props2, emissions=y, inputs=X, num_iters=50)
+At = action_trace(y, tau=50.0)
 
-posterior = model.smoother(params=fitted_params, emissions=y, inputs=X)
-posterior2 = model2.smoother(params=fitted_params2, emissions=y, inputs=X)
+fitted_params, lps = model.fit_em(params=params, props=props, emissions=y, inputs=X[:,1:], num_iters=50)
+fitted_params2, lps2 = model2.fit_em(params=params2, props=props2, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 3:]], axis=1), num_iters=50)
+fitted_params3, lps3 = model3.fit_em(params=params3, props=props3, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 3:]], axis=1), num_iters=50)
 
-import numpy as np
-import matplotlib.pyplot as plt
+
+posterior = model.smoother(params=fitted_params, emissions=y, inputs=X[:,1:])
+posterior2 = model2.smoother(params=fitted_params2, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 3:]], axis=1))
+posterior3 = model3.smoother(params=fitted_params3, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 3:]], axis=1))
 
 T = int(y.shape[0])
 
@@ -270,7 +298,8 @@ lps2_np = np.asarray(lps2)
 plt.figure(figsize=(6,3))
 plt.plot(lps_np / T, "-o", ms=3)
 plt.plot(lps2_np / T, "-o", ms=3)
-plt.legend(["SoftmaxGLMHMM", "CategoricalRegressionHMM"])
+plt.plot(np.asarray(lps3) / T, "-o", ms=3)
+plt.legend(["SoftmaxGLMHMM", "CategoricalRegressionHMM", "SoftmaxGLMHMM (no bias)"])
 plt.xlabel("EM Iteration")
 plt.ylabel("Avg log prob per trial")
 plt.title("EM log-likelihood")
@@ -278,9 +307,6 @@ plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.show()
 
-
-import numpy as np
-import matplotlib.pyplot as plt
 
 W = np.asarray(fitted_params.emissions.weights)  # (K, C, M)
 K, C, M = W.shape
@@ -307,15 +333,10 @@ for c in range(C):
 plt.tight_layout()
 plt.show()
 
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-posterior = model.smoother(params=fitted_params, emissions=y, inputs=X)
 gamma = np.asarray(posterior.smoothed_probs)  # (T, K)
 
 # Elige una ventana para visualizar
-plot_slice = (0, min(1000, T))   # ajusta
+plot_slice = (0, min(10000, T))   # ajusta
 
 fig, axs = plt.subplots(2, 1, figsize=(10, 4), sharex=True)
 
@@ -341,21 +362,15 @@ axs[1].set_title("Most likely state (MAP)")
 plt.tight_layout()
 plt.show()
 
-import numpy as np
 A = np.asarray(fitted_params.transitions.transition_matrix)
 print("Transition matrix A:")
 print(np.round(A, 3))
 
-import numpy as np
-import jax.numpy as jnp
-
-# 1) posterior sobre estados (smoothed)
-posterior = model.smoother(params=fitted_params, emissions=y, inputs=X)
-gamma = np.asarray(posterior.smoothed_probs)   # (T, K)
+gamma = np.asarray(posterior2.smoothed_probs)   # (T, K)
 
 # 2) logits por estado y trial: logits[t,k,c] = W[k,c,:] @ X[t,:]
-W = np.asarray(fitted_params.emissions.weights)  # (K, C, M)
-logits = np.einsum("kcm,tm->tkc", W, np.asarray(X))  # (T, K, C)
+W = np.asarray(fitted_params2.emissions.weights)  # (K, C, M)
+logits = np.einsum("kcm,tm->tkc", W, np.asarray(X)[:,1:])  # (T, K, C)
 
 # 3) softmax en C para obtener p(y|z=k,x)
 logits = logits - logits.max(axis=2, keepdims=True)     # estabilidad numérica
@@ -364,7 +379,7 @@ p_y_given_z = p_y_given_z / p_y_given_z.sum(axis=2, keepdims=True)  # (T,K,C)
 
 # 4) mezcla por gamma: p_pred[t,c] = sum_k gamma[t,k] * p_y_given_z[t,k,c]
 p_pred = np.einsum("tk,tkc->tc", gamma, p_y_given_z)    # (T, C)
-filt = model.filter(params=fitted_params, emissions=y, inputs=X)
+filt = model.filter(params=fitted_params2, emissions=y, inputs=X[:,1:])
 alpha = np.asarray(filt.filtered_probs)   # (T, K)  p(z_t | y_{1:t})
 
 p_pred = np.einsum("tk,tkc->tc", alpha, p_y_given_z)
