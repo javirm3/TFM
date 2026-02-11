@@ -1,0 +1,144 @@
+# config.toml
+# Centralized configuration for the project:
+# - paths
+# - plotting defaults
+# - palettes / colors
+# - model parameter sets and display names
+# - common hyperparameters (e.g., tau)
+
+[project]
+name = "glm-hmm"
+seed = 12345
+
+[model]
+num_states = 2
+num_classes = 3
+tau = 50.0
+
+[plot]
+dpi = 300
+style = "white"
+context = "talk"
+font_scale = 1.0
+grid_alpha = 0.3
+
+# default figure sizes (width, height)
+figsize_small = [6, 3]
+figsize_medium = [10, 4]
+figsize_large = [12, 5]
+
+# Which colormap to use for continuous heatmaps
+heatmap_cmap = "viridis"
+# Diverging cmap for weights centered at 0
+weights_cmap = "RdBu_r"
+
+[palettes]
+# ColorBrewer qualitative palettes: Set2, Dark2, Paired, Set1, Pastel1, etc.
+states_palette = "Dark2"
+states_palette_n = 3
+
+# If you want explicit fixed colors (overrides palette if used directly)
+# For L,C,R (3 classes)
+states_hex = ["#1B9E77", "#D95F02", "#7570B3"]  # Dark2[0:3]
+
+[labels]
+# LaTeX-ish strings for plotting (matplotlib supports $...$)
+sL = "$s_L$"
+sC = "$s_C$"
+sR = "$s_R$"
+noise_amp = "$\\sigma$"
+S_amplitude = "$S^{amp}$"
+S_d = "$S^d$"
+U_int_amplitude = "$U_{int}^{amp}$"
+U_int_baseline = "$U_{int}^{baseline}$"
+U_int_onset = "$U_{int}^{onset}$"
+U_ext_amplitude = "$U_{ext}^{amp}$"
+rel_vs_ceiling_bal = "Goodness of fit"
+nll_trial = "NLL / trial"
+
+[colors.parameters]
+# Parameter colors (hex). Keep consistent across all plots.
+# L,C,R parameters
+sL = "#66C2A5"   # Set2-ish green
+sC = "#FC8D62"   # Set2-ish orange
+sR = "#8DA0CB"   # Set2-ish blue/purple
+
+# Internal U group (same color for amplitude/baseline/onset)
+U_int_amplitude = "#C38DFF"
+U_int_baseline  = "#C38DFF"
+U_int_onset     = "#C38DFF"
+
+# S group
+S_amplitude = "#FFA64C"
+S_d         = "#FFA64C"
+
+# External U
+U_ext_amplitude = "#3385FF"
+
+# Noise / metrics
+noise_amp = "#999999"
+nll_trial = "#999999"
+rel_vs_ceiling_bal = "#999999"
+
+[colors.models]
+# Model colors for comparative plots
+spatialU_notrandom = "#1f77b4"
+spatialU           = "#ff7f0e"
+temporalU          = "#2ca02c"
+spatial_reduced2   = "#9467bd"
+spatial_reduced_cert = "#8c564b"
+spatial_reduced3   = "#e377c2"
+spatial_reduced3_randomx0 = "#e377c2"
+externalU          = "#7f7f7f"
+externalU2         = "#17becf"
+externalU2_randomx0 = "#0053CE"
+
+[model_names]
+spatialU_notrandom = "Spatial U (fixed $x_0$)"
+spatialU = "Spatial U"
+temporalU = "Temporal U"
+spatial_reduced_cert = "Spatial U (reduced)"
+spatial_reduced2 = "Spatial U (reduced 2)"
+spatial_reduced3 = "Spatial U (reduced 3)"
+externalU = "External U"
+externalU2_randomx0 = "External U (random $x_0$)"
+externalU2 = "External U comparable"
+
+[parameters]
+# Canonical parameter sets (lists of parameter keys)
+temporal = [
+  "sL", "sC", "sR", "noise_amp",
+  "S_amplitude", "S_d",
+  "U_int_amplitude", "U_int_baseline",
+  "U_int_onset", "U_ext_amplitude"
+]
+
+spatial = [
+  "sL", "sC", "sR", "noise_amp",
+  "S_amplitude", "S_d",
+  "U_int_amplitude", "U_int_baseline",
+  "U_ext_amplitude"
+]
+
+spatial_reduced = [
+  "sL", "sC", "sR",
+  "S_amplitude", "S_d",
+  "U_int_amplitude"
+]
+
+spatial_reduced2 = [
+  "sL", "sR",
+  "S_amplitude", "S_d",
+  "U_int_amplitude", "U_int_baseline"
+]
+
+[parameter_sets]
+# Map your model keys to one of the canonical parameter sets above.
+spatialU_notrandom = "spatial"
+spatialU           = "spatial"
+temporalU          = "temporal"
+spatial_reduced_cert = "spatial_reduced"
+spatial_reduced2     = "spatial_reduced"
+spatial_reduced3     = "spatial_reduced2"
+externalU2_randomx0  = "spatial"
+externalU2           = "spatial"
