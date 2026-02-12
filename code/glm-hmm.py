@@ -12,7 +12,9 @@ import optax
 import seaborn as sns
 import tensorflow_probability.substrates.jax.distributions as tfd
 import tensorflow_probability.substrates.jax.bijectors as tfb
-
+import os
+os.environ["JAX_DISABLE_JIT"] = "1"
+os.environ["JAX_TRACEBACK_FILTERING"] = "off"
 from typing import NamedTuple, Optional, Tuple, Union
 
 from dynamax.parameters import ParameterProperties
@@ -138,10 +140,59 @@ class SoftmaxGLMHMMEmissions(HMMEmissions):
         logits = params.weights[state] @ x
         return tfd.Categorical(logits=logits)
     
+class ParamsInputDrivenTransitions(NamedTuple):
+    bias: Union[Float[Array, "num_states num_states"], ParameterProperties]
+    weights: Union[Float[Array, "num_states num_states input_dim"], ParameterProperties]
 
+class InputDrivenSoftmaxTransitions(HMMTransitions):
+    def __init__(self, num_states: int, emission_input_dim: int, transition_input_dim: int,
+                 weight_scale=0.01, m_step_optimizer=optax.adam(1e-2), m_step_num_iters=50):
+        super().__init__(m_step_optimizer=m_step_optimizer, m_step_num_iters=m_step_num_iters)
+        self.num_states = num_states
+        self.emission_input_dim = emission_input_dim
+        self.transition_input_dim = transition_input_dim
+        self.weight_scale = weight_scale
+   
+    def initialize(self, key: Optional[Array] = None, method: str = "prior", bias=None, weights=None):
+        if key is None:
+            key = jr.PRNGKey(0)
+        key1, key2 = jr.split(key, 2)
+        K, D = self.num_states, self.transition_input_dim
+
+        b = jnp.zeros((K, K), dtype=jnp.float32) if bias is None else jnp.asarray(bias, jnp.float32)
+        W = self.weight_scale * jr.normal(key2, (K, K, D), dtype=jnp.float32) if weights is None else jnp.asarray(weights, jnp.float32)
+
+        params = ParamsInputDrivenTransitions(bias=b, weights=W)
+        props  = ParamsInputDrivenTransitions(bias=ParameterProperties(), weights=ParameterProperties())
+        return params, props
+
+    def log_prior(self, params: ParamsInputDrivenTransitions) -> Scalar:
+        return 0.0
+
+    def distribution(self, params, state, inputs=None):
+        u = inputs[self.emission_input_dim:self.emission_input_dim + self.transition_input_dim]
+        i = jnp.asarray(state, jnp.int32)
+        logits = params.bias[i] + jnp.einsum("kd,d->k", params.weights[i], u)
+        return tfd.Categorical(logits=logits)
+    def _compute_transition_matrices(self, params, inputs):
+        """
+        Return A[t,i,j] = P(z_{t+1}=j | z_t=i, inputs_t) for t=0..T-2
+        Shape: (T-1, K, K)
+        """
+        K = self.num_states
+        T = inputs.shape[0]
+
+        # u_t used for transition t -> t+1, so only t=0..T-2
+        u = inputs[:, self.emission_input_dim:self.emission_input_dim + self.transition_input_dim]  # (T-1, D)
+
+        # logits[t, i, j] = bias[i,j] + sum_d W[i,j,d] * u[t,d]
+        logits = params.bias[None, :, :] + jnp.einsum("ijd,td->tij", params.weights, u)  # (T-1,K,K)
+
+        return jax.nn.softmax(logits, axis=-1)
+    
 class ParamsSoftmaxGLMHMM(NamedTuple):
     initial: ParamsStandardHMMInitialState
-    transitions: ParamsStandardHMMTransitions
+    transitions: Union[ParamsStandardHMMTransitions, ParamsInputDrivenTransitions]
     emissions: ParamsSoftmaxGLMHMMEmissions
 
 
@@ -149,8 +200,8 @@ class SoftmaxGLMHMM(HMM):
     def __init__(self,
                  num_states: int,
                  num_classes: int,
-                 input_dim: int,
                  emission_input_dim: int,
+                 transition_input_dim: int,
                  initial_probs_concentration: Union[Scalar, Float[Array, " num_states"]] = 1.1,
                  transition_matrix_concentration: Union[Scalar, Float[Array, " num_states"]] = 1.1,
                  transition_matrix_stickiness: Scalar = 0.0,
@@ -158,23 +209,28 @@ class SoftmaxGLMHMM(HMM):
                  m_step_optimizer: optax.GradientTransformation = optax.adam(1e-2),
                  m_step_num_iters: int = 100):
 
-        self.inputs_dim = input_dim
+        self.inputs_dim = emission_input_dim + transition_input_dim
         self.num_states = num_states
         self.num_classes = num_classes
-        self.Dx = emission_input_dim
+        self.emission_input_dim = emission_input_dim
+        self.transition_input_dim = transition_input_dim
 
-        initial_component = StandardHMMInitialState(
-            num_states, initial_probs_concentration=initial_probs_concentration)
+        initial_component = StandardHMMInitialState( num_states, initial_probs_concentration=initial_probs_concentration)
 
-        transition_component = StandardHMMTransitions(
-            num_states,
-            concentration=transition_matrix_concentration,
-            stickiness=transition_matrix_stickiness)
+        if transition_input_dim > 0:
+            transition_component = InputDrivenSoftmaxTransitions(
+                num_states=num_states, emission_input_dim=emission_input_dim, transition_input_dim=transition_input_dim, weight_scale=weight_scale, m_step_optimizer=m_step_optimizer, m_step_num_iters=m_step_num_iters
+            )
+        else:
+            transition_component = StandardHMMTransitions(
+                num_states,
+                concentration=transition_matrix_concentration,
+                stickiness=transition_matrix_stickiness)
 
         emission_component = SoftmaxGLMHMMEmissions(
             num_states=num_states,
             num_classes=num_classes,
-            input_dim=input_dim,
+            input_dim=self.emission_input_dim,
             emission_input_dim = emission_input_dim,
             weight_scale=weight_scale,
             m_step_optimizer=m_step_optimizer,
@@ -200,8 +256,10 @@ class SoftmaxGLMHMM(HMM):
         params["initial"], props["initial"] = self.initial_component.initialize(
             key1, method=method, initial_probs=initial_probs)
 
-        params["transitions"], props["transitions"] = self.transition_component.initialize(
-            key2, method=method, transition_matrix=transition_matrix)
+        if self.transition_input_dim > 0:
+            params["transitions"], props["transitions"] = self.transition_component.initialize(key2, method=method)
+        else:
+            params["transitions"], props["transitions"] = self.transition_component.initialize(key2, method=method, transition_matrix=transition_matrix)
 
         params["emissions"], props["emissions"] = self.emission_component.initialize(
             key3, method=method, emission_weights=emission_weights)
@@ -218,7 +276,7 @@ class SoftmaxGLMHMM(HMM):
         alpha = filt.filtered_probs
 
         T, K = alpha.shape
-        A = self.transition_component._compute_transition_matrices(params.transitions, inputs)
+        A = self.transition_component._compute_transition_matrices(params.transitions, inputs[:-1]) # (T-1, K, K)
 
         if A.ndim == 2:  # homogeneous transitions
             A = jnp.broadcast_to(A[None, :, :], (T-1, K, K))
@@ -232,155 +290,58 @@ class SoftmaxGLMHMM(HMM):
 
         return jnp.einsum("tk,tkc->tc", pred_z, p_y_given_z)
 
-class ParamsInputDrivenTransitions(NamedTuple):
-    bias: Union[Float[Array, "num_states num_states"], ParameterProperties]
-    weights: Union[Float[Array, "num_states num_states input_dim"], ParameterProperties]
-
-class InputDrivenSoftmaxTransitions(HMMTransitions):
-    """
-    Transiciones no-homogéneas:
-      p(z_t=j | z_{t-1}=i, u_t) = softmax_j( bias[i,j] + <weights[i,j,:], u_t> )
-    Nota: la m_step base usa inputs[1:], así que u_t se alinea con transición (t-1)->t.
-    """
-
-    def __init__(self,
-                 num_states: int,
-                 input_dim: int,
-                 weight_scale: Scalar = 0.01,
-                 m_step_optimizer=None,
-                 m_step_num_iters: int = 50):
-        super().__init__(m_step_optimizer=m_step_optimizer, m_step_num_iters=m_step_num_iters)
-        self.num_states = num_states
-        self.input_dim = input_dim
-        self.weight_scale = weight_scale
-
-    def initialize(self, key: Optional[Array] = None, method: str = "prior", bias=None, weights=None):
-        if key is None:
-            key = jr.PRNGKey(0)
-        key1, key2 = jr.split(key, 2)
-        K, D = self.num_states, self.input_dim
-
-        b = jnp.zeros((K, K), dtype=jnp.float32) if bias is None else jnp.asarray(bias, jnp.float32)
-        W = self.weight_scale * jr.normal(key2, (K, K, D), dtype=jnp.float32) if weights is None else jnp.asarray(weights, jnp.float32)
-
-        params = ParamsInputDrivenTransitions(bias=b, weights=W)
-        props  = ParamsInputDrivenTransitions(bias=ParameterProperties(), weights=ParameterProperties())
-        return params, props
-
-    def log_prior(self, params: ParamsInputDrivenTransitions) -> Scalar:
-        return 0.0
-
-    def distribution(self, params, state, inputs=None):
-        # inputs = u_t (D,)
-        i = jnp.asarray(state, dtype=jnp.int32)
-        u = jnp.asarray(inputs, dtype=jnp.float32)
-
-        logits = params.bias[i] + jnp.einsum("kd,d->k", params.weights[i], u)  # (K,)
-        return tfd.Categorical(logits=logits)
-    
-
-class ParamsSoftmaxGLMHMMInputDriven(NamedTuple):
-    initial: ParamsStandardHMMInitialState
-    transitions: ParamsInputDrivenTransitions
-    emissions: ParamsSoftmaxGLMHMMEmissions
-
-class SoftmaxGLMHMMInputDriven(HMM):
-    def __init__(self,
-                 num_states: int,
-                 num_classes: int,
-                 x_dim: int,          # Dx
-                 u_dim: int,          # Du
-                 transition_matrix_stickiness: float = 0.0,  # si lo quieres, habría que añadirlo a logits (opcional)
-                 weight_scale: float = 1.0,
-                 trans_weight_scale: float = 0.01,
-                 m_step_optimizer=optax.adam(1e-2),
-                 m_step_num_iters=100):
-
-        self.num_states = num_states
-        self.num_classes = num_classes
-        self.x_dim = x_dim
-        self.u_dim = u_dim
-        self.inputs_dim = x_dim + u_dim
-
-        initial_component = StandardHMMInitialState(num_states)
-
-        transition_component = InputDrivenSoftmaxTransitions(
-            num_states=num_states,
-            input_dim=u_dim,
-            weight_scale=trans_weight_scale,
-            m_step_optimizer=optax.adam(1e-2),
-            m_step_num_iters=50
-        )
-
-        emission_component = SoftmaxGLMHMMEmissions(
-            num_states=num_states,
-            num_classes=num_classes,
-            x_dim=x_dim,
-            weight_scale=weight_scale,
-            m_step_optimizer=m_step_optimizer,
-            m_step_num_iters=m_step_num_iters
-        )
-
-        super().__init__(num_states, initial_component, transition_component, emission_component)
-
-    @property
-    def inputs_shape(self):
-        return (self.inputs_dim,)
-
-    def initialize(self, key=jr.PRNGKey(0), method="prior",
-                   initial_probs=None, transition_params=None, emission_weights=None):
-
-        k1, k2, k3 = jr.split(key, 3)
-
-        init_params, init_props = self.initial_component.initialize(k1, method=method, initial_probs=initial_probs)
-        trans_params, trans_props = self.transition_component.initialize(k2, method=method, **(transition_params or {}))
-        emis_params, emis_props = self.emission_component.initialize(k3, method=method, emission_weights=emission_weights)
-
-        params = ParamsSoftmaxGLMHMMInputDriven(initial=init_params, transitions=trans_params, emissions=emis_params)
-        props  = ParamsSoftmaxGLMHMMInputDriven(initial=init_props,  transitions=trans_props,  emissions=emis_props)
-        return params, props
 
     
 
-num_states= 2         # nº estados
-emmision_dim = 3          # 3 choices
+num_states= 3         # nº estados
+emission_dim = 3          # 3 choices
 input_dim = 8+3          # intercept + delay + stim_L + stim_C + stim_R + previous_outcome
 
-model = SoftmaxGLMHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim, m_step_num_iters=100, transition_matrix_stickiness=10.0)
+model = SoftmaxGLMHMM(num_states=num_states, num_classes=emission_dim, emission_input_dim=input_dim, transition_input_dim=0, m_step_num_iters=100, transition_matrix_stickiness=10.0)
 
-model2 = CategoricalRegressionHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim-2, transition_matrix_stickiness=10.0, m_step_optimizer=optax.adam(1e-3), m_step_num_iters=500,)
+# model2 = CategoricalRegressionHMM(num_states=num_states, num_classes=emission_dim, input_dim=input_dim-2,  transition_matrix_stickiness=10.0, m_step_optimizer=optax.adam(1e-3), m_step_num_iters=500,)
 
-model3 = SoftmaxGLMHMM(num_states=num_states, num_classes=emmision_dim, input_dim=input_dim-2, m_step_num_iters=100, transition_matrix_stickiness=10.0)
+model3 = SoftmaxGLMHMM(num_states=num_states, num_classes=emission_dim, emission_input_dim=input_dim-2, transition_input_dim=0, m_step_num_iters=100, transition_matrix_stickiness=10.0)
+
 
 key = jr.PRNGKey(12345)
 params, props = model.initialize(key=key)
-params2, props2 = model2.initialize(key=key)
+# params2, props2 = model2.initialize(key=key)
 params3, props3 = model3.initialize(key=key)
 
 df = pl.read_parquet(paths.DATA_PATH/"df_filtered.parquet")
 y, X, U = build_sequence_from_df(df.filter(pl.col("subject") == "A92"))
 
-# At = action_trace(y, tau=50.0)
+model4 = SoftmaxGLMHMM( num_states=2, num_classes=3, emission_input_dim=X.shape[1], transition_input_dim=U.shape[1], transition_matrix_stickiness=10.0, m_step_num_iters=100,)
+params4, props4 = model4.initialize(key=key)
 
-fitted_params, lps = model.fit_em(params=params, props=props, emissions=y, inputs=X[:,1:], num_iters=50)
-fitted_params2, lps2 = model2.fit_em(params=params2, props=props2, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1), num_iters=50)
-fitted_params3, lps3 = model3.fit_em(params=params3, props=props3, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1), num_iters=50)
+inputs_all = jnp.concatenate([X, U], axis=1)
+print("T:", y.shape[0], "inputs_all:", inputs_all.shape)
+print("emission_input_dim:", model4.emission_input_dim, "transition_input_dim:", model4.transition_input_dim)
+
+fitted_params, lps = model.fit_em(params=params, props=props, emissions=y, inputs=X[:,1:], num_iters=500)
+# fitted_params2, lps2 = model2.fit_em(params=params2, props=props2, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1), num_iters=50)
+fitted_params3, lps3 = model3.fit_em(params=params3, props=props3, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1), num_iters=500)
+
+fitted_params4, lps4 = model4.fit_em(params=params4, props=props4, emissions=y, inputs=jnp.concatenate([X[:, :], U], axis=1), num_iters=500)
 
 
 posterior = model.smoother(params=fitted_params, emissions=y, inputs=X[:,1:])
-posterior2 = model2.smoother(params=fitted_params2, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1))
+# posterior2 = model2.smoother(params=fitted_params2, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1))
 posterior3 = model3.smoother(params=fitted_params3, emissions=y, inputs=jnp.concatenate([X[:, :1], X[:, 4:]], axis=1))
+posterior4 = model4.smoother(params=fitted_params4, emissions=y, inputs=jnp.concatenate([X[:, :], U], axis=1))
 
 T = int(y.shape[0])
 
 lps_np = np.asarray(lps)
-lps2_np = np.asarray(lps2)
+# lps2_np = np.asarray(lps2)
 
 plt.figure(figsize=(6,3))
 plt.plot(lps_np / T, "-o", ms=3)
-plt.plot(lps2_np / T, "-o", ms=3)
+# plt.plot(lps2_np / T, "-o", ms=3)
 plt.plot(np.asarray(lps3) / T, "-o", ms=3)
-plt.legend(["SoftmaxGLMHMM", "CategoricalRegressionHMM", "SoftmaxGLMHMM (no bias)"])
+plt.plot(np.asarray(lps4) / T, "-o", ms=3)
+plt.legend(["SoftmaxGLMHMM", "SoftmaxGLMHMM (no bias)", "SoftmaxGLMHMM-t"])
 plt.xlabel("EM Iteration")
 plt.ylabel("Avg log prob per trial")
 plt.title("EM log-likelihood")
@@ -450,6 +411,7 @@ print(np.round(A, 3))
 
 p_pred = np.asarray(model3.predict_choice_probs(fitted_params3, y, jnp.concatenate([X[:, :1], X[:, 4:]], axis=1)))
 p_pred = np.asarray(model.predict_choice_probs(fitted_params, y, X[:,1:]))
+p_pred = np.asarray(model4.predict_choice_probs(fitted_params4, y, jnp.concatenate([X[:, :], U], axis=1)))
 
 pL, pC, pR = p_pred[:,0], p_pred[:,1], p_pred[:,2]
 
