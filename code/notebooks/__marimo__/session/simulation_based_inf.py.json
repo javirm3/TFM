@@ -1,0 +1,98 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.19.10"
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "d401111f62f15052536955a2267b5e84",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "Numba needs NumPy 2.3 or less. Got NumPy 2.4.",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "/opt/homebrew/anaconda3/envs/TFM/lib/python3.11/site-packages/arviz/__init__.py:50: FutureWarning: \nArviZ is undergoing a major refactor to improve flexibility and extensibility while maintaining a user-friendly interface.\nSome upcoming changes may be backward incompatible.\nFor details and migration guidance, visit: https://python.arviz.org/en/latest/user_guide/migration_guide.html\n  warn(\n",
+          "mimetype": "text/plain"
+        },
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_45509/__marimo__cell_isNi_.py&quot;</span>, line <span class=\"m\">10</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">import</span><span class=\"w\"> </span><span class=\"nn\">numba</span>\n  File <span class=\"nb\">&quot;/opt/homebrew/anaconda3/envs/TFM/lib/python3.11/site-packages/numba/__init__.py&quot;</span>, line <span class=\"m\">59</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_ensure_critical_deps</span><span class=\"p\">()</span>\n  File <span class=\"nb\">&quot;/opt/homebrew/anaconda3/envs/TFM/lib/python3.11/site-packages/numba/__init__.py&quot;</span>, line <span class=\"m\">45</span>, in <span class=\"n\">_ensure_critical_deps</span>\n<span class=\"w\">    </span><span class=\"k\">raise</span> <span class=\"ne\">ImportError</span><span class=\"p\">(</span><span class=\"n\">msg</span><span class=\"p\">)</span>\n<span class=\"gr\">ImportError</span>: <span class=\"n\">Numba needs NumPy 2.3 or less. Got NumPy 2.4.</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
+    },
+    {
+      "id": "vblA",
+      "code_hash": null,
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": null,
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "08314548d310425b5468293366a6f82a",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ImportError): ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_45509/__marimo__cell_ulYA_.py&quot;</span>, line <span class=\"m\">5</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">estimator</span><span class=\"o\">.</span><span class=\"n\">eval</span><span class=\"p\">()</span>\n<span class=\"w\">    </span><span class=\"pm\">^^^^^^^^^</span>\n<span class=\"gr\">NameError</span>: <span class=\"n\">name &#39;estimator&#39; is not defined</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
+    },
+    {
+      "id": "PKri",
+      "code_hash": "656765c2001210f95d751b39d2439f41",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">--- RECOVERY ---</span>\n<span class=\"paragraph\">theta_true_free: [ 1.4686276 -0.4862646  0.5792301 -2.153729   1.7807858]</span>\n<span class=\"paragraph\">theta_hat_free : [ 1.30210145 -0.27931015  0.47520909  0.24632346  1.65927665]</span>\n<span class=\"paragraph\">abs error      : [0.16652612 0.20695444 0.10402104 2.40005243 0.12150915]</span>\n<span class=\"paragraph\">NLL_hat        : -699405.375</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "cpnT",
+      "code_hash": null,
+      "outputs": [],
+      "console": []
+    }
+  ]
+}

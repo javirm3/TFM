@@ -1,0 +1,112 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.19.10"
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "e5496361365b61eef25d849f895cd026",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"parsing-filtered_dfcsv\">Parsing filtered_df.csv</h1></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "4ba4fdfe6ae4685c7cc53b140527cc7d",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "312d109d1992e042c0e7bf3ee4283ddf",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "ROOT         = /Users/javierrodriguezmartinez/Documents/MAMME/TFM\nCODE_DIR     = /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code\nDATA_PATH    = /Users/javierrodriguezmartinez/Documents/MAMME/TFM/data\nFITTING_DIR  = /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/fitting\nCSV_PATH     = /Users/javierrodriguezmartinez/Documents/MAMME/TFM/data/df_filtered.csv\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "07a28ff919f522a9e1a0c94b38363a43",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='lEQa-0' random-id='f78c8afc-939c-70bb-fcc3-022ffdcfcacd'><marimo-table data-initial-value='[]' data-label='null' data-data='&quot;[{&#92;&quot;subject&#92;&quot;:&#92;&quot;A83&#92;&quot;,&#92;&quot;trial&#92;&quot;:2,&#92;&quot;session&#92;&quot;:143,&#92;&quot;date&#92;&quot;:&#92;&quot;2023/10/23&#92;&quot;,&#92;&quot;x_c&#92;&quot;:&#92;&quot;R&#92;&quot;,&#92;&quot;r_c&#92;&quot;:&#92;&quot;R&#92;&quot;,&#92;&quot;ttype_n&#92;&quot;:0.0,&#92;&quot;stimd_n&#92;&quot;:4.0,&#92;&quot;performance&#92;&quot;:1,&#92;&quot;timepoint_1&#92;&quot;:0.3170998096466064,&#92;&quot;timepoint_2&#92;&quot;:0.5978996753692627,&#92;&quot;timepoint_3&#92;&quot;:0.9282999038696288,&#92;&quot;timepoint_4&#92;&quot;:1.9504997730255127,&#92;&quot;onset&#92;&quot;:0.0,&#92;&quot;offset&#92;&quot;:1.9504997730255127},{&#92;&quot;subject&#92;&quot;:&#92;&quot;A83&#92;&quot;,&#92;&quot;trial&#92;&quot;:3,&#92;&quot;session&#92;&quot;:143,&#92;&quot;date&#92;&quot;:&#92;&quot;2023/10/23&#92;&quot;,&#92;&quot;x_c&#92;&quot;:&#92;&quot;C&#92;&quot;,&#92;&quot;r_c&#92;&quot;:&#92;&quot;C&#92;&quot;,&#92;&quot;ttype_n&#92;&quot;:0.0,&#92;&quot;stimd_n&#92;&quot;:4.0,&#92;&quot;performance&#92;&quot;:1,&#92;&quot;timepoint_1&#92;&quot;:0.3912000656127929,&#92;&quot;timepoint_2&#92;&quot;:0.7732999324798584,&#92;&quot;timepoint_3&#92;&quot;:1.5095000267028809,&#92;&quot;timepoint_4&#92;&quot;:3.723599910736084,&#92;&quot;onset&#92;&quot;:0.0,&#92;&quot;offset&#92;&quot;:3.723599910736084},{&#92;&quot;subject&#92;&quot;:&#92;&quot;A83&#92;&quot;,&#92;&quot;trial&#92;&quot;:4,&#92;&quot;session&#92;&quot;:143,&#92;&quot;date&#92;&quot;:&#92;&quot;2023/10/23&#92;&quot;,&#92;&quot;x_c&#92;&quot;:&#92;&quot;C&#92;&quot;,&#92;&quot;r_c&#92;&quot;:&#92;&quot;C&#92;&quot;,&#92;&quot;ttype_n&#92;&quot;:0.0,&#92;&quot;stimd_n&#92;&quot;:4.0,&#92;&quot;performance&#92;&quot;:1,&#92;&quot;timepoint_1&#92;&quot;:0.5340001583099365,&#92;&quot;timepoint_2&#92;&quot;:0.8191001415252686,&#92;&quot;timepoint_3&#92;&quot;:1.153900146484375,&#92;&quot;timepoint_4&#92;&quot;:1.9186999797821045,&#92;&quot;onset&#92;&quot;:0.0,&#92;&quot;offset&#92;&quot;:1.9186999797821045},{&#92;&quot;subject&#92;&quot;:&#92;&quot;A83&#92;&quot;,&#92;&quot;trial&#92;&quot;:5,&#92;&quot;session&#92;&quot;:143,&#92;&quot;date&#92;&quot;:&#92;&quot;2023/10/23&#92;&quot;,&#92;&quot;x_c&#92;&quot;:&#92;&quot;R&#92;&quot;,&#92;&quot;r_c&#92;&quot;:&#92;&quot;R&#92;&quot;,&#92;&quot;ttype_n&#92;&quot;:0.0,&#92;&quot;stimd_n&#92;&quot;:4.0,&#92;&quot;performance&#92;&quot;:1,&#92;&quot;timepoint_1&#92;&quot;:0.5464000701904297,&#92;&quot;timepoint_2&#92;&quot;:1.9792001247406008,&#92;&quot;timepoint_3&#92;&quot;:2.8213999271392822,&#92;&quot;timepoint_4&#92;&quot;:5.1305999755859375,&#92;&quot;onset&#92;&quot;:0.0,&#92;&quot;offset&#92;&quot;:5.1305999755859375},{&#92;&quot;subject&#92;&quot;:&#92;&quot;A83&#92;&quot;,&#92;&quot;trial&#92;&quot;:6,&#92;&quot;session&#92;&quot;:143,&#92;&quot;date&#92;&quot;:&#92;&quot;2023/10/23&#92;&quot;,&#92;&quot;x_c&#92;&quot;:&#92;&quot;C&#92;&quot;,&#92;&quot;r_c&#92;&quot;:&#92;&quot;L&#92;&quot;,&#92;&quot;ttype_n&#92;&quot;:1.0,&#92;&quot;stimd_n&#92;&quot;:3.0,&#92;&quot;performance&#92;&quot;:0,&#92;&quot;timepoint_1&#92;&quot;:0.3947000503540039,&#92;&quot;timepoint_2&#92;&quot;:0.7190001010894775,&#92;&quot;timepoint_3&#92;&quot;:1.0139999389648438,&#92;&quot;timepoint_4&#92;&quot;:2.646699905395508,&#92;&quot;onset&#92;&quot;:0.0,&#92;&quot;offset&#92;&quot;:1.0139999389648438},{&#92;&quot;subject&#92;&quot;:&#92;&quot;A83&#92;&quot;,&#92;&quot;trial&#92;&quot;:7,&#92;&quot;session&#92;&quot;:143,&#92;&quot;date&#92;&quot;:&#92;&quot;2023/10/23&#92;&quot;,&#92;&quot;x_c&#92;&quot;:&#92;&quot;L&#92;&quot;,&#92;&quot;r_c&#92;&quot;:&#92;&quot;L&#92;&quot;,&#92;&quot;ttype_n&#92;&quot;:1.0,&#92;&quot;stimd_n&#92;&quot;:3.0,&#92;&quot;performance&#92;&quot;:1,&#92;&quot;timepoint_1&#92;&quot;:0.4049999713897705,&#92;&quot;timepoint_2&#92;&quot;:0.9520001411437988,&#92;&quot;timepoint_3&#92;&quot;:1.309000015258789,&#92;&quot;timepoint_4&#92;&quot;:3.4488000869750977,&#92;&quot;onset&#92;&quot;:0.0,&#92;&quot;offset&#92;&quot;:1.309000015258789},{&#92;&quot;subject&#92;&quot;:&#92;&quot;A83&#92;&quot;,&#92;&quot;trial&#92;&quot;:8,&#92;&quot;session&#92;&quot;:143,&#92;&quot;date&#92;&quot;:&#92;&quot;2023/10/23&#92;&quot;,&#92;&quot;x_c&#92;&quot;:&#92;&quot;R&#92;&quot;,&#92;&quot;r_c&#92;&quot;:&#92;&quot;R&#92;&quot;,&#92;&quot;ttype_n&#92;&quot;:1.0,&#92;&quot;stimd_n&#92;&quot;:3.0,&#92;&quot;performance&#92;&quot;:1,&#92;&quot;timepoint_1&#92;&quot;:0.4292001724243164,&#92;&quot;timepoint_2&#92;&quot;:0.7678000926971436,&#92;&quot;timepoint_3&#92;&quot;:1.0717999935150146,&#92;&quot;timepoint_4&#92;&quot;:2.0467000007629395,&#92;&quot;onset&#92;&quot;:0.0,&#92;&quot;offset&#92;&quot;:1.0717999935150146},{&#92;&quot;subject&#92;&quot;:&#92;&quot;A83&#92;&quot;,&#92;&quot;trial&#92;&quot;:9,&#92;&quot;session&#92;&quot;:143,&#92;&quot;date&#92;&quot;:&#92;&quot;2023/10/23&#92;&quot;,&#92;&quot;x_c&#92;&quot;:&#92;&quot;R&#92;&quot;,&#92;&quot;r_c&#92;&quot;:&#92;&quot;R&#92;&quot;,&#92;&quot;ttype_n&#92;&quot;:1.0,&#92;&quot;stimd_n&#92;&quot;:3.0,&#92;&quot;performance&#92;&quot;:1,&#92;&quot;timepoint_1&#92;&quot;:0.4111998081207275,&#92;&quot;timepoint_2&#92;&quot;:0.7311997413635254,&#92;&quot;timepoint_3&#92;&quot;:0.9822998046875,&#92;&quot;timepoint_4&#92;&quot;:3.2911999225616455,&#92;&quot;onset&#92;&quot;:0.0,&#92;&quot;offset&#92;&quot;:0.9822998046875},{&#92;&quot;subject&#92;&quot;:&#92;&quot;A83&#92;&quot;,&#92;&quot;trial&#92;&quot;:10,&#92;&quot;session&#92;&quot;:143,&#92;&quot;date&#92;&quot;:&#92;&quot;2023/10/23&#92;&quot;,&#92;&quot;x_c&#92;&quot;:&#92;&quot;L&#92;&quot;,&#92;&quot;r_c&#92;&quot;:&#92;&quot;L&#92;&quot;,&#92;&quot;ttype_n&#92;&quot;:1.0,&#92;&quot;stimd_n&#92;&quot;:3.0,&#92;&quot;performance&#92;&quot;:1,&#92;&quot;timepoint_1&#92;&quot;:0.3884999752044678,&#92;&quot;timepoint_2&#92;&quot;:0.6758999824523926,&#92;&quot;timepoint_3&#92;&quot;:0.9777998924255372,&#92;&quot;timepoint_4&#92;&quot;:2.528599977493286,&#92;&quot;onset&#92;&quot;:0.0,&#92;&quot;offset&#92;&quot;:0.9777998924255372},{&#92;&quot;subject&#92;&quot;:&#92;&quot;A83&#92;&quot;,&#92;&quot;trial&#92;&quot;:11,&#92;&quot;session&#92;&quot;:143,&#92;&quot;date&#92;&quot;:&#92;&quot;2023/10/23&#92;&quot;,&#92;&quot;x_c&#92;&quot;:&#92;&quot;R&#92;&quot;,&#92;&quot;r_c&#92;&quot;:&#92;&quot;R&#92;&quot;,&#92;&quot;ttype_n&#92;&quot;:2.0,&#92;&quot;stimd_n&#92;&quot;:2.0,&#92;&quot;performance&#92;&quot;:1,&#92;&quot;timepoint_1&#92;&quot;:0.3702001571655273,&#92;&quot;timepoint_2&#92;&quot;:0.6567001342773438,&#92;&quot;timepoint_3&#92;&quot;:0.9190001487731934,&#92;&quot;timepoint_4&#92;&quot;:2.501199960708618,&#92;&quot;onset&#92;&quot;:0.0,&#92;&quot;offset&#92;&quot;:0.6567001342773438}]&quot;' data-total-rows='146642' data-total-columns='15' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='true' data-page-size='10' data-field-types='[[&quot;subject&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;trial&quot;,[&quot;integer&quot;,&quot;int64&quot;]],[&quot;session&quot;,[&quot;integer&quot;,&quot;int64&quot;]],[&quot;date&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;x_c&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;r_c&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;ttype_n&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;stimd_n&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;performance&quot;,[&quot;integer&quot;,&quot;int64&quot;]],[&quot;timepoint_1&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;timepoint_2&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;timepoint_3&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;timepoint_4&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;onset&quot;,[&quot;number&quot;,&quot;float64&quot;]],[&quot;offset&quot;,[&quot;number&quot;,&quot;float64&quot;]]]' data-show-filters='true' data-show-download='true' data-show-column-summaries='true' data-show-data-types='true' data-show-page-size-selector='true' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false' data-download-file-name='&quot;df&quot;'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "bdc08cf9108f191edb3e54bd59762947",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "3c52015c2d6de46e9676e174d181fdaf",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": null,
+      "outputs": [],
+      "console": []
+    }
+  ]
+}

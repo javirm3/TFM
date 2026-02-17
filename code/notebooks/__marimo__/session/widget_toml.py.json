@@ -1,0 +1,47 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.19.11"
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "46ec5f10f263322d8778eb64c918dd94",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "35f590ba50a2c7edec549ae7644033ed",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='vblA-0' random-id='cf5a0e27-e42a-3815-4087-e33547575e02'><marimo-anywidget data-initial-value='{&quot;model_id&quot;:&quot;98926ee240a4443dba76e4e5752a884b&quot;}' data-label='null' data-js-url='&quot;./@file/23295-1438724-K62dXVTg.js&quot;' data-js-hash='&quot;5834703b4e8c10967eb3b9193d5a6fbc&quot;'></marimo-anywidget></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}
