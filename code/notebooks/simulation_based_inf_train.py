@@ -1,7 +1,10 @@
 import marimo
 
 __generated_with = "0.19.10"
-app = marimo.App()
+app = marimo.App(
+    width="medium",
+    layout_file="layouts/simulation_based_inf_train.slides.json",
+)
 
 
 @app.cell
@@ -61,8 +64,6 @@ def _():
     TH3 = np.float32(0.0)
     return (
         DT,
-        DataLoader,
-        F,
         FREE_TO_FULL,
         Gamma,
         MultipleIndependent,
@@ -71,16 +72,14 @@ def _():
         TH1,
         TH2,
         TH3,
-        TensorDataset,
         cfg,
         df,
         get_choices_varying_numba,
-        nn,
         np,
         os,
+        paths,
         pd,
         plt,
-        random_split,
         sns,
         torch,
     )
@@ -196,7 +195,7 @@ def _(cols, names, np, pd, plt, samp, sns):
     _df = pd.DataFrame(samp, columns=names)
     _df_long = _df.melt(var_name="parameter", value_name="value")
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(4, 4), dpi=100)
     sns.violinplot(
         data=_df_long,
         x="parameter",
@@ -205,11 +204,93 @@ def _(cols, names, np, pd, plt, samp, sns):
         hue="parameter",
         cut=0,
         gap=0.25,
-        alpha = 0.75
+        alpha=0.75,
     )
     pretty_names = ["$s_L$", "$s_R$", "$S_{amp}$", "$S_d$", "$U_{amp}$"]
     plt.xticks(ticks=np.arange(len(pretty_names)), labels=pretty_names)
     plt.axhline(0, xmin=-1, xmax=6, linestyle="--", color="black")
+    sns.despine()
+    plt.tight_layout()
+    plt.ylim(-3, 5)
+    plt.show()
+    return (pretty_names,)
+
+
+@app.cell
+def _(mo, paths, pd):
+    fits_list = []
+
+    files = sorted(p for p in paths.DATA_PATH.glob("fits_*")if p.is_file())
+    for _file in files:
+        _fit_df = pd.read_csv(_file)
+        fits_list.append(_fit_df)
+    fits_df = pd.concat(fits_list)
+    dropdown_subj = mo.ui.dropdown(options=fits_df["subject"].unique())
+    dropdown_subj
+    return dropdown_subj, fits_df
+
+
+@app.cell
+def _(dropdown_subj, fits_df, names, np, pd, plt, pretty_names, sns):
+    import ast
+
+    fit_df = fits_df[fits_df["subject"] == dropdown_subj.value]
+    parsed = fit_df["x0"].apply(ast.literal_eval)
+    flat = parsed.apply(lambda x: x[0])
+    params_df = pd.DataFrame(flat.tolist(), columns=names)
+    params_df["fval"] = fit_df["fval"]
+    params_df["quality"] = np.where(params_df["fval"] < fit_df["fval"].mean(), "good", "bad")
+    params_df["fit_id"] = np.arange(len(params_df))
+    params_df = params_df.melt(
+        id_vars=["fit_id", "fval", "quality"],
+        var_name="parameter",
+        value_name="value",
+    )
+    brewer = sns.color_palette("Set1", 2)
+    palette = {
+        "good": brewer[0],
+        "bad": brewer[1]
+    }
+
+    plt.figure(figsize=(4,4))
+    sns.histplot(data=params_df, x = "fval",  hue="quality",  palette=palette)
+    plt.axvline(x = params_df["fval"].mean(), linestyle = "--", color = "red")
+    sns.despine()
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(8,4))
+    sns.violinplot(
+        data=params_df,
+        x="parameter",
+        y="value",
+        hue="quality",
+        palette = palette,
+        alpha=0.75,
+    )
+    plt.xticks(ticks=np.arange(len(pretty_names)), labels=pretty_names)
+    plt.axhline(0, xmin=-1, xmax=6, linestyle="--", color="black")
+    sns.despine()
+    plt.tight_layout()
+    plt.ylim(-3, 6)
+    plt.show()
+
+
+    plt.figure(figsize=(8,6))
+
+    sns.lineplot(
+        data=params_df,
+        x="parameter",
+        y="value",
+        hue="quality",
+        units="fit_id",
+        estimator=None,
+        alpha=0.4,
+        palette=palette,
+    )
+
+    plt.xticks(ticks=np.arange(len(pretty_names)), labels=pretty_names)
+    plt.axhline(0, linestyle="--", color="black")
     sns.despine()
     plt.tight_layout()
     plt.ylim(-3, 5)
@@ -279,132 +360,114 @@ def _(
 
 
 @app.cell
-def _(
-    DataLoader,
-    F,
-    FREE_TO_FULL,
-    TEMPLATE_THETA_FULL,
-    TensorDataset,
-    X,
-    X_t,
-    mo,
-    nn,
-    os,
-    random_split,
-    torch,
-    y_t,
-):
+def _(FREE_TO_FULL, TEMPLATE_THETA_FULL, X, X_t, os, y_t):
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    from torch.utils.data import TensorDataset, DataLoader, random_split
+
     class ChoiceMLP(nn.Module):
-        def __init__(
-            self,
-            in_dim: int,
-            hidden: int = 128,
-            depth: int = 2,
-            p_drop: float = 0.0,
-        ):
+        def __init__(self, in_dim, hidden=256, depth=3, p_drop=0.1):
             super().__init__()
-            layers = []
+            layers = [nn.LayerNorm(in_dim)]
             d = in_dim
             for _ in range(depth):
-                layers += [nn.Linear(d, hidden), nn.ReLU()]
-                if p_drop > 0:
-                    layers += [nn.Dropout(p_drop)]
+                layers += [nn.Linear(d, hidden), nn.GELU(), nn.Dropout(p_drop)]
                 d = hidden
-            layers += [nn.Linear(d, 3)]  # logits for 3 classes
+            layers += [nn.Linear(d, 3)]
             self.net = nn.Sequential(*layers)
 
         def forward(self, x):
             return self.net(x)
 
-
-    # Hyperparams
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    HIDDEN = int(os.environ.get("MLP_HIDDEN", "128"))
-    DEPTH = int(os.environ.get("MLP_DEPTH", "2"))
-    DROPOUT = float(os.environ.get("MLP_DROPOUT", "0.0"))
-    LR = float(os.environ.get("MLP_LR", "3e-4"))
-    BATCH = int(os.environ.get("MLP_BATCH", "4096"))
-    EPOCHS = int(os.environ.get("MLP_EPOCHS", "100"))
-    VAL_FRAC = float(os.environ.get("MLP_VAL_FRAC", "0.1"))
 
-    model = ChoiceMLP(
-        in_dim=X.shape[1], hidden=HIDDEN, depth=DEPTH, p_drop=DROPOUT
-    ).to(DEVICE)
-    opt = torch.optim.Adam(model.parameters(), lr=LR)
+    HIDDEN  = int(os.environ.get("MLP_HIDDEN", "256"))
+    DEPTH   = int(os.environ.get("MLP_DEPTH", "3"))
+    DROPOUT = float(os.environ.get("MLP_DROPOUT", "0.1"))
+    LR      = float(os.environ.get("MLP_LR", "3e-4"))
+    BATCH   = int(os.environ.get("MLP_BATCH", "1024"))
+    EPOCHS  = int(os.environ.get("MLP_EPOCHS", "200"))
+    VAL_FRAC= float(os.environ.get("MLP_VAL_FRAC", "0.1"))
+    WD      = float(os.environ.get("MLP_WD", "1e-4"))
 
-    # Dataset / split
+    model = ChoiceMLP(X.shape[1], hidden=HIDDEN, depth=DEPTH, p_drop=DROPOUT).to(DEVICE)
+    opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WD)
+
+    # class weights (solo para entrenar si hay desbalance)
+    with torch.no_grad():
+        counts = torch.bincount(y_t.cpu(), minlength=3).float()
+        w = (counts.sum() / (3.0 * counts.clamp_min(1.0))).to(DEVICE)
+
     ds = TensorDataset(X_t, y_t)
     n_val = int(len(ds) * VAL_FRAC)
     n_train = len(ds) - n_val
-    train_ds, val_ds = random_split(
-        ds, [n_train, n_val], generator=torch.Generator().manual_seed(0)
-    )
-    train_loader = DataLoader(
-        train_ds, batch_size=BATCH, shuffle=True, drop_last=False, num_workers=0
-    )
-    val_loader = DataLoader(
-        val_ds, batch_size=BATCH, shuffle=False, drop_last=False, num_workers=0
-    )
+    train_ds, val_ds = random_split(ds, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
+    train_loader = DataLoader(train_ds, batch_size=BATCH, shuffle=True, drop_last=False, num_workers=0)
+    val_loader   = DataLoader(val_ds,   batch_size=BATCH, shuffle=False, drop_last=False, num_workers=0)
 
-    def eval_loss_acc():
+    @torch.no_grad()
+    def eval_metrics():
         model.eval()
-        tot_loss = 0.0
         tot = 0
         corr = 0
-        with torch.no_grad():
-            for xb, yb in val_loader:
-                xb = xb.to(DEVICE)
-                yb = yb.to(DEVICE)
-                logits = model(xb)
-                loss = F.cross_entropy(logits, yb, reduction="sum")
-                tot_loss += float(loss.item())
-                pred = logits.argmax(dim=1)
-                corr += int((pred == yb).sum().item())
-                tot += int(yb.numel())
-        return tot_loss / max(1, tot), corr / max(1, tot)
+        sum_ce_weighted = 0.0
+        sum_ce_unweighted = 0.0
 
+        for xb, yb in val_loader:
+            xb = xb.to(DEVICE)
+            yb = yb.to(DEVICE)
+            logits = model(xb)
 
-    best_val = 1e9
+            # para monitorizar entrenamiento
+            sum_ce_weighted += float(F.cross_entropy(logits, yb, weight=w, reduction="sum").item())
+
+            # esto es la NLL "real" del surrogate (la que usarás en fitting)
+            sum_ce_unweighted += float(F.cross_entropy(logits, yb, reduction="sum").item())
+
+            pred = logits.argmax(dim=1)
+            corr += int((pred == yb).sum().item())
+            tot += int(yb.numel())
+
+        return (sum_ce_weighted / tot), (sum_ce_unweighted / tot), (corr / tot)
+
+    best_val = 1e18
     best_state = None
 
-    for ep in mo.status.progress_bar(
-        range(1, EPOCHS + 1),
-        title="Loading",
-        subtitle="Please wait",
-        show_eta=True,
-        show_rate=True,
-    ):
+    for ep in range(1, EPOCHS + 1):
         model.train()
-        running = 0.0
+        sum_train = 0.0
         seen = 0
+
         for xb, yb in train_loader:
             xb = xb.to(DEVICE)
             yb = yb.to(DEVICE)
+
             opt.zero_grad(set_to_none=True)
             logits = model(xb)
-            loss = F.cross_entropy(logits, yb)
+
+            # entrena con weights si hay desbalance
+            loss = F.cross_entropy(logits, yb, weight=w, reduction="mean")
             loss.backward()
             opt.step()
-            running += float(loss.item()) * yb.numel()
+
+            # logging correcto: suma (sin multiplicar doble)
+            sum_train += float(F.cross_entropy(logits, yb, reduction="sum").detach().item())
             seen += int(yb.numel())
 
-        train_loss = running / max(1, seen)
-        val_loss, val_acc = eval_loss_acc()
-        print(
-            f"ep {ep:03d} | train CE {train_loss:.4f} | val CE {val_loss:.4f} | val acc {val_acc:.4f}"
-        )
+        train_ce = sum_train / seen
+        val_ce_w, val_ce, val_acc = eval_metrics()
 
-        if val_loss < best_val:
-            best_val = val_loss
-            best_state = {
-                k: v.detach().cpu().clone() for k, v in model.state_dict().items()
-            }
+        print(f"ep {ep:03d} | train CE {train_ce:.4f} | val CE {val_ce:.4f} | val acc {val_acc:.4f}")
 
-    # Restore best
+        # early stopping sobre NLL real (sin weights)
+        if val_ce < best_val:
+            best_val = val_ce
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+
     if best_state is not None:
         model.load_state_dict(best_state)
-
     # Save
     ckpt = {
         "state_dict": model.state_dict(),
@@ -418,7 +481,7 @@ def _(
     out_path = os.environ.get("MLP_OUT", "choice_mlp_surrogate.pt")
     torch.save(ckpt, out_path)
     print("Saved:", out_path)
-    return
+    return (torch,)
 
 
 @app.cell

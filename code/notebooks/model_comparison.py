@@ -16,7 +16,7 @@ def _():
     import numpy as np
     import sys, os
     import seaborn as sns
-
+    import tomllib 
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     import polars as pl
     import jax.numpy as jnp
@@ -26,7 +26,8 @@ def _():
     import paths
     from glmhmmt.model import SoftmaxGLMHMM
     from glmhmmt.features import build_sequence_from_df
-
+    with paths.CONFIG.open("rb") as f:
+            cfg = tomllib.load(f)
     return (
         SoftmaxGLMHMM,
         build_sequence_from_df,
@@ -332,11 +333,11 @@ def _(K_LIST, agg, plt, sns):
         ax.plot(K_plot, mu, marker="o", label=model)
         # ax.fill_between(K_plot, mu - sem, mu + sem, alpha=0.2)
 
-    ax.set_xlabel("Número de estados (K)")
-    ax.set_ylabel("Log-likelihood final por trial")
-    ax.set_title("Comparación GLMHMM vs GLMHMM-t (media ± SEM sobre subjects)")
+    ax.set_xlabel("Number of states (K)")
+    ax.set_ylabel("Log-likelihood/trial")
+    ax.set_title("")
     ax.set_xticks(K_LIST)
-    ax.legend()
+    ax.legend(labels = ["GLMHMM", "GLMHMM-t"])
     fig.tight_layout()
     sns.despine()
     fig
@@ -475,7 +476,7 @@ def _(H_conditional_pl, OUT_LONG, df, np, pl):
             [
                 pl.col("subject")
                 .map_elements(
-                    lambda s: H_bal_map.get(s, np.nan), return_dtype=pl.Float64
+                    lambda s: H_full_map.get(s, np.nan), return_dtype=pl.Float64
                 )
                 .alias("H_cond"),
                 (-pl.col("ll_per_trial_final")).alias("nll_per_trial_final"),
@@ -536,7 +537,7 @@ def _(K_LIST, pl, plt, results_gof, sns):
     ax2.set_ylabel("GOF (rel vs empirical ceiling)")
     ax2.set_title("GOF in-sample GLMHMM vs GLMHMM-t")
     ax2.set_xticks(K_LIST)
-    ax2.set_ylim(0, 1)
+    ax2.set_ylim(0, 2)
     ax2.legend()
     sns.despine()
     fig2.tight_layout()

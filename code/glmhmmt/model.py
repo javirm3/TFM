@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import jax.random as jr
 import jax.tree_util as jtu
 from jaxtyping import Float, Array
+from jax.scipy.special import logsumexp
 import optax
 import tensorflow_probability.substrates.jax.distributions as tfd
 from typing import NamedTuple, Optional, Tuple, Union
@@ -59,7 +60,8 @@ class SoftmaxGLMHMMEmissions(HMMEmissions):
         return params, props
 
     def log_prior(self, params):
-        return 0
+        l2 = 1e-4
+        return -l2 * jnp.sum(params.weights ** 2)
 
     def distribution(self, params, state, inputs):
         x = inputs[:self.emission_input_dim]  # (M,)
@@ -93,8 +95,10 @@ class InputDrivenSoftmaxTransitions(HMMTransitions):
         props  = ParamsInputDrivenTransitions(bias=ParameterProperties(), weights=ParameterProperties())
         return params, props
 
-    def log_prior(self, params: ParamsInputDrivenTransitions) -> Scalar:
-        return 0.0
+    def log_prior(self, params):
+        l2_bias = 1e-3
+        l2_w    = 1e-3
+        return -(l2_bias * jnp.sum(params.bias**2) + l2_w * jnp.sum(params.weights**2))
 
     def distribution(self, params, state, inputs=None):
         u = inputs[self.emission_input_dim:self.emission_input_dim + self.transition_input_dim]
@@ -106,42 +110,42 @@ class InputDrivenSoftmaxTransitions(HMMTransitions):
         Return A[t,i,j] = P(z_{t+1}=j | z_t=i, inputs_t) for t=0..T-2
         Shape: (T-1, K, K)
         """
-        K = self.num_states
-        T = inputs.shape[0]
 
         # u_t used for transition t -> t+1, so only t=0..T-2
-        u = inputs[:, self.emission_input_dim:self.emission_input_dim + self.transition_input_dim]  # (T-1, D)
-
+        u = inputs[:-1, self.emission_input_dim:self.emission_input_dim + self.transition_input_dim]  # (T-1, D)
         # logits[t, i, j] = bias[i,j] + sum_d W[i,j,d] * u[t,d]
         logits = params.bias[None, :, :] + jnp.einsum("ijd,td->tij", params.weights, u)  # (T-1,K,K)
-
         return jax.nn.softmax(logits, axis=-1)
+        
+    def collect_suff_stats(self, params, posterior, inputs=None):
+        # posterior.trans_probs: (T-1, K, K) o con batch fuera
+        # inputs: (T, Dall)
+        # usamos inputs_t para transición t->t+1: t=0..T-2
+        xi = posterior.trans_probs
+        u_inputs = inputs[:-1]  # (T-1, Dall)
+        return (xi, u_inputs)
+
     def m_step(self, params, props, batch_stats, m_step_state):
-        # batch_stats = (xi, inputs_tr) con batch dimension
-        xi_b, inputs_b = batch_stats  # shapes: (B,T-1,K,K), (B,T-1,Dall)
+        xi_b, inputs_b = batch_stats  # xi_b: (B,T-1,K,K), inputs_b: (B,T-1,Dall)
 
-        # agrega batch
-        xi = xi_b.sum(axis=0)         # (T-1,K,K)
+        B, Tm1, K, _ = xi_b.shape
+        Dall = inputs_b.shape[-1]
 
-        # si B>1, podrías concatenar/sumar; lo correcto para inputs es:
-        # aquí como inputs es determinista por secuencia, normalmente B=1 en tu uso.
-        inputs_tr = inputs_b[0]       # (T-1,Dall)
+        xi = xi_b.reshape((B * Tm1, K, K))                 # (N,K,K)
+        inputs_tr = inputs_b.reshape((B * Tm1, Dall))      # (N,Dall)
 
-        # u_t para transiciones
-        u = inputs_tr[:, self.emission_input_dim:self.emission_input_dim + self.transition_input_dim]  # (T-1,D)
+        u = inputs_tr[:, self.emission_input_dim:self.emission_input_dim + self.transition_input_dim]  # (N,D)
 
-        b0 = params.bias
-        W0 = params.weights
-
-        # hiperparámetros para estabilidad
+        b0, W0 = params.bias, params.weights
         l2 = 1e-3
         clip_val = 20.0
 
         def loss_fn(b, W):
-            logits = b[None, :, :] + jnp.einsum("ijd,td->tij", W, u)  # (T-1,K,K)
-            logp = jax.nn.log_softmax(logits, axis=-1)                # (T-1,K,K)
-            nll = -(xi * logp).sum()
-            reg = l2 * (jnp.sum(b*b) + jnp.sum(W*W))
+            # logits[n,i,j] = b[i,j] + sum_d W[i,j,d] u[n,d]
+            logits = b[None, :, :] + jnp.einsum("ijd,nd->nij", W, u)        # (N,K,K)
+            logp   = jax.nn.log_softmax(logits, axis=-1)                   # (N,K,K)
+            nll    = -(xi * logp).sum()
+            reg    = l2 * (jnp.sum(b*b) + jnp.sum(W*W))
             return nll + reg
 
         opt = self.m_step_optimizer
@@ -149,7 +153,7 @@ class InputDrivenSoftmaxTransitions(HMMTransitions):
 
         def step(carry, _):
             b, W, opt_state = carry
-            (loss, grads) = jax.value_and_grad(loss_fn, argnums=(0,1))(b, W)
+            loss, grads = jax.value_and_grad(loss_fn, argnums=(0,1))(b, W)
             updates, opt_state = opt.update(grads, opt_state, (b, W))
             b, W = optax.apply_updates((b, W), updates)
             b = jnp.clip(b, -clip_val, clip_val)
@@ -157,9 +161,7 @@ class InputDrivenSoftmaxTransitions(HMMTransitions):
             return (b, W, opt_state), loss
 
         (b, W, _), _ = jax.lax.scan(step, (b0, W0, opt_state), None, length=self.m_step_num_iters)
-
-        new_params = ParamsInputDrivenTransitions(bias=b, weights=W)
-        return new_params, m_step_state
+        return ParamsInputDrivenTransitions(bias=b, weights=W), m_step_state
     
 class ParamsSoftmaxGLMHMM(NamedTuple):
     initial: ParamsStandardHMMInitialState
@@ -236,7 +238,7 @@ class SoftmaxGLMHMM(HMM):
             key3, method=method, emission_weights=emission_weights)
 
         return ParamsSoftmaxGLMHMM(**params), ParamsSoftmaxGLMHMM(**props)
-    
+
     def predict_choice_probs(self, params, emissions, inputs):
         """
         Devuelve p(y_t=c | y_{1:t-1}, x_{1:t})
@@ -247,7 +249,7 @@ class SoftmaxGLMHMM(HMM):
         alpha = filt.filtered_probs
 
         T, K = alpha.shape
-        A = self.transition_component._compute_transition_matrices(params.transitions, inputs[:-1]) # (T-1, K, K)
+        A = self.transition_component._compute_transition_matrices(params.transitions, inputs) # (T-1, K, K)
 
         if A.ndim == 2:  # homogeneous transitions
             A = jnp.broadcast_to(A[None, :, :], (T-1, K, K))

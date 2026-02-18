@@ -23,7 +23,7 @@ color_names = [
 colors = sns.xkcd_palette(color_names)
 cmap = gradient_cmap(colors)    
 
-num_states= 3         # nº estados
+num_states= 5        # nº estados
 emission_dim = 3          # 3 choices
 input_dim = 8+3          # intercept + delay + stim_L + stim_C + stim_R + previous_outcome
 
@@ -42,7 +42,7 @@ params3, props3 = model3.initialize(key=key)
 df = pl.read_parquet(paths.DATA_PATH/"df_filtered.parquet")
 y, X, U, names = build_sequence_from_df(df.filter(pl.col("subject") == "A89"))
 
-model4 = SoftmaxGLMHMM( num_states=2, num_classes=3, emission_input_dim=X.shape[1], transition_input_dim=U.shape[1], transition_matrix_stickiness=10.0, m_step_num_iters=100,)
+model4 = SoftmaxGLMHMM( num_states=3, num_classes=3, emission_input_dim=X.shape[1], transition_input_dim=U.shape[1], transition_matrix_stickiness=10.0, m_step_num_iters=100,)
 params4, props4 = model4.initialize(key=key)
 
 inputs_all = jnp.concatenate([X, U], axis=1)
@@ -78,7 +78,6 @@ plt.title("EM log-likelihood")
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.show()
-
 
 W = np.asarray(fitted_params.emissions.weights)  # (K, C, M)
 K, C, M = W.shape

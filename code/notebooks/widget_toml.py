@@ -12,30 +12,216 @@ def _():
 
 
 @app.cell
-def _(mo):
+def _():
     import traitlets
     import anywidget
     from pathlib import Path
+    from typing import Any, Dict
 
     try:
         import tomllib  # py3.11+
-    except ImportError:
-        import tomli as tomllib
+    except ImportError:  # pragma: no cover
+        import tomli as tomllib  # type: ignore
 
     try:
         import tomli_w
-    except Exception:
+    except Exception:  # pragma: no cover
         tomli_w = None
 
 
     class TomlConfigEditor(anywidget.AnyWidget):
-        data = traitlets.Dict().tag(sync=True)
-        path = traitlets.Unicode("").tag(sync=True)
-        name = traitlets.Unicode("config").tag(sync=True)
-        status = traitlets.Unicode("").tag(sync=True)
-        command = traitlets.Unicode("").tag(sync=True)
-        command_payload = traitlets.Dict().tag(sync=True)
-        command_nonce = traitlets.Int(0).tag(sync=True)
+        """
+        A lightweight TOML editor widget.
+
+        Frontend sends commands via (command, command_payload, command_nonce).
+        Python side executes load/save and updates (data, status, path).
+        """
+
+        # ---- Synced state
+        data = traitlets.Dict(default_value={}).tag(sync=True)
+        path = traitlets.Unicode(default_value="").tag(sync=True)
+        name = traitlets.Unicode(default_value="config").tag(sync=True)
+        status = traitlets.Unicode(default_value="").tag(sync=True)
+
+        # ---- Command channel (frontend -> python)
+        command = traitlets.Unicode(default_value="").tag(sync=True)
+        command_payload = traitlets.Dict(default_value={}).tag(sync=True)
+        command_nonce = traitlets.Int(default_value=0).tag(sync=True)
+
+        _css = r"""
+        :host { display: block; }
+
+        .tce{
+          font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+          color: #111;
+        }
+
+        .topbar{
+          display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+          padding:12px; border:1px solid #e5e5e5; border-radius:14px;
+          background: linear-gradient(180deg, #ffffff, #fbfbfb);
+          box-shadow: 0 4px 18px rgba(0,0,0,0.05);
+        }
+
+        .pill{
+          display:flex; align-items:center; gap:8px;
+          padding:8px 10px; border:1px solid #e2e2e2; border-radius:999px; background:#fff;
+        }
+
+        .label{ font-size:12px; color:#555; }
+
+        .input{
+          border:none; background:transparent;
+          padding:6px 8px; min-width:240px; outline:none; color: inherit;
+        }
+        .input:focus{ outline:none; box-shadow:none; }
+
+        .btn{
+          border:1px solid #d6d6d6; background:#fff; border-radius:12px;
+          padding:9px 12px; cursor:pointer; transition: transform .05s, background .15s, border-color .15s;
+          display:flex; align-items:center; gap:8px;
+          user-select:none;
+        }
+        .btn:hover{ background:#f6f6f6; }
+        .btn:active{ transform: translateY(1px); }
+        .btn.primary{ border-color:#c9d6e6; background:#eef5ff; }
+        .btn.primary:hover{ background:#e4efff; }
+        .btn.danger:hover{ background:#fff1f1; border-color:#f0b3b3; }
+        .btn:disabled{ opacity: 0.55; cursor: not-allowed; }
+
+        .status{ margin-left:auto; font-size:12px; color:#666; }
+
+        .tabs{
+          margin-top:12px;
+          display:flex; gap:8px; flex-wrap:wrap;
+        }
+
+        .tab{
+          border:1px solid #e0e0e0; background:#fff; border-radius:999px;
+          padding:8px 12px; cursor:pointer; font-weight:700; color:#333;
+        }
+        .tab.active{
+          background:#111; color:#fff; border-color:#111;
+        }
+
+        .panel{
+          margin-top:12px;
+          border:1px solid #e7e7e7; border-radius:16px;
+          padding:14px; background:#fff;
+          box-shadow: 0 6px 24px rgba(0,0,0,0.04);
+        }
+
+        .sectionTitle{
+          font-size:14px; font-weight:800; color:#111; margin:0 0 10px 0;
+          display:flex; align-items:center; justify-content:space-between;
+        }
+
+        .card{
+          border:1px solid #ededed; border-radius:14px; padding:10px 10px;
+          background: linear-gradient(180deg, #fff, #fcfcfc);
+          margin:8px 0;
+        }
+
+        .row{
+          display:grid;
+          grid-template-columns: 220px 1fr auto;
+          gap:10px;
+          align-items:center;
+          padding:6px 6px;
+          border-radius:12px;
+        }
+        .row:hover{ background:#fafafa; }
+
+        .k{
+          font-weight:700; color:#222;
+          overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        }
+
+        .v{ display:flex; gap:10px; align-items:center; min-width:0; }
+
+        .text, .num, select, textarea{
+          width:100%;
+          border:1px solid #d8d8d8; border-radius:10px; padding:8px 10px;
+          outline:none; color: inherit; background: #fff;
+        }
+        .text:focus, .num:focus, select:focus, textarea:focus{
+          border-color:#9ab; box-shadow: 0 0 0 3px rgba(100,130,170,0.15);
+        }
+
+        textarea{
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        }
+
+        .fold{
+          cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;
+          font-weight:800; color:#111;
+          padding:6px 6px; border-radius:12px;
+        }
+        .fold:hover{ background:#f5f5f5; }
+
+        .indent{ margin-left:16px; }
+
+        .color{
+          width:44px; height:36px; border:1px solid #d8d8d8; border-radius:10px; padding:0; background:#fff;
+        }
+
+        .hint{ font-size:12px; color:#777; margin-top:6px; }
+
+        .addbox{
+          display:grid;
+          grid-template-columns: 1.2fr 1fr 1fr auto;
+          gap:10px;
+          align-items:center;
+          padding:10px;
+          border:1px dashed #ddd;
+          border-radius:14px;
+          background:#fff;
+          margin:10px 0 14px 0;
+        }
+        .addboxTitle{
+          font-size:12px; font-weight:800; color:#333; margin:0 0 6px 2px;
+        }
+
+        /* --- Dark mode --- */
+        @media (prefers-color-scheme: dark){
+          .tce{ color:#fff; }
+          .topbar{
+            border-color:#2b2b2b;
+            background: linear-gradient(180deg, #1a1a1a, #141414);
+            box-shadow: 0 8px 26px rgba(0,0,0,0.35);
+          }
+          .pill{ border-color:#2b2b2b; background:#121212; }
+          .label{ color:#bdbdbd; }
+          .status{ color:#bdbdbd; }
+
+          .btn{ border-color:#2b2b2b; background:#141414; color:#fff; }
+          .btn:hover{ background:#1b1b1b; }
+          .btn.primary{ border-color:#2a3b55; background:#122033; }
+          .btn.primary:hover{ background:#152a45; }
+          .btn.danger:hover{ background:#2a1414; border-color:#5a2a2a; }
+
+          .tab{ border-color:#2b2b2b; background:#141414; color:#fff; }
+          .tab.active{ background:#fff; color:#111; border-color:#fff; }
+
+          .panel{ border-color:#2b2b2b; background:#121212; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+          .sectionTitle{ color:#fff; }
+
+          .card{ border-color:#2b2b2b; background: linear-gradient(180deg, #141414, #101010); }
+          .row:hover{ background:#171717; }
+          .k{ color:#fff; }
+
+          .text, .num, select, textarea{
+            border-color:#2b2b2b; background:#0f0f0f; color:#fff;
+          }
+          .fold{ color:#fff; }
+          .fold:hover{ background:#1a1a1a; }
+
+          .hint{ color:#bdbdbd; }
+          .addbox{ border-color:#2b2b2b; background:#141414; }
+          .addboxTitle{ color:#d5d5d5; }
+          .color{ border-color:#2b2b2b; background:#0f0f0f; }
+        }
+        """
 
         _esm = r"""
         function deepClone(x){ return JSON.parse(JSON.stringify(x)); }
@@ -78,129 +264,9 @@ def _(mo):
           return Object.keys(obj || {}).sort((a,b)=>a.localeCompare(b));
         }
 
-        function css(){
-          return `
-          .tce{ font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-          .topbar{
-            display:flex; gap:10px; align-items:center; flex-wrap:wrap;
-            padding:12px; border:1px solid #e5e5e5; border-radius:14px;
-            background: linear-gradient(180deg, #ffffff, #fbfbfb);
-            box-shadow: 0 4px 18px rgba(0,0,0,0.05);
-          }
-          .pill{
-            display:flex; align-items:center; gap:8px;
-            padding:8px 10px; border:1px solid #e2e2e2; border-radius:999px; background:#fff;
-          }
-          .label{ font-size:12px; color:#555; }
-          /* 👇 sin “contornos” exagerados */
-          .input{
-            border:none; background:transparent;
-            padding:6px 8px; min-width:240px; outline:none;
-          }
-          .input:focus{ outline:none; box-shadow:none; }
-          .btn{
-            border:1px solid #d6d6d6; background:#fff; border-radius:12px;
-            padding:9px 12px; cursor:pointer; transition: transform .05s, background .15s, border-color .15s;
-            display:flex; align-items:center; gap:8px;
-          }
-          .btn:hover{ background:#f6f6f6; }
-          .btn:active{ transform: translateY(1px); }
-          .btn.primary{ border-color:#c9d6e6; background:#eef5ff; }
-          .btn.primary:hover{ background:#e4efff; }
-          .btn.danger:hover{ background:#fff1f1; border-color:#f0b3b3; }
-          .status{ margin-left:auto; font-size:12px; color:#666; }
-          .tabs{
-            margin-top:12px;
-            display:flex; gap:8px; flex-wrap:wrap;
-          }
-          /* 👇 tabs sin iconos */
-          .tab{
-            border:1px solid #e0e0e0; background:#fff; border-radius:999px;
-            padding:8px 12px; cursor:pointer; font-weight:700; color:#333;
-          }
-          .tab.active{
-            background:#111; color:#fff; border-color:#111;
-          }
-          .panel{
-            margin-top:12px;
-            border:1px solid #e7e7e7; border-radius:16px;
-            padding:14px; background:#fff;
-            box-shadow: 0 6px 24px rgba(0,0,0,0.04);
-          }
-          .sectionTitle{
-            font-size:14px; font-weight:800; color:#111; margin:0 0 10px 0;
-            display:flex; align-items:center; justify-content:space-between;
-          }
-          .card{
-            border:1px solid #ededed; border-radius:14px; padding:10px 10px;
-            background: linear-gradient(180deg, #fff, #fcfcfc);
-            margin:8px 0;
-          }
-          .row{
-            display:grid;
-            grid-template-columns: 220px 1fr auto;
-            gap:10px;
-            align-items:center;
-            padding:6px 6px;
-            border-radius:12px;
-          }
-          .row:hover{ background:#fafafa; }
-          .k{
-            font-weight:700; color:#222;
-            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-          }
-          .v{
-            display:flex; gap:10px; align-items:center; min-width:0;
-          }
-          .text, .num, select, textarea{
-            width:100%;
-            border:1px solid #d8d8d8; border-radius:10px; padding:8px 10px;
-            outline:none;
-          }
-          .text:focus, .num:focus, select:focus, textarea:focus{
-            border-color:#9ab; box-shadow: 0 0 0 3px rgba(100,130,170,0.15);
-          }
-          textarea{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-          .mini{
-            border:1px solid #d6d6d6; background:#fff; border-radius:10px;
-            padding:7px 10px; cursor:pointer;
-          }
-          .mini:hover{ background:#f6f6f6; }
-          .fold{
-            cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;
-            font-weight:800; color:#111;
-            padding:6px 6px; border-radius:12px;
-          }
-          .fold:hover{ background:#f5f5f5; }
-          .indent{ margin-left:16px; }
-          .color{ width:44px; height:36px; border:1px solid #d8d8d8; border-radius:10px; padding:0; background:#fff; }
-          .hint{ font-size:12px; color:#777; margin-top:6px; }
-
-          /* Add-box (in-widget inputs) */
-          .addbox{
-            display:grid;
-            grid-template-columns: 1.2fr 1fr 1fr auto;
-            gap:10px;
-            align-items:center;
-            padding:10px;
-            border:1px dashed #ddd;
-            border-radius:14px;
-            background:#fff;
-            margin:10px 0 14px 0;
-          }
-          .addbox .btn{ justify-content:center; }
-          .addboxTitle{
-            font-size:12px; font-weight:800; color:#333; margin:0 0 6px 2px;
-          }
-          `;
-        }
-
         export default {
           render({ model, el }) {
             el.innerHTML = "";
-            const style = document.createElement("style");
-            style.textContent = css();
-            el.appendChild(style);
 
             const root = document.createElement("div");
             root.className = "tce";
@@ -238,7 +304,6 @@ def _(mo):
             let expandedInitialized = false;
 
             function expandAllTablesByDefault(data){
-              // expand top-level tables and their nested tables by default once
               function walk(obj, basePath){
                 for(const k of Object.keys(obj || {})){
                   const v = obj[k];
@@ -251,6 +316,7 @@ def _(mo):
               }
               walk(data, "");
             }
+
             function sendCommand(type, payload){
               model.set("command", type);
               model.set("command_payload", payload || {});
@@ -342,6 +408,7 @@ def _(mo):
                     const parsed = JSON.parse(ta.value);
                     if(!Array.isArray(parsed)) throw new Error("not array");
                     commitChange(d => setByPath(d, fullPath, parsed));
+                    ta.style.borderColor = "";
                   } catch(e){
                     ta.style.borderColor = "#c00";
                   }
@@ -364,7 +431,7 @@ def _(mo):
 
               const title = document.createElement("div");
               title.className = "addboxTitle";
-              title.textContent = `Añadir dentro de: ${basePath || "root"}`;
+              title.textContent = `Add inside: ${basePath || "root"}`;
               wrap.appendChild(title);
 
               const box = document.createElement("div");
@@ -372,7 +439,7 @@ def _(mo):
 
               const key = document.createElement("input");
               key.className = "text";
-              key.placeholder = "nombre_clave";
+              key.placeholder = "key_name";
 
               const type = document.createElement("select");
               type.innerHTML = `
@@ -380,20 +447,19 @@ def _(mo):
                 <option value="number">number</option>
                 <option value="boolean">boolean</option>
                 <option value="color">color</option>
-                <option value="table">subtabla</option>
+                <option value="table">table</option>
               `;
 
               const val = document.createElement("input");
               val.className = "text";
-              val.placeholder = "valor";
-              val.value = "";
+              val.placeholder = "value";
 
               function syncValUI(){
                 const t = type.value;
                 if(t === "table"){
                   val.disabled = true;
                   val.value = "";
-                  val.placeholder = "(vacío)";
+                  val.placeholder = "(empty)";
                 } else if(t === "boolean"){
                   val.disabled = false;
                   val.value = "false";
@@ -409,7 +475,7 @@ def _(mo):
                 } else {
                   val.disabled = false;
                   val.value = "";
-                  val.placeholder = "texto";
+                  val.placeholder = "text";
                 }
               }
               type.onchange = syncValUI;
@@ -417,15 +483,15 @@ def _(mo):
 
               const addBtn = document.createElement("button");
               addBtn.className = "btn primary";
-              addBtn.textContent = "Añadir";
+              addBtn.textContent = "Add";
 
               addBtn.onclick = () => {
                 const k = (key.value || "").trim();
-                if(!k){ alert("Falta el nombre del campo."); return; }
+                if(!k){ alert("Missing key name."); return; }
                 const full = basePath ? `${basePath}.${k}` : k;
 
                 commitChange(d => {
-                  if(getByPath(d, full) !== undefined){ alert("Esa clave ya existe."); return; }
+                  if(getByPath(d, full) !== undefined){ alert("That key already exists."); return; }
                   const t = type.value;
                   if(t === "table"){
                     setByPath(d, full, {});
@@ -444,7 +510,6 @@ def _(mo):
                   }
                 });
 
-                // reset
                 key.value = "";
                 syncValUI();
               };
@@ -467,14 +532,13 @@ def _(mo):
               header.textContent = titleText;
               card.appendChild(header);
 
-              // Add-box inside widget
               card.appendChild(renderAddBox(basePath));
 
               const ks = keysSorted(obj);
               if(ks.length === 0){
                 const empty = document.createElement("div");
                 empty.className = "hint";
-                empty.textContent = "No hay claves aquí todavía.";
+                empty.textContent = "No keys yet.";
                 card.appendChild(empty);
                 return card;
               }
@@ -486,6 +550,7 @@ def _(mo):
                 const isObj = v && typeof v === "object" && !Array.isArray(v);
                 if(isObj){
                   const open = expanded.has(fullPath);
+
                   const foldRow = document.createElement("div");
                   foldRow.style.display = "flex";
                   foldRow.style.justifyContent = "space-between";
@@ -505,7 +570,7 @@ def _(mo):
                   del.className = "btn danger";
                   del.style.padding = "8px 10px";
                   del.textContent = "🗑";
-                  del.title = "Eliminar";
+                  del.title = "Delete";
                   del.onclick = () => commitChange(d => deleteByPath(d, fullPath));
 
                   foldRow.appendChild(fold);
@@ -513,7 +578,7 @@ def _(mo):
                   card.appendChild(foldRow);
 
                   if(open){
-                    const inner = renderObjectCard(v, fullPath, "Contenido");
+                    const inner = renderObjectCard(v, fullPath, "Contents");
                     inner.classList.add("indent");
                     card.appendChild(inner);
                   }
@@ -535,7 +600,7 @@ def _(mo):
                 del.className = "btn danger";
                 del.style.padding = "8px 10px";
                 del.textContent = "🗑";
-                del.title = "Eliminar";
+                del.title = "Delete";
                 del.onclick = () => commitChange(d => deleteByPath(d, fullPath));
 
                 row.appendChild(keyEl);
@@ -555,7 +620,7 @@ def _(mo):
             namePill.className = "pill";
             const nameLabel = document.createElement("span");
             nameLabel.className = "label";
-            nameLabel.textContent = "Nombre";
+            nameLabel.textContent = "Name";
             const nameInput = document.createElement("input");
             nameInput.className = "input";
             nameInput.style.minWidth = "160px";
@@ -571,28 +636,42 @@ def _(mo):
             pathPill.className = "pill";
             const pathLabel = document.createElement("span");
             pathLabel.className = "label";
-            pathLabel.textContent = "Ruta";
+            pathLabel.textContent = "Path";
             const pathInput = document.createElement("input");
             pathInput.className = "input";
             pathInput.value = model.get("path") || "";
             pathInput.placeholder = "config.toml";
             pathPill.appendChild(pathLabel);
             pathPill.appendChild(pathInput);
+
             const openBtn = document.createElement("button");
             openBtn.className = "btn primary";
-            openBtn.textContent = "Abrir";
-            openBtn.onclick = () => {
-              const p = pathInput.value;
+            openBtn.textContent = "Open";
+
+            function openFromPath(){
+              const p = (pathInput.value || "").trim();
+              if(!p){
+                alert("Please enter a path to a TOML file.");
+                return;
+              }
               model.set("path", p);
               model.save_changes();
               sendCommand("load", { path: p });
-            };
+            }
+            openBtn.onclick = openFromPath;
+            pathInput.addEventListener("keydown", (e) => {
+              if(e.key === "Enter") openFromPath();
+            });
 
             const saveBtn = document.createElement("button");
             saveBtn.className = "btn primary";
-            saveBtn.textContent = "Guardar";
+            saveBtn.textContent = "Save";
             saveBtn.onclick = () => {
-              const p = model.get("path") || pathInput.value;
+              const p = (model.get("path") || pathInput.value || "").trim();
+              if(!p){
+                alert("Please enter a path to save the TOML file.");
+                return;
+              }
               const snapshot = deepClone(model.get("data") || {});
               sendCommand("save", { path: p, data: snapshot });
             };
@@ -645,6 +724,8 @@ def _(mo):
               pathInput.value = model.get("path") || "";
               status.textContent = model.get("status") || "";
 
+              openBtn.disabled = !(pathInput.value || "").trim();
+
               ensureHistoryInit();
               undoBtn.style.opacity = canUndo() ? "1" : "0.5";
               undoBtn.style.pointerEvents = canUndo() ? "auto" : "none";
@@ -675,13 +756,13 @@ def _(mo):
               if(activeTab === "root"){
                 const title = document.createElement("div");
                 title.className = "sectionTitle";
-                title.textContent = "Root (valores no-tabla)";
+                title.textContent = "Root (non-table values)";
                 panel.appendChild(title);
                 panel.appendChild(renderObjectCard(rootScalars, "", "Root"));
               } else {
                 const title = document.createElement("div");
                 title.className = "sectionTitle";
-                title.textContent = `Tabla: ${activeTab}`;
+                title.textContent = `Table: ${activeTab}`;
                 panel.appendChild(title);
                 panel.appendChild(renderObjectCard(tables[activeTab] || {}, activeTab, activeTab));
               }
@@ -689,7 +770,7 @@ def _(mo):
 
             // Sync Python -> UI
             model.on("change:data", () => {
-              expandedInitialized = false; // re-expand for new file
+              expandedInitialized = false;
               resetHistoryToCurrent();
               renderAll();
             });
@@ -697,93 +778,58 @@ def _(mo):
             model.on("change:path", renderAll);
             model.on("change:name", renderAll);
 
-            // init history now
             resetHistoryToCurrent();
             renderAll();
           }
         };
         """
 
-        def __init__(self, path="config.toml", name="config"):
+        def __init__(self, path: str = "config.toml", name: str = "config"):
             super().__init__()
-            self.path = path
             self.name = name
+            self.path = str(Path(path).expanduser()) if path else ""
+            self.status = "Ready."
             self.data = {}
-            self.status = "Listo."
-            self.on_msg(self._handle_msg)
-            if path:
-                self.load(path)
 
-        def load(self, path: str):
+            if self.path:
+                self.load(self.path)
+
+        def load(self, path: str) -> None:
             p = Path(path).expanduser()
+
             if not p.exists():
-                self.status = f"No existe: {p}"
                 self.data = {}
+                self.status = f"File not found: {p}"
                 return
+
             try:
-                with open(p, "rb") as f:
+                with p.open("rb") as f:
                     obj = tomllib.load(f)
                 self.path = str(p)
-                self.data = obj
-                self.status = f"Cargado: {p}"
+                self.data = obj if isinstance(obj, dict) else {}
+                self.status = f"Loaded: {p}"
             except Exception as e:
-                self.status = f"Error cargando TOML: {e}"
                 self.data = {}
+                self.status = f"Error loading TOML: {e}"
 
-        def save(self, path: str):
+        def save(self, path: str) -> None:
             if tomli_w is None:
-                self.status = "Instala tomli-w para poder guardar (pip install tomli-w)."
+                self.status = "Install tomli-w to enable saving (pip install tomli-w)."
                 return
 
             p = Path(path).expanduser()
+
             try:
                 p.parent.mkdir(parents=True, exist_ok=True)
-                text = tomli_w.dumps(self.data)
+                text = tomli_w.dumps(self.data)  # type: ignore[union-attr]
                 p.write_text(text, encoding="utf-8")
                 self.path = str(p)
-                self.status = f"Guardado: {p.resolve()}"  # 🔥 ruta real
+                self.status = f"Saved: {p.resolve()}"
             except Exception as e:
-                self.status = f"Error guardando: {e} (ruta: {p.resolve()})"
-            mo.md(f"SAVED TO: {p.resolve()}")
+                self.status = f"Error saving: {e} (path: {p.resolve()})"
 
-        def _handle_msg(self, msg, *args, **kwargs):
-            # marimo/ipywidgets pueden envolver el payload en content/data
-            payload = None
-
-            if isinstance(msg, dict):
-                # 1) ipywidgets style: msg["content"]["data"]
-                content = msg.get("content")
-                if isinstance(content, dict):
-                    data = content.get("data")
-                    if isinstance(data, dict):
-                        payload = data
-                    elif isinstance(content, dict):
-                        # 2) a veces cae directo en content
-                        payload = content
-
-                # 3) a veces cae directo en msg
-                if payload is None and "type" in msg:
-                    payload = msg
-
-            if not isinstance(payload, dict):
-                return
-
-            t = payload.get("type")
-            if t is None:
-                return
-
-            if t == "load":
-                self.load(payload.get("path", self.path))
-
-            elif t == "save":
-                if isinstance(payload.get("data"), dict):
-                    self.data = payload["data"]
-                self.save(payload.get("path", self.path))
-
-            else:
-                self.status = f"Mensaje desconocido: {t}"
         @traitlets.observe("command_nonce")
-        def _on_command(self, change):
+        def _on_command(self, change: Dict[str, Any]) -> None:
             cmd = self.command
             payload = self.command_payload or {}
 
@@ -791,13 +837,16 @@ def _(mo):
                 self.load(payload.get("path", self.path))
 
             elif cmd == "save":
-                # snapshot del frontend (evita race)
                 d = payload.get("data")
                 if isinstance(d, dict):
                     self.data = d
                 self.save(payload.get("path", self.path))
 
-            # limpia comando para no re-ejecutar accidentalmente
+            else:
+                if cmd:
+                    self.status = f"Unknown command: {cmd}"
+
+            # prevent accidental re-exec
             self.command = ""
             self.command_payload = {}
 
