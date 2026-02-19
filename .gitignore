@@ -1,2 +1,4 @@
 /references
 /data
+*.synctex.gz
+*.DS_Store

@@ -14,7 +14,8 @@
 \definecolor{colL}{HTML}{E41A1C}           % histogram bar left
 \definecolor{colC}{HTML}{377EB8}           % histogram bar centre
 \definecolor{colR}{HTML}{4DAF4A}           % histogram bar right
-
+\definecolor{colTA}{HTML}{E41A1C}          % trans bar 1 – red
+\definecolor{colTW}{HTML}{FFC107} 
 \begin{document}
 \begin{tikzpicture}[
   font=\sffamily,
@@ -57,8 +58,8 @@
 
 %% ── Transition arrows ──────────────────────────────────────────────────────
 \draw[dotarrow] (ldots) -- (z0);
-\draw[tarrow]   (z0) -- node[above, font=\sffamily\bfseries, color=transOrange] {$A$} (z1);
-\draw[tarrow]   (z1) -- node[above, font=\sffamily\bfseries, color=transOrange] {$A$} (z2);
+\draw[tarrow]   (z0) --  (z1);
+\draw[tarrow]   (z1) --  (z2);
 \draw[dotarrow] (z2)    -- (rdots);
 
 %% ── Emission arrows ────────────────────────────────────────────────────────
@@ -71,25 +72,28 @@
 %% ── Histograms beside emission arrows (right side) ──────────────────────────
 %% helper macro: histogram centred at coordinate, with given bar heights
 %% y0: left-skewed  (tall L, medium C, short R)  – placed right of z0->y0 midpoint
-\coordinate (h0) at ($(z0)!0.5!(y0)+(9mm,0)$);
-\fill[colL] ($(h0)+(-3.1mm,-2.8mm)$) rectangle ($(h0)+(-1.3mm, 2.2mm)$);
-\fill[colC] ($(h0)+(-0.9mm,-2.8mm)$) rectangle ($(h0)+(0.9mm,  0.2mm)$);
-\fill[colR] ($(h0)+(1.3mm, -2.8mm)$) rectangle ($(h0)+(3.1mm, -1.3mm)$);
-\draw[black, line width=1.4pt] ($(h0)+(-3.5mm,-2.8mm)$) -- ($(h0)+(3.5mm,-2.8mm)$);
+\node[inner sep=0pt, anchor=west] at ($(z0)!0.5!(y0)+(2mm,0)$)
+  {\includegraphics[width=13mm]{3WM.pdf}};
+\node[inner sep=0pt, anchor=west] at ($(z1)!0.5!(y1)+(2mm,0)$)
+  {\includegraphics[width=13mm]{3WM.pdf}};
+\node[inner sep=0pt, anchor=west] at ($(z2)!0.5!(y2)+(2mm,0)$)
+  {\includegraphics[width=13mm]{3WM.pdf}};
 
-%% y1: centre-peaked (short L, tall C, short R)  – placed right of z1->y1 midpoint
-\coordinate (h1) at ($(z1)!0.5!(y1)+(9mm,0)$);
-\fill[colL] ($(h1)+(-3.1mm,-2.8mm)$) rectangle ($(h1)+(-1.3mm,-1.3mm)$);
-\fill[colC] ($(h1)+(-0.9mm,-2.8mm)$) rectangle ($(h1)+(0.9mm,  2.2mm)$);
-\fill[colR] ($(h1)+(1.3mm, -2.8mm)$) rectangle ($(h1)+(3.1mm, -1.3mm)$);
-\draw[black, line width=1.4pt] ($(h1)+(-3.5mm,-2.8mm)$) -- ($(h1)+(3.5mm,-2.8mm)$);
+\coordinate (ht0) at ($(z0)!0.5!(z1)+(0,8mm)$);
+\fill[colTA] ($(ht0)+(-6mm,-3mm)$) rectangle ($(ht0)+(-3mm, 2mm)$);
+\fill[colTW] ($(ht0)+(3mm,-3mm)$)  rectangle ($(ht0)+(6mm,  0mm)$);
+\draw[black, line width=1.3pt] ($(ht0)+(-7mm,-3mm)$) -- ($(ht0)+(7mm,-3mm)$);
+\node[font=\sffamily\small] at ($(ht0)+(0,-1.2mm)$) {$\cdots$};
+\node[font=\sffamily\small] at ($(ht0)+(-4.5mm,-5mm)$) {$1$};
+\node[font=\sffamily\small] at ($(ht0)+(4.5mm,-5mm)$)  {$k$};
+\coordinate (ht1) at ($(z1)!0.5!(z2)+(0,8mm)$);
+\fill[colTA] ($(ht1)+(-6mm,-3mm)$) rectangle ($(ht1)+(-3mm,  0.5mm)$);
+\fill[colTW] ($(ht1)+(3mm,-3mm)$)  rectangle ($(ht1)+(6mm,  2mm)$);
+\draw[black, line width=1.3pt] ($(ht1)+(-7mm,-3mm)$) -- ($(ht1)+(7mm,-3mm)$);
+\node[font=\sffamily\small] at ($(ht1)+(0,-1.2mm)$) {$\cdots$};
+\node[font=\sffamily\small] at ($(ht1)+(-4.5mm,-5mm)$) {$1$};
+\node[font=\sffamily\small] at ($(ht1)+(4.5mm,-5mm)$)  {$k$};
 
-%% y2: right-skewed (short L, medium C, tall R)  – placed right of z2->y2 midpoint
-\coordinate (h2) at ($(z2)!0.5!(y2)+(9mm,0)$);
-\fill[colL] ($(h2)+(-3.1mm,-2.8mm)$) rectangle ($(h2)+(-1.3mm,-1.3mm)$);
-\fill[colC] ($(h2)+(-0.9mm,-2.8mm)$) rectangle ($(h2)+(0.9mm,  0.2mm)$);
-\fill[colR] ($(h2)+(1.3mm, -2.8mm)$) rectangle ($(h2)+(3.1mm,  2.2mm)$);
-\draw[black, line width=1.4pt] ($(h2)+(-3.5mm,-2.8mm)$) -- ($(h2)+(3.5mm,-2.8mm)$);
 
 %% ── Plate ──────────────────────────────────────────────────────────────────
 \begin{scope}[on background layer]

@@ -14,6 +14,9 @@
 \definecolor{colL}{HTML}{E41A1C}           % histogram bar left
 \definecolor{colC}{HTML}{377EB8}           % histogram bar centre
 \definecolor{colR}{HTML}{4DAF4A}           % histogram bar right
+\definecolor{colTA}{HTML}{E41A1C}          % trans bar 1 – red
+\definecolor{colTB}{HTML}{FFC107}          % trans bar 2 – amber
+\definecolor{colTW}{HTML}{0078D4}          % trans bar k – windows blue
 
 \begin{document}
 \begin{tikzpicture}[
@@ -52,39 +55,58 @@
 \node[obs, below=22mm of z0] (y0) {$y_{t-1}$};
 \node[obs, below=22mm of z1] (y1) {$y_t$};
 \node[obs, below=22mm of z2] (y2) {$y_{t+1}$};
-%% phantom node to push plate border lower
-\node[below=2.5mm of y1, inner sep=0pt, minimum size=0pt] (phantomBot) {};
+
+%% phantom nodes to push plate borders
+\node[below=7.5mm of y1, inner sep=0pt, minimum size=0pt] (phantomBot) {};
+\node[right=14mm of y2,  inner sep=0pt, minimum size=0pt] (phantomRight) {};
 
 %% ── Transition arrows ──────────────────────────────────────────────────────
 \draw[dotarrow] (ldots) -- (z0);
-\draw[tarrow]   (z0) -- node[above, font=\sffamily\bfseries, color=transOrange] {$A$} (z1);
-\draw[tarrow]   (z1) -- node[above, font=\sffamily\bfseries, color=transOrange] {$A$} (z2);
+\draw[tarrow]   (z0)    -- (z1);
+\draw[tarrow]   (z1)    -- (z2);
 \draw[dotarrow] (z2)    -- (rdots);
+
+%% ── Transition bar-plots (above red arrows) ─────────────────────────────
+%% Each mini-histogram: bar_1 (red), ···, bar_k (windows blue), "k" below bar k
+%% ─ above z0→z1: state-1-heavy distribution
+\coordinate (ht0) at ($(z0)!0.5!(z1)+(0,8mm)$);
+\fill[colTA] ($(ht0)+(-6mm,-3mm)$) rectangle ($(ht0)+(-3mm, 4mm)$);
+\fill[colTW] ($(ht0)+(3mm,-3mm)$)  rectangle ($(ht0)+(6mm,  1mm)$);
+\draw[black, line width=1.3pt] ($(ht0)+(-7mm,-3mm)$) -- ($(ht0)+(7mm,-3mm)$);
+\node[font=\sffamily\small] at ($(ht0)+(0,-1.2mm)$) {$\cdots$};
+\node[font=\sffamily\small] at ($(ht0)+(-4.5mm,-5mm)$) {$1$};
+\node[font=\sffamily\small] at ($(ht0)+(4.5mm,-5mm)$)  {$k$};
+
+%% ─ above z1→z2: state-k-heavy distribution
+\coordinate (ht1) at ($(z1)!0.5!(z2)+(0,8mm)$);
+\fill[colTA] ($(ht1)+(-6mm,-3mm)$) rectangle ($(ht1)+(-3mm,  0.5mm)$);
+\fill[colTW] ($(ht1)+(3mm,-3mm)$)  rectangle ($(ht1)+(6mm,  4mm)$);
+\draw[black, line width=1.3pt] ($(ht1)+(-7mm,-3mm)$) -- ($(ht1)+(7mm,-3mm)$);
+\node[font=\sffamily\small] at ($(ht1)+(0,-1.2mm)$) {$\cdots$};
+\node[font=\sffamily\small] at ($(ht1)+(-4.5mm,-5mm)$) {$1$};
+\node[font=\sffamily\small] at ($(ht1)+(4.5mm,-5mm)$)  {$k$};
 
 %% ── Emission arrows ────────────────────────────────────────────────────────
 \draw[earrow] (z0) -- (y0);
 \draw[earrow] (z1) -- (y1);
 \draw[earrow] (z2) -- (y2);
 
-%% bar geometry: width=1.8mm, gap=0.4mm
-%% x centres: L=-2.2mm, C=0mm, R=2.2mm
 %% ── Histograms beside emission arrows (right side) ──────────────────────────
-%% helper macro: histogram centred at coordinate, with given bar heights
-%% y0: left-skewed  (tall L, medium C, short R)  – placed right of z0->y0 midpoint
+%% y0: left-skewed  (tall L, medium C, short R)
 \coordinate (h0) at ($(z0)!0.5!(y0)+(9mm,0)$);
 \fill[colL] ($(h0)+(-3.1mm,-2.8mm)$) rectangle ($(h0)+(-1.3mm, 2.2mm)$);
 \fill[colC] ($(h0)+(-0.9mm,-2.8mm)$) rectangle ($(h0)+(0.9mm,  0.2mm)$);
 \fill[colR] ($(h0)+(1.3mm, -2.8mm)$) rectangle ($(h0)+(3.1mm, -1.3mm)$);
 \draw[black, line width=1.4pt] ($(h0)+(-3.5mm,-2.8mm)$) -- ($(h0)+(3.5mm,-2.8mm)$);
 
-%% y1: centre-peaked (short L, tall C, short R)  – placed right of z1->y1 midpoint
+%% y1: centre-peaked (short L, tall C, short R)
 \coordinate (h1) at ($(z1)!0.5!(y1)+(9mm,0)$);
 \fill[colL] ($(h1)+(-3.1mm,-2.8mm)$) rectangle ($(h1)+(-1.3mm,-1.3mm)$);
 \fill[colC] ($(h1)+(-0.9mm,-2.8mm)$) rectangle ($(h1)+(0.9mm,  2.2mm)$);
 \fill[colR] ($(h1)+(1.3mm, -2.8mm)$) rectangle ($(h1)+(3.1mm, -1.3mm)$);
 \draw[black, line width=1.4pt] ($(h1)+(-3.5mm,-2.8mm)$) -- ($(h1)+(3.5mm,-2.8mm)$);
 
-%% y2: right-skewed (short L, medium C, tall R)  – placed right of z2->y2 midpoint
+%% y2: right-skewed (short L, medium C, tall R)
 \coordinate (h2) at ($(z2)!0.5!(y2)+(9mm,0)$);
 \fill[colL] ($(h2)+(-3.1mm,-2.8mm)$) rectangle ($(h2)+(-1.3mm,-1.3mm)$);
 \fill[colC] ($(h2)+(-0.9mm,-2.8mm)$) rectangle ($(h2)+(0.9mm,  0.2mm)$);
@@ -97,13 +119,36 @@
     rounded corners=8pt,
     draw=plateGray, thick, dashed,
     fill=gray!4,
-    inner xsep=26pt, inner ysep=20pt,
-    fit=(z0)(z1)(z2)(y0)(y1)(y2)(phantomBot)
+    inner xsep=26pt, inner ysep=15pt,
+    fit=(z0)(z1)(z2)(y0)(y1)(y2)(phantomBot)(phantomRight)
   ] (plate) {};
 \end{scope}
 \node[above right=2pt and 2pt of plate.south west,
       font=\sffamily\small, text=plateGray] {$t = 1, \dots, T$};
 
+%% ── Transition annotation (top-left, red) ──────────────────────────────────
+\node[
+  above=6mm of plate.north, anchor=south east, xshift=-8mm,
+  text=annoTrans, align=left,
+  font=\sffamily
+] (tanno) {
+  \textbf{Transition (GLM-softmax)}\\[2pt]
+  $p(z_t{=}j \mid z_{t-1}{=}i,\,x^{(T)}_t)
+    = \displaystyle\frac{e^{\,\alpha_{ij}+{w^{(T)}_{ij}}^{\!\top} x^{(T)}_t}}
+                        {\sum_{j'}e^{\,\alpha_{ij'}+{w^{(T)}_{ij'}}^{\!\top} x^{(T)}_t}}$
+};
+
+%% ── Emission annotation (top-right, purple) ───────────────────────────────
+\node[
+  above=6mm of plate.north, anchor=south west, xshift=8mm,
+  text=annoEmit, align=left,
+  font=\sffamily
+] (eanno) {
+  \textbf{Emission (multinomial logit)}\\[2pt]
+  $p(y_t{=}k \mid z_t{=}s,\,x^{(E)}_t)
+    = \displaystyle\frac{e^{\,\beta_{sk}+{w^{(E)}_{sk}}^{\!\top} x^{(E)}_t}}
+                        {\sum_{k'}e^{\,\beta_{sk'}+{w^{(E)}_{sk'}}^{\!\top} x^{(E)}_t}}$
+};
 
 
 \end{tikzpicture}

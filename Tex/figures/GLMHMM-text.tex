@@ -97,13 +97,28 @@
     rounded corners=8pt,
     draw=plateGray, thick, dashed,
     fill=gray!4,
-    inner xsep=26pt, inner ysep=20pt,
+    inner xsep=26pt, inner ysep=15pt,
     fit=(z0)(z1)(z2)(y0)(y1)(y2)(phantomBot)
   ] (plate) {};
 \end{scope}
 \node[above right=2pt and 2pt of plate.south west,
       font=\sffamily\small, text=plateGray] {$t = 1, \dots, T$};
 
+%% ── Annotations (aligned table, no lines) ─────────────────────────────────
+\node[
+  above=6mm of plate.north, anchor=south,
+  font=\sffamily
+] (annos) {%
+  \renewcommand{\arraystretch}{1.4}%
+  \begin{tabular}{@{}l@{\qquad\quad}l@{}}
+    \color{annoTrans}\textbf{Transition (fixed matrix)}
+      & \color{annoEmit}\textbf{Emission (multinomial logit)} \\
+    \color{annoTrans}$p(z_t{=}j \mid z_{t-1}{=}i) = A_{ij}$     \color{annoTrans}$A \in [0,1]^{K\times K},\;\textstyle\sum_j A_{ij}=1$
+      & \color{annoEmit}$\displaystyle p(y_t{=}k \mid z_t{=}s,\,x^{(E)}_t)
+          = \frac{e^{\,\beta_{sk}+{w^{(E)}_{sk}}^{\!\top} x^{(E)}_t}}
+                 {\sum_{k'}e^{\,\beta_{sk'}+{w^{(E)}_{sk'}}^{\!\top} x^{(E)}_t}}$ \\[4pt]
+  \end{tabular}%
+};
 
 
 \end{tikzpicture}
