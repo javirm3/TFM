@@ -537,7 +537,7 @@ def _(K_LIST, pl, plt, results_gof, sns):
     ax2.set_ylabel("GOF (rel vs empirical ceiling)")
     ax2.set_title("GOF in-sample GLMHMM vs GLMHMM-t")
     ax2.set_xticks(K_LIST)
-    ax2.set_ylim(0, 2)
+    ax2.set_ylim(0, 5)
     ax2.legend()
     sns.despine()
     fig2.tight_layout()
