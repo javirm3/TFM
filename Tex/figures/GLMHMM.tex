@@ -11,6 +11,9 @@
 \definecolor{plateGray}{HTML}{AAAAAA}      % plate border
 \definecolor{annoTrans}{HTML}{C0392B}      % transition annotation text
 \definecolor{annoEmit}{HTML}{6C3483}       % emission annotation text
+\definecolor{colL}{HTML}{E41A1C}           % histogram bar left
+\definecolor{colC}{HTML}{377EB8}           % histogram bar centre
+\definecolor{colR}{HTML}{4DAF4A}           % histogram bar right
 
 \begin{document}
 \begin{tikzpicture}[
@@ -49,11 +52,13 @@
 \node[obs, below=22mm of z0] (y0) {$y_{t-1}$};
 \node[obs, below=22mm of z1] (y1) {$y_t$};
 \node[obs, below=22mm of z2] (y2) {$y_{t+1}$};
+%% phantom node to push plate border lower
+\node[below=2.5mm of y1, inner sep=0pt, minimum size=0pt] (phantomBot) {};
 
 %% ── Transition arrows ──────────────────────────────────────────────────────
 \draw[dotarrow] (ldots) -- (z0);
-\draw[tarrow]   (z0)    -- (z1);
-\draw[tarrow]   (z1)    -- (z2);
+\draw[tarrow]   (z0) -- node[above, font=\sffamily\bfseries, color=transOrange] {$A$} (z1);
+\draw[tarrow]   (z1) -- node[above, font=\sffamily\bfseries, color=transOrange] {$A$} (z2);
 \draw[dotarrow] (z2)    -- (rdots);
 
 %% ── Emission arrows ────────────────────────────────────────────────────────
@@ -61,14 +66,39 @@
 \draw[earrow] (z1) -- (y1);
 \draw[earrow] (z2) -- (y2);
 
+%% bar geometry: width=1.8mm, gap=0.4mm
+%% x centres: L=-2.2mm, C=0mm, R=2.2mm
+%% ── Histograms beside emission arrows (right side) ──────────────────────────
+%% helper macro: histogram centred at coordinate, with given bar heights
+%% y0: left-skewed  (tall L, medium C, short R)  – placed right of z0->y0 midpoint
+\coordinate (h0) at ($(z0)!0.5!(y0)+(9mm,0)$);
+\fill[colL] ($(h0)+(-3.1mm,-2.8mm)$) rectangle ($(h0)+(-1.3mm, 2.2mm)$);
+\fill[colC] ($(h0)+(-0.9mm,-2.8mm)$) rectangle ($(h0)+(0.9mm,  0.2mm)$);
+\fill[colR] ($(h0)+(1.3mm, -2.8mm)$) rectangle ($(h0)+(3.1mm, -1.3mm)$);
+\draw[black, line width=1.4pt] ($(h0)+(-3.5mm,-2.8mm)$) -- ($(h0)+(3.5mm,-2.8mm)$);
+
+%% y1: centre-peaked (short L, tall C, short R)  – placed right of z1->y1 midpoint
+\coordinate (h1) at ($(z1)!0.5!(y1)+(9mm,0)$);
+\fill[colL] ($(h1)+(-3.1mm,-2.8mm)$) rectangle ($(h1)+(-1.3mm,-1.3mm)$);
+\fill[colC] ($(h1)+(-0.9mm,-2.8mm)$) rectangle ($(h1)+(0.9mm,  2.2mm)$);
+\fill[colR] ($(h1)+(1.3mm, -2.8mm)$) rectangle ($(h1)+(3.1mm, -1.3mm)$);
+\draw[black, line width=1.4pt] ($(h1)+(-3.5mm,-2.8mm)$) -- ($(h1)+(3.5mm,-2.8mm)$);
+
+%% y2: right-skewed (short L, medium C, tall R)  – placed right of z2->y2 midpoint
+\coordinate (h2) at ($(z2)!0.5!(y2)+(9mm,0)$);
+\fill[colL] ($(h2)+(-3.1mm,-2.8mm)$) rectangle ($(h2)+(-1.3mm,-1.3mm)$);
+\fill[colC] ($(h2)+(-0.9mm,-2.8mm)$) rectangle ($(h2)+(0.9mm,  0.2mm)$);
+\fill[colR] ($(h2)+(1.3mm, -2.8mm)$) rectangle ($(h2)+(3.1mm,  2.2mm)$);
+\draw[black, line width=1.4pt] ($(h2)+(-3.5mm,-2.8mm)$) -- ($(h2)+(3.5mm,-2.8mm)$);
+
 %% ── Plate ──────────────────────────────────────────────────────────────────
 \begin{scope}[on background layer]
   \node[
     rounded corners=8pt,
     draw=plateGray, thick, dashed,
     fill=gray!4,
-    inner xsep=16pt, inner ysep=14pt,
-    fit=(z0)(z1)(z2)(y0)(y1)(y2)
+    inner xsep=26pt, inner ysep=15pt,
+    fit=(z0)(z1)(z2)(y0)(y1)(y2)(phantomBot)
   ] (plate) {};
 \end{scope}
 \node[above right=2pt and 2pt of plate.south west,
