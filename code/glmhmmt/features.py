@@ -93,22 +93,24 @@ def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
         pl.col("performance").shift(1).fill_null(0).cast(pl.Float32).alias("previous_outcome"),
         pl.col("response").shift(1).fill_null(0.0).eq(0).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).alias("A_L"),
         pl.col("response").shift(1).fill_null(0.0).eq(2).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).alias("A_R"),
+    ])
+    df_sub = df_sub.with_columns([
         pl.col("previous_outcome").shift(1).fill_null(0.0).ewm_mean(half_life=tau, adjust=False).alias("A_plus"),
         (1.0 - pl.col("previous_outcome")).shift(1).fill_null(0.0).ewm_mean(half_life=tau, adjust=False).alias("A_minus"),
     ])
 
     y = df_sub["response"].to_numpy()
     
-    X_base = df_sub.select(["biasL", "biasR", "delay", "SL", "SR", "previous_outcome", "A_L", "A_R"]).to_numpy().astype(jnp.float32)
+    X_base = df_sub.select(["biasL", "biasR", "delay", "SL", "SR", "SLxdelay", "SRxdelay", "previous_outcome", "A_L", "A_R"]).to_numpy().astype(jnp.float32)
     X = jnp.asarray(X_base)
     U_base = df_sub.select(["A_plus", "A_minus"]).to_numpy().astype(jnp.float32)
-    U = jnp.column_stack([jnp.ones(len(y), dtype=jnp.float32), jnp.asarray(U_base)])
+    U = jnp.asarray(U_base)
 
     A_plus = jnp.asarray(df_sub["A_plus"].to_numpy())[:, None]
     A_minus = jnp.asarray(df_sub["A_minus"].to_numpy())[:, None]
 
     names = {
-        "X_cols": ["biasL", "biasR", "delay", "SL", "SR", "previous_outcome", "A_L", "A_R"],
-        "U_cols": ["1", "A_plus", "A_minus"],
+        "X_cols": ["biasL", "biasR", "delay", "SL", "SR", "SLxdelay", "SRxdelay", "previous_outcome", "A_L", "A_R"],
+        "U_cols": ["A_plus", "A_minus"],
     }
     return jnp.asarray(y), jnp.asarray(X), jnp.asarray(U), names, jnp.concatenate([A_plus, A_minus], axis=1)
