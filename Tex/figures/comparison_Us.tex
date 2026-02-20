@@ -1,0 +1,122 @@
+\documentclass[tikz,border=12pt]{standalone}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+% ── Colours ──────────────────────────────────────────────────────────────────
+\definecolor{colU}{HTML}{C38DFF}   % purple  – piecewise urgency
+\definecolor{colT}{HTML}{2CA02C}   % green   – temporal linear-ramp urgency
+\definecolor{colStep}{HTML}{0053CE}% dark orange – step urgency
+\definecolor{colS}{HTML}{FFA64C}   % orange  – stimulus
+\definecolor{colV}{HTML}{E41A1C}   % blue    – vertical markers
+\definecolor{colVnon}{HTML}{4472C4}   % blue    – vertical markers
+%% Timepoints – edit here to move all lines/curves at once
+\pgfmathsetmacro{\tOne}{0.7}
+\pgfmathsetmacro{\tTwo}{1.5}
+\pgfmathsetmacro{\tThree}{2.5}
+\pgfmathsetmacro{\tFour}{4.8}
+\begin{document}
+\begin{tikzpicture}
+\begin{axis}[
+  width  = 9cm,
+  height = 6.5cm,
+  xlabel = {Position},
+  ylabel = {Urgency $U$},
+  xmin   = 0,   xmax = 5,
+  ymin   = -0.12, ymax = 1.22,
+  xtick  = {0, \tOne, \tTwo, \tThree, \tFour},
+  xticklabels = {$0$, $t_1$, $t_2$, $t_3$, $t_4$},
+  ytick  = {0, 0.25, 0.5, 0.75, 1.0},
+  yticklabels = {%
+    $0$,
+    $\frac{U^{\mathrm{amp}}}{4}$,
+    $\frac{U^{\mathrm{amp}}}{2}$,
+    $\frac{3U^{\mathrm{amp}}}{4}$,
+    $U^{\mathrm{amp}}$},
+  tick align  = outside,
+  axis x line = middle,   % x-axis sits at y=0
+  axis y line = left,
+  axis line style = {thick},
+  tick style  = {thick},
+  every axis x label/.style = {at={(axis description cs:0.5,-0.13)}, anchor=north},
+  every axis y label/.style = {at={(axis description cs:-0.18,0.5)}, anchor=south, rotate=90},
+  legend style = {
+    at           = {(0.5, 1.04)},
+    anchor       = south,
+    draw         = none,
+    fill         = none,
+    font         = \small,
+    legend columns = 2,
+    column sep   = 8pt,
+  },
+  clip = false,
+]
+
+%% ── 4 blue dashed vertical lines ──────────────────────────────────────────
+
+
+%% ── Step urgency at t2 (dark orange) ──────────────────────────────────────
+%% Jumps instantly to U_amp at t2 and stays constant until t4.
+
+\addplot[
+  colStep, very thick,
+  const plot mark right,
+  no marks,
+] coordinates {
+  (0,        0)
+  (\tTwo,0 )
+  (\tTwo,    1.00)
+  (\tFour,   1.00)
+};
+\addlegendentry{Step $U$}
+
+
+%% ── Stimulus: up at t2, flat top, decaying tail of 0.5 past t3 ────────────
+\addplot[
+  colS, very thick,
+  no marks,
+] coordinates {
+  (0, 0)
+  (\tTwo,    0)
+  (\tTwo,    0.15)
+  (\tThree,  0.15)
+  ({\tThree+0.5}, 0)
+  (\tFour, 0)
+};
+\addlegendentry{Stimulus}
+
+%% ── Piecewise linear-ramp urgency (purple) ────────────────────────────────
+\addplot[
+  colU, very thick,
+  no marks,
+] coordinates {
+  (0,          0)
+  (\tOne,   0.25)
+  (\tTwo,   0.50)
+  (\tThree, 0.75)
+  (\tFour,  1.00)
+};
+\addlegendentry{Spatial $U$}
+
+%% ── Temporal linear-ramp urgency (green) ──────────────────────────────────
+\addplot[
+  colT, very thick,
+  no marks,
+] coordinates {
+  (0,        0)
+  (\tFour, 1.00)
+};
+\addlegendentry{Temporal $U$}
+
+%% ── U_amp dotted reference line ───────────────────────────────────────────
+\draw[gray!60, densely dotted]
+  (axis cs:0, 1.0) -- (axis cs:5.0, 1.0);
+\draw[colVnon, dashed, thick] (axis cs:\tOne,   0) -- (axis cs:\tOne,   1.06);
+\draw[colV, dashed, thick] (axis cs:\tTwo,   0) -- (axis cs:\tTwo,   1.06);
+\draw[colV, dashed, thick] (axis cs:\tThree, 0) -- (axis cs:\tThree, 1.06);
+\draw[colVnon, dashed, thick] (axis cs:\tFour,  0) -- (axis cs:\tFour,  1.06);
+
+\end{axis}
+\end{tikzpicture}
+\end{document}
+

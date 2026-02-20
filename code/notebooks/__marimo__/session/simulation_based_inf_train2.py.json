@@ -1,0 +1,244 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.19.10"
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "54736c96e8762b4565d6cdeac27ad4c1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "70d378f1e6d85edb9913ccc05f9fb77e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": null,
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "da7aad62bf33791000d1251a1812adc5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Simularemos 139309 trials para el entrenamiento.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "cb0db2e73a205bdf7c2b4578a549ccbc",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "d09cb70646208ab14f77408ac0b39313",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "9d8089e3d0aabd135697c36e0b368001",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "ce6cf8d432e1460e00ba7c3931f59219",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "87fbb6d0daceb8c4eb29ca87e7b50114",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "OMP: Info #276: omp_set_nested routine deprecated, please use omp_set_max_active_levels instead.\n",
+          "mimetype": "text/plain"
+        },
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "Total miss: 0 / 600000 (0.00%)\nValid pairs: 20000 / 20000 (100.00%)\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "5918aa1d9f91376af59f5a8176c88314",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "7f6d8ce349b3226dd18ca0a3c25a9897",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "437ea66089aa8ffa3dbbafb7da579e06",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "Loaded surrogate: {'path': 'choice_mlp_surrogate.pt', 'in_dim': 12, 'hidden': 256, 'depth': 3, 'dropout': 0.1, 'device': 'cpu'}\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "d481972761d9b72a201a3aba79a5f09e",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "08dea84adcb94a5deabe42f94fce01fe",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "23dbf8b9f5e451237a34077ec35e3590",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "488a6a3abc4b11a3632d881ee9d14566",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "ab9d26dc27b2c8a283973f64ac004ccc",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "10115386d487f376e7cf0c95b7e35442",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "No module named 'juliacall'",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_79412/__marimo__cell_TqIu_.py&quot;</span>, line <span class=\"m\">25</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">juliacall</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">Main</span> <span class=\"k\">as</span> <span class=\"n\">jl</span>\n<span class=\"gr\">ModuleNotFoundError</span>: <span class=\"n\">No module named &#39;juliacall&#39;</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "3dab1c3098cf61e20c9e8e42fe34fcbc",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "DnEU",
+      "code_hash": "d05f688e50e5e24d14fd07a95738c9f4",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">cond_np_all = build_cond_np(stimd, delayd, side, t1, t2, t3, t4)\ntheta_true_free = prior.sample((1,)).numpy().astype(np.float32)[0]</span>\n<span class=\"paragraph\">theta_full_1 = np.tile(TEMPLATE_THETA_FULL[None,:], (1,1)).astype(np.float32)\ntheta_full_1[:, FREE_TO_FULL] = theta_true_free[None,:]\ntheta_true_full = theta_full_1[0].astype(np.float32)</span>\n<span class=\"paragraph\">N = stimd.shape[0]\ntheta_full_trials = np.tile(theta_true_full[None,:], (N,1)).astype(np.float32)</span>\n<span class=\"paragraph\">choice_obs = get_choices_varying_numba(\n    stimd.astype(np.float32),\n    delayd.astype(np.float32),\n    side.astype(np.float32),\n    t1.astype(np.float32),\n    t2.astype(np.float32),\n    t3.astype(np.float32),\n    t4.astype(np.float32),\n    theta_full_trials,\n    DT, TH1, TH2, TH3\n).astype(np.int16)</span>\n<span class=\"paragraph\">_ok = (choice_obs != -1)\ncond_np_ok = cond_np_all[_ok]\nchoice_obs_ok = choice_obs[_ok].astype(np.int64)</span>\n<span class=\"paragraph\">print(\"Observed ok trials:\", int(_ok.sum()), \"/\", int(N), \"miss_rate:\", float((~_ok).mean()))</span>\n<span class=\"paragraph\">def bads_objective(theta_free):\n    theta_free = np.asarray(theta_free, dtype=np.float32)\n    return mlp_nll_for_theta(mlp, theta_free, cond_np_ok, choice_obs_ok, chunk=200000)</span>\n<h1 id=\"-bounds-\">--- bounds ---</h1>\n<span class=\"paragraph\">lb  = np.array([-3.0, -3.0,  0.0,  -3.0,  0.0], dtype=float)\nub  = np.array([ 3.0,  3.0,  3.0,   3.0,  10.0], dtype=float)\nplb = np.array([-1.0, -1.0,  0.05, -1.0,  0.1], dtype=float)\npub = np.array([ 1.0,  1.0,  2.0,   1.0,  5.0], dtype=float)</span>\n<span class=\"paragraph\">x0 = theta_true_free + 0.2<em>np.random.randn(</em>theta_true_free.shape).astype(np.float32)</span>\n<span class=\"paragraph\">bads = BADS(\n    fun=bads_objective,\n    x0=x0,\n    lower_bounds=lb, upper_bounds=ub,\n    plausible_lower_bounds=plb, plausible_upper_bounds=pub,\n    options={\"display\": \"iter\", \"uncertainty_handling\": False},\n)\nres = bads.optimize()</span>\n<span class=\"paragraph\">print(\"\\n--- RECOVERY ---\")\nprint(\"theta_true_free:\", theta_true_free)\nprint(\"theta_hat_free :\", res.x)\nprint(\"abs error      :\", np.abs(res.x - theta_true_free))\nprint(\"NLL_hat        :\", res.fval)</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ulZA",
+      "code_hash": "652b339f689aaf54375a4c02267a0dc1",
+      "outputs": [],
+      "console": []
+    }
+  ]
+}

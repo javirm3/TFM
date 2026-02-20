@@ -198,7 +198,16 @@ spatial_reduced2 = [
     "S_amplitude",
     "S_d",
     "U_int_amplitude",
-    "U_int_baseline",
+    # "U_int_baseline",
+]
+
+[pretty_names]
+spatial_reduced2 = [
+    "$s_L$",
+    "$s_R$",
+    "$S_{amp}$",
+    "$S_d$",
+    "$U_{amp}$",
 ]
 
 [parameter_sets]

@@ -23,9 +23,9 @@ color_names = [
 colors = sns.xkcd_palette(color_names)
 cmap = gradient_cmap(colors)    
 
-num_states= 5        # nº estados
+num_states= 2        # nº estados
 emission_dim = 3          # 3 choices
-input_dim = 8+3          # intercept + delay + stim_L + stim_C + stim_R + previous_outcome
+input_dim = 8+1          # intercept + delay + stim_L + stim_C + stim_R + previous_outcome
 
 model = SoftmaxGLMHMM(num_states=num_states, num_classes=emission_dim, emission_input_dim=input_dim, transition_input_dim=0, m_step_num_iters=100, transition_matrix_stickiness=10.0)
 
@@ -40,7 +40,7 @@ params, props = model.initialize(key=key)
 params3, props3 = model3.initialize(key=key)
 
 df = pl.read_parquet(paths.DATA_PATH/"df_filtered.parquet")
-y, X, U, names = build_sequence_from_df(df.filter(pl.col("subject") == "A89"))
+y, X, U, names, _ = build_sequence_from_df(df.filter(pl.col("subject") == "A89"))
 
 model4 = SoftmaxGLMHMM( num_states=3, num_classes=3, emission_input_dim=X.shape[1], transition_input_dim=U.shape[1], transition_matrix_stickiness=10.0, m_step_num_iters=100,)
 params4, props4 = model4.initialize(key=key)
@@ -140,7 +140,7 @@ print(np.round(A, 3))
 
 p_pred = np.asarray(model3.predict_choice_probs(fitted_params3, y, jnp.concatenate([X[:, :1], X[:, 4:]], axis=1)))
 p_pred = np.asarray(model.predict_choice_probs(fitted_params, y, X[:,1:]))
-p_pred = np.asarray(model4.predict_choice_probs(fitted_params4, y, jnp.concatenate([X[:, :], U], axis=1)))
+# p_pred = np.asarray(model4.predict_choice_probs(fitted_params4, y, jnp.concatenate([X[:, :], U], axis=1)))
 
 
 pL, pC, pR = p_pred[:,0], p_pred[:,1], p_pred[:,2]

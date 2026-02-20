@@ -17,9 +17,8 @@ from dynamax.types import IntScalar, Scalar
 
 
 class ParamsSoftmaxGLMHMMEmissions(NamedTuple):
-    # weights: (K, C, M)
-    weights: Union[Float[Array, "num_states num_classes input_dim"], ParameterProperties]
-
+    # weights: (K, C-1, M)
+    weights: Union[Float[Array, "num_states num_classes_minus1 input_dim"], ParameterProperties]
 
 class SoftmaxGLMHMMEmissions(HMMEmissions):
     def __init__(self,
@@ -49,14 +48,12 @@ class SoftmaxGLMHMMEmissions(HMMEmissions):
     def initialize(self, key, method="random", emission_weights=None):
         if emission_weights is None:
             key, subkey = jr.split(key)
-            W = self.weight_scale * jr.normal(subkey, (self.num_states, self.num_classes, self.input_dim))
+            W = self.weight_scale * jr.normal(subkey, (self.num_states, self.num_classes - 1, self.input_dim))
         else:
             W = emission_weights
 
         params = ParamsSoftmaxGLMHMMEmissions(weights=W)
-        props = ParamsSoftmaxGLMHMMEmissions(
-            weights=ParameterProperties()  # puedes añadir regularización/prior aquí si quieres
-        )
+        props = ParamsSoftmaxGLMHMMEmissions(weights=ParameterProperties())
         return params, props
 
     def log_prior(self, params):
@@ -64,9 +61,11 @@ class SoftmaxGLMHMMEmissions(HMMEmissions):
         return -l2 * jnp.sum(params.weights ** 2)
 
     def distribution(self, params, state, inputs):
-        x = inputs[:self.emission_input_dim]  # (M,)
-        # logits: (C,)  = (C,M) @ (M,)
-        logits = params.weights[state] @ x
+        x = inputs[:self.emission_input_dim]              # (M,)
+        eta = params.weights[state] @ x                   # (2,) -> [eta_L, eta_R]
+
+        # logits full: [L, C(base=0), R]
+        logits = jnp.array([eta[0], 0.0, eta[1]], dtype=jnp.float32)
         return tfd.Categorical(logits=logits)
     
 class ParamsInputDrivenTransitions(NamedTuple):

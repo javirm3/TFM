@@ -16,7 +16,8 @@ def _():
     import numpy as np
     import sys, os
     import seaborn as sns
-    import tomllib 
+    import tomllib
+
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     import polars as pl
     import jax.numpy as jnp
@@ -26,8 +27,9 @@ def _():
     import paths
     from glmhmmt.model import SoftmaxGLMHMM
     from glmhmmt.features import build_sequence_from_df
+
     with paths.CONFIG.open("rb") as f:
-            cfg = tomllib.load(f)
+        cfg = tomllib.load(f)
     return (
         SoftmaxGLMHMM,
         build_sequence_from_df,
@@ -337,7 +339,7 @@ def _(K_LIST, agg, plt, sns):
     ax.set_ylabel("Log-likelihood/trial")
     ax.set_title("")
     ax.set_xticks(K_LIST)
-    ax.legend(labels = ["GLMHMM", "GLMHMM-t"])
+    ax.legend(labels=["GLMHMM", "GLMHMM-t"])
     fig.tight_layout()
     sns.despine()
     fig
@@ -546,7 +548,167 @@ def _(K_LIST, pl, plt, results_gof, sns):
 
 
 @app.cell
-def _():
+def _(mo, subjects):
+    COL_L = "#E41A1C"
+    COL_C = "#377EB8"
+    COL_R = "#4DAF4A"
+
+
+    ui_subject = mo.ui.dropdown(options=subjects, value="A92", label="Subject")
+    ui_tau = mo.ui.slider(start=1, stop=300, step=1, value=50, label="tau")
+    ui_show_A = mo.ui.checkbox(value=True, label="Show A_L/A_C/A_R")
+    ui_show_ew = mo.ui.checkbox(value=False, label="Show EWMA")
+    return COL_C, COL_L, COL_R, ui_show_A, ui_show_ew, ui_subject, ui_tau
+
+
+@app.cell
+def _(build_sequence_from_df, df, mo, np, pl, ui_subject, ui_tau):
+    _df_sub = df.filter(pl.col("subject") == ui_subject.value).sort("trial_idx")
+    y2, _X, U2, names, A_pm = build_sequence_from_df(_df_sub, tau=int(ui_tau.value))
+
+    _U = np.asarray(U2)
+    T = _U.shape[0]
+
+    ui_range = mo.ui.range_slider(
+        start=0, stop=max(T - 1, 1), value=(0, T - 1), label="Trial range"
+    )
+    return A_pm, T, U2, ui_range, y2
+
+
+@app.cell
+def _(
+    COL_C,
+    COL_L,
+    COL_R,
+    T,
+    U2,
+    mo,
+    np,
+    pl,
+    plt,
+    sns,
+    ui_range,
+    ui_show_A,
+    ui_show_ew,
+    ui_subject,
+    ui_tau,
+    y2,
+):
+    _U = U2
+    _y = y2
+    lo, hi = ui_range.value
+    x = np.arange(T)[lo : hi + 1]
+
+    AL = _U[:, 1][lo : hi + 1]
+    AC = _U[:, 2][lo : hi + 1]
+    AR = _U[:, 3][lo : hi + 1]
+
+    y_np = np.asarray(_y).astype(int).reshape(-1)
+    lam = np.exp(-1.0 / float(ui_tau.value))
+
+    df_ew = pl.DataFrame(
+        {
+            "L": (y_np == 0).astype(int),
+            "C": (y_np == 1).astype(int),
+            "R": (y_np == 2).astype(int),
+        }
+    ).with_columns(
+        [
+            pl.col("L").ewm_mean(half_life=ui_tau.value, adjust=False).alias("EW_L"),
+            pl.col("C").ewm_mean(half_life = ui_tau.value, adjust=False).alias("EW_C"),
+            pl.col("R").ewm_mean(half_life = ui_tau.value, adjust=False).alias("EW_R"),
+        ]
+    )
+
+    EW_L = df_ew["EW_L"].to_numpy()[lo : hi + 1]
+    EW_C = df_ew["EW_C"].to_numpy()[lo : hi + 1]
+    EW_R = df_ew["EW_R"].to_numpy()[lo : hi + 1]
+
+    fig1 = plt.figure(figsize=(12, 4))
+
+    if ui_show_A.value:
+        plt.plot(x, AL, color=COL_L, label=f"$A_L$")
+        plt.plot(x, AC, color=COL_C, label=f"$A_C$")
+        plt.plot(x, AR, color=COL_R, label=f"$A_R$")
+
+    if ui_show_ew.value:
+        plt.plot(x, EW_L, "--", color=COL_L, label=f"$EW_L$")
+        plt.plot(x, EW_C, "--", color=COL_C, label=f"$EW_C$")
+        plt.plot(x, EW_R, "--", color=COL_R, label=f"$EW_R$")
+
+    plt.xlabel("trial")
+    plt.ylabel("value")
+    plt.title(f"{ui_subject.value} | tau={int(ui_tau.value)}")
+    plt.legend(ncol=2)
+    plt.tight_layout()
+    sns.despine()
+
+    mo.vstack(
+        [
+            mo.hstack([ui_subject, ui_tau, ui_show_A, ui_show_ew]),
+            ui_range,
+            fig1,
+        ]
+    )
+    return fig1, hi, lo, x
+
+
+@app.cell
+def _(A_pm, U2, hi, lo, mo, np, y2):
+
+    _U = U2
+    _y = y2
+    _Apm = np.asarray(A_pm, dtype=np.float32)  # (T,2): col0=A_plus, col1=A_minus
+
+    Aplus  = _Apm[:, 0][lo : hi + 1]
+    Aminus = _Apm[:, 1][lo : hi + 1]
+
+    # UI toggles
+    ui_show_Aplus  = mo.ui.checkbox(value=True,  label="show $A^{+}$")
+    ui_show_Aminus = mo.ui.checkbox(value=True,  label="show $A^{-}$")
+    return Aminus, Aplus, ui_show_Aminus, ui_show_Aplus
+
+
+@app.cell
+def _(
+    Aminus,
+    Aplus,
+    fig1,
+    mo,
+    plt,
+    sns,
+    ui_range,
+    ui_show_Aminus,
+    ui_show_Aplus,
+    ui_show_ew,
+    ui_subject,
+    ui_tau,
+    x,
+):
+
+    _fig = plt.figure(figsize=(12, 4))
+
+    if ui_show_Aplus.value:
+        plt.plot(x, Aplus, label=r"$A^{+}$")
+
+    if ui_show_Aminus.value:
+        plt.plot(x, Aminus, label=r"$A^{-}$")
+
+    plt.xlabel("trial")
+    plt.ylabel("value")
+    plt.title(f"{ui_subject.value} | tau={int(ui_tau.value)}")
+    plt.legend(ncol=2)
+    plt.tight_layout()
+    sns.despine()
+
+    mo.vstack(
+        [
+            mo.hstack([ui_subject, ui_tau, ui_show_Aplus, ui_show_Aminus, ui_show_ew]),
+            ui_range,
+            _fig,
+            fig1,
+        ]
+    )
     return
 
 
