@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "marimo-toml-editor"
+version = "0.1.0"
+description = "Interactive TOML config editor widget for Jupyter and marimo notebooks"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Javier Rodríguez Martínez" }]
+keywords = ["marimo", "jupyter", "anywidget", "toml", "config", "editor"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Visualization",
+  "Framework :: Jupyter",
+]
+requires-python = ">=3.9"
+dependencies = [
+  "anywidget>=0.9",
+  "traitlets>=5.0",
+  "tomli>=1.2; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+save = ["tomli-w>=1.0"]
+dev  = ["marimo", "tomli-w", "hatch"]
+
+[project.urls]
+Homepage   = "https://github.com/javirm3/marimo-toml-editor"
+Repository = "https://github.com/javirm3/marimo-toml-editor"
+Issues     = "https://github.com/javirm3/marimo-toml-editor/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/marimo_toml_editor"]
