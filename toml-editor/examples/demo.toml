@@ -1,0 +1,32 @@
+title = "My Application"
+debug = false
+version = "1.0.0"
+primary_color = "#3b82f6"
+max_retries = 3
+tags = [
+    "web",
+    "api",
+    "production",
+]
+
+[server]
+host = "0.0.0.0"
+port = 8080
+workers = 4
+
+[database]
+url = "postgresql://localhost/mydb"
+pool_size = 10
+echo = false
+
+[database.options]
+timeout = 30
+retries = 3
+
+[logging]
+level = "INFO"
+format = "json"
+outputs = [
+    "stdout",
+    "file",
+]

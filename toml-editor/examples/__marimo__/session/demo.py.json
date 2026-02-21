@@ -1,0 +1,73 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.19.11"
+  },
+  "cells": [
+    {
+      "id": "MJUe",
+      "code_hash": "9bac4ebf9b43839df654aedbad122c16",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"marimo-toml-editor-demo\">\ud83d\udcdd marimo-toml-editor demo</h1>\n<span class=\"paragraph\">An interactive TOML config editor widget built with <a href=\"https://anywidget.dev\" rel=\"noopener noreferrer\" target=\"_blank\">anywidget</a>.</span>\n<span class=\"paragraph\"><strong>Features:</strong> tab-per-table, type-aware inputs, rich list/dict editors,\ntype badges, search, undo/redo, dirty indicator, keyboard shortcuts.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hbol",
+      "code_hash": "077d526e89f1189124e29c3537608cbf",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "76740d289b9c334b6a01bda376c5e696",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "417e21a025eddbf41687b5f3b46a71d1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='bkHC-0' random-id='bb4ab082-2cec-fbb5-be89-b6797ce7f543'><marimo-anywidget data-initial-value='{&quot;model_id&quot;:&quot;96705e4251554b689d7a322bd3e65d0a&quot;}' data-label='null' data-js-url='&quot;./@file/39078-2594138-UFiKyG5Y.js&quot;' data-js-hash='&quot;7798eab70a4d201909e8458307516180&quot;'></marimo-anywidget></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "96dadf106cbe1cb6085e8c63fe8c0f50",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"current-state\">Current state</h3>\n<ul>\n<li><strong>Title:</strong> <code>My Application</code></li>\n<li><strong>Debug:</strong> <code>False</code></li>\n<li><strong>Tags:</strong> <code>['web', 'api', 'production']</code></li>\n<li><strong>Server port:</strong> <code>8080</code></li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}
