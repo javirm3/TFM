@@ -166,7 +166,7 @@ dependencies = [
     "sympy==1.13.1",
     "tensorboard==2.20.0",
     "tensorboard-data-server==0.7.2",
-    "tensorflow-probability==0.25.0",
+    # "tensorflow-probability==0.25.0",
     "terminado==0.18.1",
     "tfp-nightly==0.26.0.dev20260205",
     "tinycss2==1.4.0",
@@ -199,7 +199,7 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-members = ["./glmhmmt"]
+members = ["glmhmmt/"]
 
 [tool.uv.sources]
-glmhmmt = { workspace = true, editable = true }
+glmhmmt = { workspace = true }

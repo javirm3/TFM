@@ -163,7 +163,7 @@ def plot_categorical_performance_all(df, model_name):
                     palette=cfg["plots"]["ttype"]["palette"], labels=cfg["plots"]["ttype"]["labels"])
     
     # b) Stim duration (DS, SS/SM/SL)
-    df_b = df.filter(pl.col("ttype_c") == "DS", pl.col("stimd_c").is_in(cfg["plots"]["stimd"]["order"]))
+    df_b = df.filter(pl.col("ttype_c") == "DS")
     plot_cat_panel(ax2, df_b, "stimd_c", cfg["plots"]["stimd"]["order"],
                     title="b) Stim duration",
                     xlabel="Stimulus type",

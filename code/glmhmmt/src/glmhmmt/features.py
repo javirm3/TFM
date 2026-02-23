@@ -72,6 +72,7 @@ def action_trace_plus_minus(
     return A_plus[:, None], A_minus[:, None]
 
 
+
 def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
     df_sub = df_sub.sort("trial_idx")
     df_sub = df_sub.with_columns([
@@ -83,10 +84,20 @@ def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
         pl.lit(1.0).cast(pl.Float32).alias("bias"),
         
         pl.col("delay_d").cast(pl.Float32).alias("delay"),
+        ((pl.col("x_c") == "L") * pl.col("onset")).cast(pl.Float32).alias("onsetL"),
+        ((pl.col("x_c") == "C") * pl.col("onset")).cast(pl.Float32).alias("onsetC"),
+        ((pl.col("x_c") == "R") * pl.col("onset")).cast(pl.Float32).alias("onsetR"),
 
         ((pl.col("x_c") == "L") * pl.col("stim_d")).cast(pl.Float32).alias("SL"),
+        ((pl.col("x_c") == "C") * pl.col("stim_d")).cast(pl.Float32).alias("SC"),
         ((pl.col("x_c") == "R") * pl.col("stim_d")).cast(pl.Float32).alias("SR"),
+
+        ((pl.col("x_c") == "L") * pl.col("delay_d")).cast(pl.Float32).alias("DL"),
+        ((pl.col("x_c") == "C") * pl.col("delay_d")).cast(pl.Float32).alias("DC"),
+        ((pl.col("x_c") == "R") * pl.col("delay_d")).cast(pl.Float32).alias("DR"),
+        
         ((pl.col("x_c") == "L") * pl.col("stim_d") * pl.col("delay_d")).cast(pl.Float32).alias("SLxdelay"),
+        ((pl.col("x_c") == "C") * pl.col("stim_d") * pl.col("delay_d")).cast(pl.Float32).alias("SCxdelay"),
         ((pl.col("x_c") == "R") * pl.col("stim_d") * pl.col("delay_d")).cast(pl.Float32).alias("SRxdelay"),
 
 
@@ -97,11 +108,13 @@ def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
     df_sub = df_sub.with_columns([
         pl.col("previous_outcome").shift(1).fill_null(0.0).ewm_mean(half_life=tau, adjust=False).alias("A_plus"),
         (1.0 - pl.col("previous_outcome")).shift(1).fill_null(0.0).ewm_mean(half_life=tau, adjust=False).alias("A_minus"),
+        (pl.col("A_L") * pl.col("delay_d")).cast(pl.Float32).alias("ALxdelay"),
+        (pl.col("A_R") * pl.col("delay_d")).cast(pl.Float32).alias("ARxdelay"),
     ])
 
     y = df_sub["response"].to_numpy()
     
-    X_base = df_sub.select(["biasL", "biasR", "delay", "SL", "SR", "SLxdelay", "SRxdelay", "previous_outcome", "A_L", "A_R"]).to_numpy().astype(jnp.float32)
+    X_base = df_sub.select(["biasL", "biasR", "onsetL", "onsetC", "onsetR", "delay", "DR", "DL", "SL", "SC", "SR", "SLxdelay", "SCxdelay", "SRxdelay", "A_L", "A_R"]).to_numpy().astype(jnp.float32)
     X = jnp.asarray(X_base)
     U_base = df_sub.select(["A_plus", "A_minus"]).to_numpy().astype(jnp.float32)
     U = jnp.asarray(U_base)
@@ -110,7 +123,7 @@ def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
     A_minus = jnp.asarray(df_sub["A_minus"].to_numpy())[:, None]
 
     names = {
-        "X_cols": ["biasL", "biasR", "delay", "SL", "SR", "SLxdelay", "SRxdelay", "previous_outcome", "A_L", "A_R"],
+        "X_cols": ["biasL", "biasR", "onsetL", "onsetC", "onsetR", "delay", "DR", "DL", "SL", "SC", "SR", "SLxdelay", "SCxdelay", "SRxdelay", "A_L", "A_R"],
         "U_cols": ["A_plus", "A_minus"],
     }
     return jnp.asarray(y), jnp.asarray(X), jnp.asarray(U), names, jnp.concatenate([A_plus, A_minus], axis=1)

@@ -764,7 +764,6 @@ dependencies = [
     { name = "sympy" },
     { name = "tensorboard" },
     { name = "tensorboard-data-server" },
-    { name = "tensorflow-probability" },
     { name = "terminado" },
     { name = "tfp-nightly" },
     { name = "tinycss2" },
@@ -959,7 +958,6 @@ requires-dist = [
     { name = "sympy", specifier = "==1.13.1" },
     { name = "tensorboard", specifier = "==2.20.0" },
     { name = "tensorboard-data-server", specifier = "==0.7.2" },
-    { name = "tensorflow-probability", specifier = "==0.25.0" },
     { name = "terminado", specifier = "==0.18.1" },
     { name = "tfp-nightly", specifier = "==0.26.0.dev20260205" },
     { name = "tinycss2", specifier = "==1.4.0" },
@@ -1615,7 +1613,7 @@ dependencies = [
     { name = "polars" },
     { name = "scipy" },
     { name = "seaborn" },
-    { name = "tensorflow-probability" },
+    { name = "tfp-nightly" },
 ]
 
 [package.metadata]
@@ -1630,7 +1628,7 @@ requires-dist = [
     { name = "polars", specifier = ">=1.38.1" },
     { name = "scipy", specifier = ">=1.17.1" },
     { name = "seaborn", specifier = ">=0.13.2" },
-    { name = "tensorflow-probability", specifier = ">=0.25.0" },
+    { name = "tfp-nightly" },
 ]
 
 [[package]]

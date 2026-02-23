@@ -146,7 +146,7 @@ print(np.round(A, 3))
 
 # p_pred = np.asarray(model3.predict_choice_probs(fitted_params3, y, jnp.concatenate([X[:, :1], X[:, 4:]], axis=1)))
 p_pred = np.asarray(model.predict_choice_probs(fitted_params, y, X))
-p_pred = np.asarray(model4.predict_choice_probs(fitted_params4, y, jnp.concatenate([X[:, :], U], axis=1)))
+# p_pred = np.asarray(model4.predict_choice_probs(fitted_params4, y, jnp.concatenate([X[:, :], U], axis=1)))
 
 
 pL, pC, pR = p_pred[:,0], p_pred[:,1], p_pred[:,2]

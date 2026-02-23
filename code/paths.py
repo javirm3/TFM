@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 CODE_DIR  = ROOT / "code"
+RESULTS = CODE_DIR / "results"
 CONFIG = CODE_DIR / "config.toml"
 DATA_PATH = ROOT / "data"
 FITTING_DIR = CODE_DIR / "fitting"
