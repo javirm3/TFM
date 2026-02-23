@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.10"
+__generated_with = "0.19.11"
 app = marimo.App()
 
 
@@ -23,7 +23,7 @@ def _(pathlib):
     from sbi.inference import MNLE
     from sbi.utils import MultipleIndependent
     import numba
-    numba.set_num_threads(64)
+    #numba.set_num_threads(64)
 
     import helpers 
     import sys
@@ -49,7 +49,8 @@ def _():
 
 
 @app.cell
-def _():
+def _(TOML):
+    TOML
     return
 
 

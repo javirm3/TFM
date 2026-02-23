@@ -1,11 +1,12 @@
 import marimo
 
-__generated_with = "0.19.10"
+__generated_with = "0.19.11"
 app = marimo.App(width="full")
 
 
 @app.cell
 def _():
+    import marimo as mo
     import numpy as np
     import os, sys
 
@@ -65,11 +66,6 @@ def _(nn, os, torch):
 
     print("Loaded surrogate:", {"path": ckpt_path, "in_dim": in_dim, "hidden": hidden, "depth": depth, "dropout": dropout, "device": str(DEVICE_EVAL)})
     return DEVICE_EVAL, mlp
-
-
-@app.cell
-def _():
-    return
 
 
 @app.cell

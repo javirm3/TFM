@@ -1,0 +1,26 @@
+[project]
+name = "glmhmmt"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Javi", email = "jrm2003@icloud.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "dynamax>=1.0.1",
+    "jax>=0.9.0.1",
+    "jaxtyping>=0.3.7",
+    "matplotlib>=3.10.8",
+    "numpy>=2.3.5",
+    "optax>=0.2.7",
+    "pandas>=3.0.0",
+    "polars>=1.38.1",
+    "scipy>=1.17.1",
+    "seaborn>=0.13.2",
+    "tensorflow-probability>=0.25.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.4,<0.11.0"]
+build-backend = "uv_build"

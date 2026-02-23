@@ -6,30 +6,51 @@
   "cells": [
     {
       "id": "Hbol",
-      "code_hash": "dca48f23ab6bebaa1fcfd7c8f376f148",
-      "outputs": [],
+      "code_hash": "fa84b66b4f51634f1df50dd8609db23a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "MJUe",
       "code_hash": "dc7303fafdd5b1bbdfed0dabb324f0ea",
-      "outputs": [],
-      "console": []
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "Loaded surrogate: {'path': 'choice_mlp_surrogate.pt', 'in_dim': 12, 'hidden': 256, 'depth': 3, 'dropout': 0.1, 'device': 'cpu'}\n",
+          "mimetype": "text/plain"
+        }
+      ]
     },
     {
-      "id": "bkHC",
+      "id": "vblA",
       "code_hash": "08dea84adcb94a5deabe42f94fce01fe",
       "outputs": [],
       "console": []
     },
     {
-      "id": "lEQa",
+      "id": "bkHC",
       "code_hash": "23dbf8b9f5e451237a34077ec35e3590",
       "outputs": [],
       "console": []
     },
     {
-      "id": "PKri",
+      "id": "lEQa",
       "code_hash": "74b0c51953a0937f8c1c13a0e7023199",
       "outputs": [],
       "console": []

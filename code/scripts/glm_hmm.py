@@ -1,6 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import polars as pl
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
 import jax.numpy as jnp
 import jax.random as jr

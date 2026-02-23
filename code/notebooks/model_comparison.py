@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.10"
+__generated_with = "0.19.11"
 app = marimo.App(width="full")
 
 
@@ -44,9 +44,18 @@ def _():
 
 
 @app.cell
-def _(mo, paths):
+def _(mo):
+    range_slider = mo.ui.range_slider(
+        start=1, stop=10, step=1, value=[2, 2], full_width=True
+    )
+    range_slider
+    return (range_slider,)
+
+
+@app.cell
+def _(mo, paths, range_slider):
     DATA_PATH = paths.DATA_PATH / "df_filtered.parquet"
-    K_LIST = range(2, 6)
+    K_LIST = range_slider.value
 
     # EM settings
     NUM_ITERS = 50
@@ -87,10 +96,39 @@ def _(DATA_PATH, mo, pl):
     df = pl.read_parquet(DATA_PATH)
     subjects = df.select("subject").unique().sort("subject").to_series().to_list()
     mo.md(f"Subjects in the df: **{len(subjects)}** $\Rightarrow$ `{subjects}`")
-    return df, subjects
+    multiselect_subjects = mo.ui.multiselect(options=subjects)
+    multiselect_models = mo.ui.multiselect(options=["glmhmm", "glmhmm-t"])
+    return df, multiselect_models, multiselect_subjects, subjects
 
 
 @app.cell
+def _(mo, multiselect_models, multiselect_subjects):
+    selected_subjects = multiselect_subjects.value
+    selected_models = multiselect_models.value
+    mo.hstack(
+        [
+            mo.vstack(
+                [
+                    multiselect_subjects,
+                    mo.md(
+                        f"**Chosen subjects ({len(multiselect_subjects.value)}):** {', '.join(f'`{s}`' for s in multiselect_subjects.value) or '_None_'}"
+                    ),
+                ]
+            ),
+            mo.vstack(
+                [
+                    multiselect_models,
+                    mo.md(
+                        f"**Chosen models ({len(multiselect_models.value)}):** {', '.join(f'`{m}`' for m in multiselect_models.value) or '_None_'}"
+                    ),
+                ]
+            ),
+        ]
+    )
+    return selected_models, selected_subjects
+
+
+@app.cell(hide_code=True)
 def _(np):
     def brier_multiclass(p, y, *, eps=1e-12, renorm=True):
         p = np.asarray(p, dtype=float)
@@ -110,7 +148,7 @@ def _(np):
     return (brier_multiclass,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(SoftmaxGLMHMM, brier_multiclass, build_sequence_from_df, jnp, jr, np):
     def fit_one_subject_one_model(
         df_sub: "pl.DataFrame",
@@ -126,7 +164,7 @@ def _(SoftmaxGLMHMM, brier_multiclass, build_sequence_from_df, jnp, jr, np):
         Returns the best fit (by ll) between n_restarts
         Saves total LL and LL/trial of the last iteration
         """
-        y, X, U, names = build_sequence_from_df(df_sub)
+        y, X, U, names, _ = build_sequence_from_df(df_sub)
 
         T = int(y.shape[0])
         X = jnp.asarray(X)
@@ -184,6 +222,7 @@ def _(SoftmaxGLMHMM, brier_multiclass, build_sequence_from_df, jnp, jr, np):
             print("fit_em final:", -lps[-1] / T)
             cand = {
                 "fitted_params": fitted_params,
+                "model": model,
                 "p_true": p_true,
                 "acc": acc,
                 "brier": brier,
@@ -200,11 +239,13 @@ def _(SoftmaxGLMHMM, brier_multiclass, build_sequence_from_df, jnp, jr, np):
                 best = cand
 
         return {
+            "fitted_params": best["fitted_params"],
+            "model": best["model"],
+            "p_true": best["p_true"],
+            "acc": best["acc"],
+            "brier": best["brier"],
             "ll_total_final": best["ll_total_final"],
             "ll_per_trial_final": best["ll_per_trial_final"],
-            "p_true": p_true,
-            "acc": acc,
-            "brier": brier,
             "T": best["T"],
             "best_restart": best["restart"],
             "seed": best["seed"],
@@ -213,23 +254,6 @@ def _(SoftmaxGLMHMM, brier_multiclass, build_sequence_from_df, jnp, jr, np):
         }
 
     return (fit_one_subject_one_model,)
-
-
-@app.cell(disabled=True)
-def _(df, fit_one_subject_one_model, pl, subjects):
-    for s in subjects:
-        ou2t = fit_one_subject_one_model(
-            df_sub=df.filter(pl.col("subject") == s),
-            K=2,
-            model_kind="glmhmm-t",
-            num_iters=100,
-            m_step_num_iters=100,
-            stickiness=10,
-            base_seed=12345678 + (hash(s) % 100000),
-            n_restarts=1,
-        )
-        print(ou2t)
-    return
 
 
 @app.cell
@@ -245,18 +269,18 @@ def _(
     fit_one_subject_one_model,
     mo,
     pl,
-    subjects,
+    selected_models,
+    selected_subjects,
 ):
-    models = ["glmhmm", "glmhmm-t"]
-
     jobs = [
         (subj, K, model_kind)
-        for subj in subjects
+        for subj in selected_subjects
         for K in K_LIST
-        for model_kind in models
+        for model_kind in selected_models
     ]
 
     rows = []
+    fitted_params_store = {}  # (subj, K, model_kind) -> {"fitted_params", "model", "p_true"}
 
     for i, (subj, K, model_kind) in enumerate(
         mo.status.progress_bar(
@@ -281,6 +305,12 @@ def _(
             n_restarts=N_RESTARTS,
         )
 
+        fitted_params_store[(subj, K, model_kind)] = {
+            "fitted_params": out.pop("fitted_params"),
+            "model": out.pop("model"),
+            "p_true": out.pop("p_true"),
+        }
+
         rows.append(
             {
                 "subject": subj,
@@ -297,7 +327,7 @@ def _(
     results_long = pl.DataFrame(rows)
     results_long.write_parquet(OUT_LONG)
     results_long
-    return (results_long,)
+    return K, df_sub, fitted_params_store, model_kind, results_long
 
 
 @app.cell
@@ -321,6 +351,298 @@ def _(pl, results_long):
         .sort(["model", "K"])
     )
     return (agg,)
+
+
+@app.cell
+def _(fitted_params_store, jnp, np):
+    fp = fitted_params_store[("A92", 2, "glmhmm-t")]
+    bias = np.asarray(fp["fitted_params"].transitions.bias)  # (K, K)
+    # softmax over rows gives the "average" transition matrix
+    from jax.nn import softmax
+
+    A_avg = np.asarray(softmax(jnp.array(bias), axis=-1))
+    print(A_avg)
+    return (bias,)
+
+
+@app.cell
+def _(
+    K,
+    build_sequence_from_df,
+    df_sub,
+    fitted_params_store,
+    mo,
+    np,
+    plt,
+    selected_models,
+    selected_subjects,
+    sns,
+):
+    import pandas as pd
+
+    records = []
+    _, _, _, names, _ = build_sequence_from_df(df_sub)
+    for _subj in selected_subjects:
+        key = (_subj, K, selected_models[0])
+        if key not in fitted_params_store:
+            continue
+        _fp = fitted_params_store[key]["fitted_params"]
+        # W shape: (K, n_classes-1, input_dim)  or  (K, n_classes, input_dim)
+        W = np.asarray(_fp.emissions.weights)  # adjust attribute name if needed
+        for k in range(W.shape[0]):
+            for c in range(W.shape[1]):
+                for _f, fname in enumerate(names["X_cols"]):
+                    records.append(
+                        {
+                            "subject": _subj,
+                            "state": f"s{k}",
+                            "class": c,
+                            "feature": fname,
+                            "weight": float(W[k, c, _f]),
+                        }
+                    )
+
+    df_w = pd.DataFrame(records)
+
+    _fig, _axes = plt.subplots(1, W.shape[1], figsize=(8, 4), sharey=True)
+
+    for c, _ax in enumerate(_axes):
+        sns.lineplot(
+            data=df_w[df_w["class"] == c],
+            x="feature",
+            y="weight",
+            hue="state",
+            ax=_ax,
+            markers=True,
+            marker="o",
+            markersize=10,
+            markeredgewidth=0,
+            alpha=0.75,
+        )
+        _ax.get_legend().remove()
+
+        # label each line at its last point
+        for line, (state, group) in zip(_ax.get_lines(), df_w[df_w["class"] == c].groupby("state")):
+            last_x = names["X_cols"][1]
+            first_y = group[group["feature"] == last_x]["weight"].mean()
+            _ax.text(
+                1.05, (5 if state == 's0' else -5),
+                f"{'State 0' if state == 's0' else 'State 1'}",
+                color=line.get_color(),
+                fontsize=10, fontweight="bold", va="center"
+            )
+        _ax.set_title(f"{'Left' if c == 0 else 'Right'}")
+        _ax.set_xticklabels(labels = names["X_cols"], rotation=30, ha="right")
+        _ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+        _ax.set_xlabel("")
+    _fig.tight_layout()
+    sns.despine()
+    _fig
+
+
+    trans_records = []
+
+    for _subj in selected_subjects:
+        key = (_subj, K, "glmhmm-t")
+        if key not in fitted_params_store:
+            continue
+        _fp = fitted_params_store[key]["fitted_params"]
+        W = np.asarray(_fp.transitions.weights)  # (K, K, D)
+        for k_from in range(W.shape[0]):
+            for k_to in range(W.shape[1]):
+                for _f, fname in enumerate(names["U_cols"]):
+                    trans_records.append({
+                        "subject": _subj,
+                        "transition": f"s{k_from}→s{k_to}",
+                        "feature": fname,
+                        "weight": float(W[k_from, k_to, _f]),
+                    })
+
+    df_trans = pd.DataFrame(trans_records)
+    transitions = sorted(df_trans["transition"].unique())
+
+    _fig2, _axes = plt.subplots(1, len(transitions), figsize=(4 * len(transitions), 4), sharey=True)
+    _axes = np.atleast_1d(_axes)
+
+    for _ax, trans in zip(_axes, transitions):
+        sns.lineplot(
+            data=df_trans[df_trans["transition"] == trans],
+            x="feature", y="weight",
+            ax=_ax,
+            markers=True,
+            marker="o",
+            markersize=10,
+            alpha=0.75,
+            markeredgewidth=0,
+            color="steelblue",
+        )
+        _ax.set_title(trans)
+        _ax.set_xticks(range(len(names["U_cols"])))
+        _ax.set_xticklabels(names["U_cols"], rotation=30, ha="right")
+        _ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
+        _ax.set_xlabel("")
+
+    _fig.tight_layout()
+    sns.despine()
+    mo.vstack([_fig,_fig2])
+
+    return df_w, names, pd
+
+
+@app.cell
+def _(K, df_w, names, plt, selected_models, sns):
+    _fig, _ax = plt.subplots(figsize=(6, 4))
+
+    # map class to color, state to linestyle
+    _palette = {0: "steelblue", 1: "tomato"}  # 0=L, 1=R
+    _linestyles = {f"s{k}": ls for k, ls in enumerate([(1,0), (4,2), (2,2,4,2)])}
+
+    for (_state, _class), _group in df_w.groupby(["state", "class"]):
+        _mean = _group.groupby("feature")["weight"].mean().reindex(names["X_cols"])
+        _ax.plot(
+            range(len(names["X_cols"])),
+            _mean.values,
+            color=_palette[_class],
+            dashes=_linestyles[_state],
+            marker="o",
+            markersize=8,
+            markeredgewidth=0,
+            alpha=0.75,
+            label=f"{_state} {'L' if _class == 0 else 'R'}",
+        )
+
+    _ax.set_xticks(range(len(names["X_cols"])))
+    _ax.set_xticklabels(names["X_cols"], rotation=30, ha="right")
+    _ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
+    _ax.set_ylabel("GLM weight")
+    _ax.set_xlabel("")
+    _ax.set_title(f"{selected_models[0]} K={K} — emission weights (ref = C)")
+    _ax.legend(title="state / side", bbox_to_anchor=(1.05, 1), loc="upper left", frameon=False)
+    _fig.tight_layout()
+    sns.despine()
+    _fig
+    return
+
+
+@app.cell
+def _(K, fitted_params_store, names, np, pd, plt, selected_subjects, sns):
+    import copy
+
+    trans_records_std = []
+
+    for _subj in selected_subjects:
+        _key = (_subj, K, "glmhmm-t")
+        if _key not in fitted_params_store:
+            continue
+        _fp = fitted_params_store[_key]["fitted_params"]
+        W_raw = np.asarray(_fp.transitions.weights)  # (K, K, D)
+    
+        # For each from-state, standardize the (K, D) destination weights
+        # Average across from-states to get a single (K, D) summary
+        W_avg_from = W_raw.mean(axis=0)  # (K, D) — averaged over from-states
+    
+        # append zero reference row and mean-center (paper's trick)
+        W_aug = np.vstack([W_avg_from, np.zeros((1, W_avg_from.shape[1]))])  # (K+1, D)
+        v1 = -np.mean(W_aug, axis=0)
+        W_std = copy.deepcopy(W_aug)
+        W_std[-1] = v1
+        for _k in range(K):
+            W_std[_k] = v1 + W_avg_from[_k]
+
+        for _k in range(K):
+            for _f, _fname in enumerate(names["U_cols"]):
+                trans_records_std.append({
+                    "subject": _subj,
+                    "state": f"s{_k}",
+                    "feature": _fname,
+                    "weight": float(W_std[_k, _f]),
+                })
+
+    df_trans_std = pd.DataFrame(trans_records_std)
+
+    _fig2, _ax2 = plt.subplots(figsize=(5, 4))
+
+    sns.lineplot(
+        data=df_trans_std,
+        x="feature", y="weight",
+        hue="state",
+        ax=_ax2,
+        markers=True,
+        marker="o",
+        markersize=10,
+        alpha=0.75,
+        markeredgewidth=0,
+    )
+
+    _ax2.get_legend().remove()
+    for _line, (_state, _group) in zip(_ax2.get_lines(), df_trans_std.groupby("state")):
+        _last_y = _group[_group["feature"] == names["U_cols"][-1]]["weight"].mean()
+        _ax2.text(
+            len(names["U_cols"]) - 1 + 0.05, _last_y,
+            _state, color=_line.get_color(),
+            fontsize=10, fontweight="bold", va="center"
+        )
+
+    _ax2.set_xticks(range(len(names["U_cols"])))
+    _ax2.set_xticklabels(names["U_cols"], rotation=30, ha="right")
+    _ax2.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
+    _ax2.set_ylabel("Transition Weights")
+    _ax2.set_xlabel("")
+    _ax2.set_title(f"glmhmm-t K={K} — transition weights")
+    _fig2.tight_layout()
+    sns.despine()
+    _fig2
+    return
+
+
+@app.cell
+def _(
+    K,
+    bias,
+    fitted_params_store,
+    model_kind,
+    np,
+    plt,
+    selected_models,
+    selected_subjects,
+    sns,
+):
+    _fig, _axes = plt.subplots(1, len(selected_models), figsize=(4 * len(selected_models), 4))
+    _axes = np.atleast_1d(_axes)
+
+    for _ax, _model_kind in zip(_axes, selected_models):
+        # collect transition matrices across subjects
+        A_list = []
+        for _subj in selected_subjects:
+            _key = (_subj, K, _model_kind)
+            if _key not in fitted_params_store:
+                continue
+            _fp = fitted_params_store[_key]["fitted_params"]
+            if model_kind == "glmhmm":
+                A = np.asarray(_fp.transitions.transition_matrix)  # (K, K)
+            else:
+                # glmhmm-t: softmax over bias (input-independent component)
+                _bias = np.asarray(_fp.transitions.bias)  # (K, K)
+                A = np.exp(bias) / np.exp(bias).sum(axis=-1, keepdims=True)
+            A_list.append(A)
+
+        A_mean = np.mean(A_list, axis=0)  # (K, K)
+        light_blue = sns.color_palette("grey", as_cmap=True)
+        sns.heatmap(
+            A_mean, ax=_ax, annot=True, fmt=".2f", vmin=0, vmax=1,square=True,
+            cbar=False, 
+            linewidths=0.5,
+            cmap = light_blue,
+            xticklabels=[f"s{k}" for k in range(K)],
+            yticklabels=[f"s{k}" for k in range(K)],
+        )
+        _ax.set_title(f"{model_kind} — mean transition matrix (K={K})")
+        _ax.set_xlabel("To state")
+        _ax.set_ylabel("From state")
+
+    _fig.tight_layout()
+    _fig
+    return
 
 
 @app.cell
@@ -561,10 +883,12 @@ def _(mo, subjects):
     return COL_C, COL_L, COL_R, ui_show_A, ui_show_ew, ui_subject, ui_tau
 
 
-@app.cell
-def _(build_sequence_from_df, df, mo, np, pl, ui_subject, ui_tau):
+app._unparsable_cell(
+    r"""
     _df_sub = df.filter(pl.col("subject") == ui_subject.value).sort("trial_idx")
-    y2, _X, U2, names, A_pm = build_sequence_from_df(_df_sub, tau=int(ui_tau.value))
+    #y2, _X, U2, names, A_pm = build_sequence_from_df(
+        _df_sub, tau=int(ui_tau.value)
+    )
 
     _U = np.asarray(U2)
     T = _U.shape[0]
@@ -572,7 +896,9 @@ def _(build_sequence_from_df, df, mo, np, pl, ui_subject, ui_tau):
     ui_range = mo.ui.range_slider(
         start=0, stop=max(T - 1, 1), value=(0, T - 1), label="Trial range"
     )
-    return A_pm, T, U2, ui_range, y2
+    """,
+    name="_"
+)
 
 
 @app.cell
@@ -614,9 +940,15 @@ def _(
         }
     ).with_columns(
         [
-            pl.col("L").ewm_mean(half_life=ui_tau.value, adjust=False).alias("EW_L"),
-            pl.col("C").ewm_mean(half_life = ui_tau.value, adjust=False).alias("EW_C"),
-            pl.col("R").ewm_mean(half_life = ui_tau.value, adjust=False).alias("EW_R"),
+            pl.col("L")
+            .ewm_mean(half_life=ui_tau.value, adjust=False)
+            .alias("EW_L"),
+            pl.col("C")
+            .ewm_mean(half_life=ui_tau.value, adjust=False)
+            .alias("EW_C"),
+            pl.col("R")
+            .ewm_mean(half_life=ui_tau.value, adjust=False)
+            .alias("EW_R"),
         ]
     )
 
@@ -655,17 +987,16 @@ def _(
 
 @app.cell
 def _(A_pm, U2, hi, lo, mo, np, y2):
-
     _U = U2
     _y = y2
     _Apm = np.asarray(A_pm, dtype=np.float32)  # (T,2): col0=A_plus, col1=A_minus
 
-    Aplus  = _Apm[:, 0][lo : hi + 1]
+    Aplus = _Apm[:, 0][lo : hi + 1]
     Aminus = _Apm[:, 1][lo : hi + 1]
 
     # UI toggles
-    ui_show_Aplus  = mo.ui.checkbox(value=True,  label="show $A^{+}$")
-    ui_show_Aminus = mo.ui.checkbox(value=True,  label="show $A^{-}$")
+    ui_show_Aplus = mo.ui.checkbox(value=True, label="show $A^{+}$")
+    ui_show_Aminus = mo.ui.checkbox(value=True, label="show $A^{-}$")
     return Aminus, Aplus, ui_show_Aminus, ui_show_Aplus
 
 
@@ -685,7 +1016,6 @@ def _(
     ui_tau,
     x,
 ):
-
     _fig = plt.figure(figsize=(12, 4))
 
     if ui_show_Aplus.value:
@@ -703,7 +1033,9 @@ def _(
 
     mo.vstack(
         [
-            mo.hstack([ui_subject, ui_tau, ui_show_Aplus, ui_show_Aminus, ui_show_ew]),
+            mo.hstack(
+                [ui_subject, ui_tau, ui_show_Aplus, ui_show_Aminus, ui_show_ew]
+            ),
             ui_range,
             _fig,
             fig1,
