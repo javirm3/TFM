@@ -140,7 +140,13 @@ def plot_cat_panel(ax, df, group_col, order, title, xlabel, ylabel=None, palette
                         color=colors[i], ms=7, capsize=3)
 
     ax.set_xticks(np.arange(len(cats)))
-    ax.set_xticklabels(labels if labels else cats)
+    # align labels to the subset of categories actually present in this panel
+    if labels:
+        _label_map = dict(zip(order, labels))
+        _tick_labels = [_label_map.get(c, c) for c in cats]
+    else:
+        _tick_labels = cats
+    ax.set_xticklabels(_tick_labels)
 
     ax.set_ylim(0.2, 1.05)
     ax.axhspan(0, 1/3, color="gray", alpha=0.15)
@@ -149,6 +155,187 @@ def plot_cat_panel(ax, df, group_col, order, title, xlabel, ylabel=None, palette
     ax.set_xlabel(xlabel)
     if ylabel:
         ax.set_ylabel(ylabel)
+
+
+def _plot_state_panel(ax, df_state, group_col, order, color, label):
+    """
+    Draw:
+      - Data dots  : mean(correct_bool) ± sd per category, MAP-assigned trials
+      - Model line : mean(p_model_correct) per category, same trial subset
+    Both in `color`.  Returns (data_errorbar_container, model_line) for legend
+    building, or (None, None) if the subset is empty.
+    """
+    subj = (
+        df_state
+        .filter(pl.col(group_col).is_in(order))
+        .group_by([group_col, "subject"])
+        .agg([
+            pl.col("correct_bool").mean().alias("acc"),
+            pl.col("p_model_correct").mean().alias("model"),
+        ])
+    )
+    if subj.height == 0:
+        return None, None
+
+    agg = (
+        subj.group_by(group_col)
+        .agg([
+            pl.col("acc").mean().alias("md"),
+            pl.col("acc").std(ddof=1).alias("sd"),
+            pl.col("model").mean().alias("mm"),
+            pl.col("model").std(ddof=1).alias("sm"),
+        ])
+    )
+    rows   = {r[group_col]: r for r in agg.to_dicts()}
+    cats   = [c for c in order if c in rows]
+    if not cats:
+        return None, None
+    xpos   = np.arange(len(cats))
+    md     = np.array([rows[c]["md"] for c in cats])
+    sd     = np.array([rows[c]["sd"] for c in cats])
+    mm     = np.array([rows[c]["mm"] for c in cats])
+    sm     = np.array([rows[c]["sm"] for c in cats])
+    n_subj = subj["subject"].n_unique()
+
+    # ── data dots ─────────────────────────────────────────────────────────────
+    data_h = None
+    for i, (x, y) in enumerate(zip(xpos, md)):
+        eb = ax.errorbar(
+            x, y,
+            yerr=sd[i] if n_subj > 1 else None,
+            fmt="o", color=color, ms=7, capsize=3,
+            alpha=0.55, zorder=5, label="_nolegend_",
+        )
+        if data_h is None:
+            data_h = eb
+
+    # ── model prediction line ─────────────────────────────────────────────────
+    (model_h,) = ax.plot(
+        xpos, mm, "-", color=color, lw=2.2, alpha=0.95,
+        zorder=6, label="_nolegend_",
+    )
+    if n_subj > 1:
+        ax.fill_between(xpos, mm - sm, mm + sm, color=color, alpha=0.10, zorder=3)
+
+    return data_h, model_h
+
+
+def plot_categorical_performance_by_state(
+    df: pl.DataFrame,
+    smoothed_probs,
+    state_labels: dict,
+    model_name: str,
+    state_assign=None,
+):
+    """
+    Plot per-state categorical performance: dots + line per state,  no pooled
+    overlay.  Supports multi-subject DataFrames when `state_assign` is provided.
+
+    Parameters
+    ----------
+    df            : prepared predictions DataFrame (prepare_predictions_df output)
+    smoothed_probs: (T, K) array, ignored when state_assign is given
+    state_labels  : {rank_idx: label_str}  e.g. {0: "Engaged", 1: "Disengaged"}
+                    For pooled multi-subject calls use normalised rank indices
+                    (0=Engaged, 1=Disengaged, …).
+    model_name    : string for figure suptitle
+    state_assign  : optional pre-computed (T,) int array of normalised state
+                    ranks (0=Engaged, 1=Disengaged, …).  If provided,
+                    smoothed_probs is ignored.
+    """
+    if state_assign is not None:
+        _arr = np.asarray(state_assign, dtype=int)
+        T    = len(_arr)
+        K    = int(_arr.max()) + 1
+    else:
+        T, K = smoothed_probs.shape
+        _arr = np.argmax(smoothed_probs, axis=1).astype(int)
+
+    assert df.height == T, (
+        f"df has {df.height} rows but state assignment has T={T}"
+    )
+    df = df.with_columns(pl.Series("_state_k", _arr))
+
+    _state_palette = sns.color_palette("tab10", n_colors=K)
+    _label_rank = {"Engaged": 0, "Disengaged": 1,
+                   **{f"Disengaged {i}": i for i in range(1, K)}}
+    _state_colors = {
+        k: _state_palette[_label_rank.get(state_labels.get(k, ""), k % len(_state_palette))]
+        for k in range(K)
+    }
+
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=True)
+    ax1, ax2, ax3 = axes
+
+    panels = [
+        (ax1, df,                                   "ttype_c", cfg["plots"]["ttype"]["order"],
+         "a) Trial difficulty", "Trial difficulty",  cfg["plots"]["ttype"]["labels"]),
+        (ax2, df.filter(pl.col("ttype_c") == "DS"), "stimd_c", cfg["plots"]["stimd"]["order"],
+         "b) Stim duration",    "Stimulus type",     cfg["plots"]["stimd"]["labels"]),
+        (ax3, df.filter(pl.col("stimd_c") == "SS"), "ttype_c", cfg["plots"]["delay"]["order"],
+         "c) Delay duration",   "Delay type",        cfg["plots"]["delay"]["labels"]),
+    ]
+
+    # collect handles for legend (first panel that has data for each state)
+    _data_handles  = {}   # k -> first data errorbar container
+    _model_handles = {}   # k -> first model line
+
+    for ax, df_panel, gcol, order, title, xlabel, labels in panels:
+        # per-state dots + line (no pooled layer)
+        for k in range(K):
+            df_k = df_panel.filter(pl.col("_state_k") == k)
+            d_h, m_h = _plot_state_panel(
+                ax, df_k, gcol, order,
+                color=_state_colors[k],
+                label=state_labels.get(k, f"State {k}"),
+            )
+            if k not in _data_handles and d_h is not None:
+                _data_handles[k]  = d_h
+                _model_handles[k] = m_h
+
+        # axis decoration based on categories present across all states
+        _cats = [c for c in order
+                 if df_panel.filter(pl.col(gcol) == c).height > 0]
+        if labels:
+            _lmap = dict(zip(order, labels))
+            _tick_labels = [_lmap.get(c, c) for c in _cats]
+        else:
+            _tick_labels = _cats
+        ax.set_xticks(np.arange(len(_cats)))
+        ax.set_xticklabels(_tick_labels)
+        ax.set_ylim(0.2, 1.05)
+        ax.axhspan(0, 1 / 3, color="gray", alpha=0.15)
+        ax.set_xlim(left=-0.4)
+        ax.set_title(title)
+        ax.set_xlabel(xlabel)
+        if ax is ax1:
+            ax.set_ylabel("Accuracy")
+
+    # ── shared legend: data dots then model lines, grouped by state ───────────
+    import matplotlib.lines as mlines
+    import matplotlib.patches as mpatches
+    legend_handles = []
+    legend_labels  = []
+    for k in range(K):
+        _lbl   = state_labels.get(k, f"State {k}")
+        _color = _state_colors[k]
+        legend_handles.append(
+            mlines.Line2D([], [], marker="o", color=_color, linestyle="None",
+                          ms=7, alpha=0.55, label=f"{_lbl} data")
+        )
+        legend_labels.append(f"{_lbl} data")
+        legend_handles.append(
+            mlines.Line2D([], [], color=_color, lw=2.2, alpha=0.95,
+                          label=f"{_lbl} model")
+        )
+        legend_labels.append(f"{_lbl} model")
+
+    ax3.legend(legend_handles, legend_labels, fontsize=8, frameon=False,
+               bbox_to_anchor=(1.01, 1), loc="upper left")
+    fig.suptitle(model_name, y=1.02)
+    sns.despine(fig=fig)
+    fig.tight_layout()
+    return fig, axes
 
 
 def plot_categorical_performance_all(df, model_name):
@@ -177,7 +364,7 @@ def plot_categorical_performance_all(df, model_name):
                     palette=cfg["plots"]["delay"]["palette"], labels=cfg["plots"]["delay"]["labels"])
     sns.despine()
     fig.tight_layout()
-    plt.show()
+    return fig, axes
 
 
 def plot_delay_or_stim_1d_on_ax( ax, df, subject, n_bins, which):
