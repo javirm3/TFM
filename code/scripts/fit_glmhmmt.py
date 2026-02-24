@@ -18,10 +18,14 @@ def fit_subject(
     base_seed: int = 0,
     m_step_num_iters: int = 100,
     stickiness: float = 10.0,
+    emission_cols: list[str] | None = None,
+    transition_cols: list[str] | None = None,
 ) -> dict:
     df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
     y, X, U, names, _ = build_sequence_from_df(
-        df.filter(pl.col("subject") == subject)
+        df.filter(pl.col("subject") == subject),
+        emission_cols=emission_cols,
+        transition_cols=transition_cols,
     )
     inputs_all = jnp.concatenate([X, U], axis=1)
 
@@ -114,6 +118,8 @@ def main(
     n_restarts: int = 5,
     base_seed: int = 0,
     out_dir: Path | None = None,
+    emission_cols: list[str] | None = None,
+    transition_cols: list[str] | None = None,
 ):
     if out_dir is None:
         out_dir = paths.RESULTS_PATH / "glmhmmt"
@@ -124,8 +130,14 @@ def main(
     for subj in subjects:
         for K in K_list:
             print(f"Fitting glmhmm-t | subject={subj} K={K} ...")
-            result = fit_subject(subj, K, num_iters=num_iters,
-                                 n_restarts=n_restarts, base_seed=base_seed)
+            result = fit_subject(
+                subj, K,
+                num_iters=num_iters,
+                n_restarts=n_restarts,
+                base_seed=base_seed,
+                emission_cols=emission_cols,
+                transition_cols=transition_cols,
+            )
             save_results(result, out_dir)
             print(f"  ✓ saved to {out_dir}")
 

@@ -73,7 +73,43 @@ def action_trace_plus_minus(
 
 
 
-def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
+_ALL_EMISSION_COLS: list[str] = [
+    "biasL", "biasR", "onsetL", "onsetC", "onsetR", "delay",
+    "DR", "DL", "SL", "SC", "SR",
+    "SLxdelay", "SCxdelay", "SRxdelay",
+    "A_L", "A_R",
+]
+_ALL_TRANSITION_COLS: list[str] = ["A_plus", "A_minus", "A_L", "A_C", "A_R"]
+
+
+def build_sequence_from_df(
+    df_sub: pl.DataFrame,
+    tau: float = 50,
+    emission_cols: list[str] | None = None,
+    transition_cols: list[str] | None = None,
+):
+    """Build (y, X, U, names, AU) arrays from a subject DataFrame.
+
+    Parameters
+    ----------
+    df_sub          : raw trial DataFrame for one (or more) subjects.
+    tau             : half-life for exponential action traces.
+    emission_cols   : subset of emission features to include in X.
+                      Defaults to all features in ``_ALL_EMISSION_COLS``.
+    transition_cols : subset of transition features to include in U.
+                      Defaults to all features in ``_ALL_TRANSITION_COLS``.
+    """
+    _ecols = emission_cols if emission_cols is not None else _ALL_EMISSION_COLS
+    _ucols = transition_cols if transition_cols is not None else _ALL_TRANSITION_COLS
+
+    # validate requested column names
+    _bad_e = [c for c in _ecols if c not in _ALL_EMISSION_COLS]
+    _bad_u = [c for c in _ucols if c not in _ALL_TRANSITION_COLS]
+    if _bad_e:
+        raise ValueError(f"Unknown emission_cols: {_bad_e}. Available: {_ALL_EMISSION_COLS}")
+    if _bad_u:
+        raise ValueError(f"Unknown transition_cols: {_bad_u}. Available: {_ALL_TRANSITION_COLS}")
+
     df_sub = df_sub.sort("trial_idx")
     df_sub = df_sub.with_columns([
         pl.col("response").cast(pl.Int32),
@@ -103,6 +139,7 @@ def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
 
         pl.col("performance").shift(1).fill_null(0).cast(pl.Float32).alias("previous_outcome"),
         pl.col("response").shift(1).fill_null(0.0).eq(0).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).alias("A_L"),
+        pl.col("response").shift(1).fill_null(0.0).eq(1).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).alias("A_C"),
         pl.col("response").shift(1).fill_null(0.0).eq(2).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).alias("A_R"),
     ])
     df_sub = df_sub.with_columns([
@@ -113,17 +150,17 @@ def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
     ])
 
     y = df_sub["response"].to_numpy()
-    
-    X_base = df_sub.select(["biasL", "biasR", "onsetL", "onsetC", "onsetR", "delay", "DR", "DL", "SL", "SC", "SR", "SLxdelay", "SCxdelay", "SRxdelay", "A_L", "A_R"]).to_numpy().astype(jnp.float32)
+
+    X_base = df_sub.select(_ecols).to_numpy().astype(jnp.float32)
     X = jnp.asarray(X_base)
-    U_base = df_sub.select(["A_plus", "A_minus"]).to_numpy().astype(jnp.float32)
+    U_base = df_sub.select(_ucols).to_numpy().astype(jnp.float32)
     U = jnp.asarray(U_base)
 
-    A_plus = jnp.asarray(df_sub["A_plus"].to_numpy())[:, None]
+    A_plus  = jnp.asarray(df_sub["A_plus"].to_numpy())[:, None]
     A_minus = jnp.asarray(df_sub["A_minus"].to_numpy())[:, None]
 
     names = {
-        "X_cols": ["biasL", "biasR", "onsetL", "onsetC", "onsetR", "delay", "DR", "DL", "SL", "SC", "SR", "SLxdelay", "SCxdelay", "SRxdelay", "A_L", "A_R"],
-        "U_cols": ["A_plus", "A_minus"],
+        "X_cols": list(_ecols),
+        "U_cols": list(_ucols),
     }
     return jnp.asarray(y), jnp.asarray(X), jnp.asarray(U), names, jnp.concatenate([A_plus, A_minus], axis=1)

@@ -24,41 +24,88 @@ def _():
 
 @app.cell
 def _(df_all, mo):
+    from glmhmmt.features import _ALL_EMISSION_COLS, _ALL_TRANSITION_COLS
+
     # ── controls ──────────────────────────────────────────────────────────────
     ui_K = mo.ui.slider(start=2, stop=6, value=2, label="K")
     ui_subjects = mo.ui.multiselect(
         value = df_all["subject"].unique(),
-        options=df_all["subject"].unique(),  # replace with dynamic list
+        options=df_all["subject"].unique(),
         label="Subjects",
     )
+
+    ui_model_id = mo.ui.text(
+        value="glmhmmt_2s_default",
+        label="Model ID (used as output folder name)",
+        full_width=True,
+    )
+
+    ui_emission_cols = mo.ui.multiselect(
+        options=_ALL_EMISSION_COLS,
+        value=_ALL_EMISSION_COLS,
+        label="Emission regressors (X)",
+    )
+
+    ui_transition_cols = mo.ui.multiselect(
+        options=_ALL_TRANSITION_COLS,
+        value=_ALL_TRANSITION_COLS,
+        label="Transition regressors (U)",
+    )
+
     fit_button = mo.ui.run_button(label="Run fit")
-    mo.vstack([mo.md("### Configuration"), mo.hstack([ui_K, ui_subjects, fit_button])], align = "center")
-    return fit_button, ui_K, ui_subjects
+
+    mo.vstack([
+        mo.md("### Model Configuration"),
+        mo.hstack([ui_model_id, ui_K, ui_subjects]),
+        mo.hstack([ui_emission_cols, ui_transition_cols]),
+        mo.hstack([fit_button]),
+    ], align="start")
+
+    return (
+        fit_button,
+        ui_K,
+        ui_emission_cols,
+        ui_model_id,
+        ui_subjects,
+        ui_transition_cols,
+    )
 
 
 @app.cell
-def _(fit_button, mo, paths, ui_K, ui_subjects):
+def _(
+    fit_button,
+    mo,
+    paths,
+    ui_K,
+    ui_emission_cols,
+    ui_model_id,
+    ui_subjects,
+    ui_transition_cols,
+):
     from scripts.fit_glmhmmt import main as fit_main
 
     mo.stop(not fit_button.value, mo.md("Configure parameters and press **Run fit**."))
 
-    with mo.status.spinner(title=f"Fitting glmhmm-t K={ui_K.value} for {ui_subjects.value}..."):
+    _OUT = paths.RESULTS / "fits" / ui_model_id.value
+    with mo.status.spinner(title=f"Fitting {ui_model_id.value} K={ui_K.value} for {ui_subjects.value}..."):
         fit_main(
             subjects=ui_subjects.value,
             K_list=[ui_K.value],
-            out_dir=paths.RESULTS / "fits/glmhmmt",
+            out_dir=_OUT,
+            emission_cols=ui_emission_cols.value or None,
+            transition_cols=ui_transition_cols.value or None,
         )
     mo.md("✅ Fit complete — plots below update automatically.")
     return
 
 
 @app.cell
-def _(df_all, np, paths, pl, ui_K, ui_subjects):
+def _(df_all, np, paths, pl, ui_K, ui_model_id, ui_subjects):
     from glmhmmt.features import build_sequence_from_df
 
-    OUT = paths.RESULTS / "fits/glmhmmt"
     K = ui_K.value
 
+    OUT = paths.RESULTS / "fits" / ui_model_id.value
     # load feature names from data (use first available subject for a representative build)
     _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort("trial_idx")
     _, _, _, names, _ = build_sequence_from_df(_df_sel)
@@ -742,7 +789,7 @@ def _(
     _selected_acc = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected_acc, mo.md("No fitted subjects available."))
 
-    _THRESH  = 0.5
+    _THRESH  = 0.4
     _palette = sns.color_palette("tab10", n_colors=K)
 
     _label_order = (
@@ -984,6 +1031,15 @@ def _(
 
     _palette_occ    = sns.color_palette("tab10", n_colors=K)
     _label_rank_occ = {"Engaged": 0, "Disengaged": 1, **{f"Disengaged {i}": i for i in range(1, K)}}
+    ordered_labels = [k for k, _ in sorted(_label_rank_occ.items(), key=lambda kv: kv[1])]
+    def _rank_label(_lbl: str) -> int:
+        if _lbl in _label_rank_occ:
+            return _label_rank_occ[_lbl]
+        if _lbl.startswith("Disengaged "):
+            _tail = _lbl.split("Disengaged ", 1)[1]
+            if _tail.isdigit():
+                return int(_tail)
+        return K + 100  
 
     _n_subj_occ = len(_selected_occ)
     _fig_occ, _axes_occ = plt.subplots(
@@ -1010,19 +1066,22 @@ def _(
 
         _slbl = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
 
-        # ── fractional occupancy bar plot ──────────────────────────────────
+        # ── fractional occupancy bar plot (ordenado por etiqueta) ───────────
         _fracs = np.array([np.mean(_state_assign == _k) for _k in range(K)])
-        _bar_labels = [_slbl.get(_k, f"State {_k}") for _k in range(K)]
+        _bar_labels_raw = [_slbl.get(_k, f"State {_k}") for _k in range(K)]
+
+        _order = np.argsort([_rank_label(_lab) for _lab in _bar_labels_raw], kind="stable")
+        _fracs_ord = _fracs[_order]
+        _bar_labels = [_bar_labels_raw[_j] for _j in _order]
         _bar_colors = [
-            _palette_occ[_label_rank_occ.get(_slbl.get(_k, ""), _k) % len(_palette_occ)]
-            for _k in range(K)
+            _palette_occ[_rank_label(_bar_labels_raw[_j]) % len(_palette_occ)]
+            for _j in _order
         ]
-        _ax_bar.bar(range(K), _fracs, color=_bar_colors, width=0.6, alpha=0.9)
-        for _xi, _fv in enumerate(_fracs):
-            _ax_bar.text(
-                _xi, _fv + 0.01, f"{_fv:.2f}",
-                ha="center", va="bottom", fontsize=9,
-            )
+
+        _ax_bar.bar(range(K), _fracs_ord, color=_bar_colors, width=0.6, alpha=0.9)
+        for _xi, _fv in enumerate(_fracs_ord):
+            _ax_bar.text(_xi, _fv + 0.01, f"{_fv:.2f}", ha="center", va="bottom", fontsize=9)
+
         _ax_bar.set_xticks(range(K))
         _ax_bar.set_xticklabels(_bar_labels, rotation=15, ha="right")
         _ax_bar.set_ylim(0, 1.15)
