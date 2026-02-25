@@ -27,10 +27,11 @@ def fit_subject(
     base_seed: int = 0,
     m_step_num_iters: int = 100,
     stickiness: float = 10.0,
+    tau: float = 50.0,
 ) -> dict:
     df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
     df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
-    y, X, _, names, _ = build_sequence_from_df(df_sub)
+    y, X, _, names, _ = build_sequence_from_df(df_sub, tau=tau)
     session_ids = df_sub["session"].to_numpy()
 
     # Drop trials from sessions too short for EM (must match _split_by_session)
@@ -123,6 +124,7 @@ def main(
     n_restarts: int = 5,
     base_seed: int = 0,
     out_dir: Path | None = None,
+    tau: float = 50.0,
 ):
     if out_dir is None:
         out_dir = paths.RESULTS_PATH / "glmhmm"
@@ -132,9 +134,10 @@ def main(
 
     for subj in subjects:
         for K in K_list:
-            print(f"Fitting glmhmm | subject={subj} K={K} ...")
+            print(f"Fitting glmhmm | subject={subj} K={K} tau={tau} ...")
             result = fit_subject(subj, K, num_iters=num_iters,
-                                 n_restarts=n_restarts, base_seed=base_seed)
+                                 n_restarts=n_restarts, base_seed=base_seed,
+                                 tau=tau)
             print("Fitted, waiting to save")
             save_results(result, out_dir)
             print(f"  ✓ saved to {out_dir}")
@@ -152,6 +155,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out_dir", type=str, default=None,
                         help="Output directory. Defaults to RESULTS_PATH/glmhmm.")
+    parser.add_argument("--tau", type=float, default=50.0,
+                        help="Half-life for exponential action traces.")
     args = parser.parse_args()
     main(
         subjects=args.subjects,
@@ -160,4 +165,5 @@ if __name__ == "__main__":
         n_restarts=args.n_restarts,
         base_seed=args.seed,
         out_dir=Path(args.out_dir) if args.out_dir else None,
+        tau=args.tau,
     )

@@ -33,16 +33,24 @@ def _(df_all, mo):
         options=df_all["subject"].unique(),  # replace with dynamic list
         label="Subjects",
     )
+    ui_tau = mo.ui.slider(
+        start=1, stop=200, value=50, step=5,
+        label="τ action trace half-life",
+    )
     fit_button = mo.ui.run_button(label="Run fit")
     mo.vstack(
-        [mo.md("### Configuration"), mo.hstack([ui_K, ui_subjects, fit_button])],
+        [
+            mo.md("### Configuration"),
+            mo.hstack([ui_K, ui_tau, ui_subjects]),
+            mo.hstack([fit_button]),
+        ],
         align="center",
     )
-    return fit_button, ui_K, ui_subjects
+    return fit_button, ui_K, ui_subjects, ui_tau
 
 
 @app.cell
-def _(fit_button, mo, paths, ui_K, ui_subjects):
+def _(fit_button, mo, paths, ui_K, ui_subjects, ui_tau):
     from scripts.fit_glmhmm import main as fit_main
 
     mo.stop(
@@ -50,19 +58,20 @@ def _(fit_button, mo, paths, ui_K, ui_subjects):
     )
 
     with mo.status.spinner(
-        title=f"Fitting glmhmm K={ui_K.value} for {ui_subjects.value}..."
+        title=f"Fitting glmhmm K={ui_K.value} τ={ui_tau.value} for {ui_subjects.value}..."
     ):
         fit_main(
             subjects=ui_subjects.value,
             K_list=[ui_K.value],
             out_dir=paths.RESULTS / "fits/glmhmm",
+            tau=ui_tau.value,
         )
     mo.md("✅ Fit complete — plots below update automatically.")
     return
 
 
 @app.cell
-def _(df_all, np, paths, pl, ui_K, ui_subjects):
+def _(df_all, np, paths, pl, ui_K, ui_subjects, ui_tau):
     from glmhmmt.features import build_sequence_from_df
 
     OUT = paths.RESULTS / "fits/glmhmm"
@@ -72,13 +81,16 @@ def _(df_all, np, paths, pl, ui_K, ui_subjects):
     _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(
         "trial_idx"
     )
-    _, _, _, names, _ = build_sequence_from_df(_df_sel)
+    _, _, _, names, _ = build_sequence_from_df(_df_sel, tau=ui_tau.value)
 
     arrays_store = {}
     for _subj in ui_subjects.value:
         _f = OUT / f"{_subj}_K{K}_glmhmm_arrays.npz"
         if _f.exists():
-            arrays_store[_subj] = dict(np.load(_f))
+            _d = dict(np.load(_f, allow_pickle=True))
+            # decode column names saved as string arrays; fall back to build output
+            _d["X_cols"] = list(_d["X_cols"]) if "X_cols" in _d else names["X_cols"]
+            arrays_store[_subj] = _d
 
     arrays_store
     return K, arrays_store, names
@@ -107,7 +119,7 @@ def _(K, arrays_store, names, np, ui_subjects):
         return scores / max(1, n_terms)
 
 
-    _feat_names = names.get("X_cols", [])
+    _feat_names = names.get("X_cols", [])  # fallback; per-subject override below
     state_labels = {}  # subj -> {state_idx: label_str}
     state_order = {}  # subj -> [state_idx, ...] sorted by S_coh desc
 
@@ -117,7 +129,9 @@ def _(K, arrays_store, names, np, ui_subjects):
             state_labels[_subj] = {k: f"State {k + 1}" for k in range(K)}
             state_order[_subj] = list(range(K))
             continue
-        _scores = _scoh_score(_W, _feat_names)
+        # prefer column names saved alongside this subject's fit
+        _feat_names_subj = arrays_store[_subj].get("X_cols", _feat_names)
+        _scores = _scoh_score(_W, _feat_names_subj)
         _ranking = list(np.argsort(_scores)[::-1])
         _labels = {}
         _dis_idx = 1
@@ -524,10 +538,37 @@ def _(K, arrays_store, df_all, mo, np, pl, state_labels, ui_subjects):
         )
         _plot_df_s = plots.prepare_predictions_df(_df_s)
         _gamma_s = arrays_store[_subj]["smoothed_probs"]
-        _T_s = min(_plot_df_s.height, _gamma_s.shape[0])
-        _pool_dfs.append(_plot_df_s[:_T_s])
+        # Both must have the same length — if not, session filtering diverged
+        # between the fit script and this notebook.
+        assert _plot_df_s.height == _gamma_s.shape[0], (
+            f"{_subj}: df has {_plot_df_s.height} rows but smoothed_probs has "
+            f"{_gamma_s.shape[0]}. Check session-count filter consistency."
+        )
+        _T_s = _gamma_s.shape[0]
+
+        # ── per-state emission prediction: softmax(W_k × x) for MAP state k ───────
+        # Using the marginal p_pred (blended over all states) makes every
+        # state's model line look the same.  Instead look up the emission of
+        # the MAP-assigned state directly from the saved weights.
+        _W = np.asarray(arrays_store[_subj]["emission_weights"])  # (K, C-1, n_feat)
+        _X_s = np.asarray(arrays_store[_subj]["X"])               # (T, n_feat)
+        _logits = np.einsum("kci,ti->tkc", _W, _X_s)              # (T, K, C-1)  → [L, R]
+        _logits_full = np.concatenate(
+            [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]], axis=2  # (T, K, C) → [L, 0, R]
+        )
+        _lse = _logits_full.max(axis=2, keepdims=True)
+        _exp = np.exp(_logits_full - _lse)
+        _p_state = _exp / _exp.sum(axis=2, keepdims=True)         # (T, K, C)
+        _map_k = np.argmax(_gamma_s, axis=1).astype(int)          # (T,)
+        _stim = _plot_df_s["stimulus"].to_numpy().astype(int)      # (T,)
+        _p_state_correct = _p_state[np.arange(_T_s), _map_k, _stim]  # (T,)
+        # build per-state df with state-k emission replacing the marginal
+        _plot_df_state_s = _plot_df_s.with_columns(
+            pl.Series("p_model_correct", _p_state_correct.astype(np.float64))
+        )
+        _pool_dfs.append(_plot_df_state_s)
         _slbls = state_labels[_subj]
-        _raw = np.argmax(_gamma_s[:_T_s], axis=1).astype(int)
+        _raw = _map_k  # reuse already-computed MAP assignment
         _norm = np.array([_lrank_map.get(_slbls.get(int(k), ""), k) for k in _raw])
         _pool_assigns.append(_norm)
 
@@ -1157,6 +1198,78 @@ def _(
 
 @app.cell
 def _():
+    return
+
+
+@app.cell
+def _(K, mo, np, paths, pd, pl, plt, sns, ui_subjects):
+    # ── τ sweep analysis ────────────────────────────────────────────────────────
+    # Loads results produced by:
+    #   uv run python scripts/fit_tau_sweep.py --model glmhmm --K <K>
+    # Expects: RESULTS/fits/tau_sweep/glmhmm_K<K>/tau_sweep_summary.parquet
+
+    _sweep_path = paths.RESULTS / "fits" / "tau_sweep" / f"glmhmm_K{K}" / "tau_sweep_summary.parquet"
+    mo.stop(
+        not _sweep_path.exists(),
+        mo.md(
+            f"**τ sweep results not found.**  \
+ Run the sweep first:\n```\n"
+            f"uv run python scripts/fit_tau_sweep.py --model glmhmm --K {K}\n```"
+        ),
+    )
+
+    _df_sweep = pl.read_parquet(_sweep_path)
+    _subjects = [s for s in ui_subjects.value if s in _df_sweep["subject"].unique().to_list()]
+    mo.stop(not _subjects, mo.md("No sweep data for selected subjects."))
+
+    # ── BIC vs τ plot ────────────────────────────────────────────────────
+    _fig_sweep, _axes_sw = plt.subplots(1, 2, figsize=(12, 4))
+    _ax_bic, _ax_ll = _axes_sw
+    _palette = sns.color_palette("tab10", n_colors=len(_subjects))
+
+    for _i, _subj in enumerate(_subjects):
+        _d = _df_sweep.filter(
+            (pl.col("subject") == _subj) & (pl.col("K") == K)
+        ).sort("tau")
+        _tau = _d["tau"].to_numpy()
+        _bic = _d["bic"].to_numpy()
+        _ll  = _d["ll_per_trial"].to_numpy()
+        _c   = _palette[_i]
+        _ax_bic.plot(_tau, _bic,  "-o", ms=3, color=_c, label=_subj)
+        _ax_ll .plot(_tau, _ll,   "-o", ms=3, color=_c, label=_subj)
+        # mark best τ
+        _best_idx = int(np.argmin(_bic))
+        _ax_bic.axvline(_tau[_best_idx], color=_c, lw=0.8, linestyle="--", alpha=0.6)
+
+    for _ax, _ylabel, _title in [
+        (_ax_bic, "BIC",          "BIC vs τ  (lower is better)"),
+        (_ax_ll,  "LL / trial",   "Log-likelihood per trial vs τ"),
+    ]:
+        _ax.set_xlabel("τ (action-trace half-life)")
+        _ax.set_ylabel(_ylabel)
+        _ax.set_title(_title)
+        _ax.legend(fontsize=8, frameon=False)
+        sns.despine(ax=_ax)
+
+    _fig_sweep.tight_layout()
+
+    # ── best τ table ────────────────────────────────────────────────────────
+    _best = (
+        _df_sweep
+        .filter(pl.col("subject").is_in(_subjects) & (pl.col("K") == K))
+        .sort("bic")
+        .group_by(["subject", "K"])
+        .first()
+        .select(["subject", "K", "tau", "bic", "ll_per_trial", "acc"])
+        .sort(["subject", "K"])
+    )
+
+    mo.vstack([
+        mo.md(f"### τ sweep results — glmhmm K={K}"),
+        _fig_sweep,
+        mo.md("**Best τ per subject (min BIC):**"),
+        mo.plain_text(_best.to_pandas().to_string(index=False)),
+    ], align="center")
     return
 
 

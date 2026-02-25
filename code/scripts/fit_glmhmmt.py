@@ -17,6 +17,7 @@ def _valid_trial_mask(session_ids: np.ndarray, min_length: int = 2) -> np.ndarra
     return np.array([s in keep for s in session_ids])
 
 
+def fit_subject(
     subject: str,
     K: int,
     num_iters: int = 50,
@@ -26,11 +27,13 @@ def _valid_trial_mask(session_ids: np.ndarray, min_length: int = 2) -> np.ndarra
     stickiness: float = 10.0,
     emission_cols: list[str] | None = None,
     transition_cols: list[str] | None = None,
+    tau: float = 50.0,
 ) -> dict:
     df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
     df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
     y, X, U, names, _ = build_sequence_from_df(
         df_sub,
+        tau=tau,
         emission_cols=emission_cols,
         transition_cols=transition_cols,
     )
@@ -136,6 +139,7 @@ def main(
     out_dir: Path | None = None,
     emission_cols: list[str] | None = None,
     transition_cols: list[str] | None = None,
+    tau: float = 50.0,
 ):
     if out_dir is None:
         out_dir = paths.RESULTS_PATH / "glmhmmt"
@@ -153,6 +157,7 @@ def main(
                 base_seed=base_seed,
                 emission_cols=emission_cols,
                 transition_cols=transition_cols,
+                tau=tau,
             )
             save_results(result, out_dir)
             print(f"  ✓ saved to {out_dir}")
@@ -167,6 +172,8 @@ if __name__ == "__main__":
     parser.add_argument("--n_restarts", type=int, default=5)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out_dir", type=str, default=None)
+    parser.add_argument("--tau", type=float, default=50.0,
+                        help="Half-life for exponential action traces.")
     args = parser.parse_args()
     main(
         subjects=args.subjects,
@@ -175,4 +182,5 @@ if __name__ == "__main__":
         n_restarts=args.n_restarts,
         base_seed=args.seed,
         out_dir=Path(args.out_dir) if args.out_dir else None,
+        tau=args.tau,
     )
