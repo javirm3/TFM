@@ -53,7 +53,7 @@ def _(df_all, mo):
     )
 
     ui_tau = mo.ui.slider(
-        start=1, stop=200, value=50, step=5,
+        start=1, stop=200, value=50, step=1,
         label="τ action trace half-life",
     )
 
@@ -596,14 +596,17 @@ def _(K, arrays_store, mo, names, np, pd, plt, sns, ui_subjects):
         mo.md("No transition weights found — run the glmhmm-t fit first."),
     )
 
-    _U_cols = arrays_store[_selected[0]].get("U_cols", names["U_cols"])
+    _D_first = arrays_store[_selected[0]]["transition_weights"].shape[2]
+    _U_cols = arrays_store[_selected[0]].get("U_cols", names["U_cols"])[:_D_first]
 
     # ── 1. Standardised agonist view (mean-centred across states) ──────────────
     _std_records = []
     for _subj in _selected:
         _W_raw = arrays_store[_subj]["transition_weights"]  # (K, K, D)
         # use the column names that were actually used during this fit
-        _U_cols_subj = arrays_store[_subj].get("U_cols", names["U_cols"])
+        # truncate to the actual D to guard against name-list/weight mismatch
+        _D = _W_raw.shape[2]
+        _U_cols_subj = arrays_store[_subj].get("U_cols", names["U_cols"])[:_D]
         _W_avg = _W_raw.mean(axis=0)                        # (K, D) averaged over from-states
         # append reference row of zeros, then mean-centre
         _W_aug = np.vstack([_W_avg, np.zeros((1, _W_avg.shape[1]))])  # (K+1, D)
@@ -793,7 +796,6 @@ def _(K, arrays_store, mo, names, np, pd, plt, sns, ui_subjects):
         )
         _ax_r.set_title(_trans)
         _ax_r.set_xticks(range(len(_U_cols)))
-        _ax_r.set_md("### Transition weights"), mo.xticklabels(_U_cols, rotation=30, ha="right")
         _ax_r.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
         _ax_r.set_xlabel("")
         _ax_r.set_ylabel("Weight" if _ax_r is _axes_raw[0] else "")
@@ -833,7 +835,7 @@ def _(
     _selected_acc = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected_acc, mo.md("No fitted subjects available."))
 
-    _THRESH  = 0.4
+    _THRESH  = 0.5
     _palette = sns.color_palette("tab10", n_colors=K)
 
     _label_order = (
@@ -947,6 +949,12 @@ def _(
         mo.md("**Trial counts & mean accuracy per label:**"),
         mo.plain_text(_tbl.to_string()),
     ])
+    return
+
+
+@app.cell
+def _():
+    77791.0 + 68134.0
     return
 
 
@@ -1169,7 +1177,7 @@ def _(
 
 
 @app.cell
-def _(arrays_store, df_all, mo, pl, ui_subjects):
+def _(arrays_store, mo, ui_subjects):
     # ── Session deep-dive controls ─────────────────────────────────────────────
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     _subj_opts = _selected if _selected else ["(no fitted subjects)"]
@@ -1179,6 +1187,11 @@ def _(arrays_store, df_all, mo, pl, ui_subjects):
         value=_subj_opts[0],
         label="Subject",
     )
+    return (ui_session_subj,)
+
+
+@app.cell
+def _(arrays_store, df_all, mo, pl, ui_session_subj):
 
     _sess_opts = (
         sorted(
@@ -1198,7 +1211,7 @@ def _(arrays_store, df_all, mo, pl, ui_subjects):
         mo.md("### Session deep-dive"),
         mo.hstack([ui_session_subj, ui_session_id]),
     ])
-    return ui_session_id, ui_session_subj
+    return (ui_session_id,)
 
 
 @app.cell
@@ -1255,13 +1268,27 @@ def _(
     _T = _probs.shape[0]
     _x = np.arange(_T)
 
-    # ── action traces from X ─────────────────────────────────────────────────
-    _X_all = arrays_store[_subj]["X"]                      # (T_total, n_feat)
-    _X_sess = _X_all[_sess_mask]                            # (T_sess, n_feat)
-    _feat_names = names.get("X_cols", [])
-    _fname2idx = {f: i for i, f in enumerate(_feat_names)}
-    _trace_cols = [c for c in ["A_L", "A_C", "A_R"] if c in _fname2idx]
-    _trace_colors = {"A_L": "royalblue", "A_C": "gold", "A_R": "tomato"}
+    # ── action traces: A_plus / A_minus live in U; A_R lives in X ────────────
+    _X_all   = arrays_store[_subj]["X"]                    # (T_total, n_X)
+    _U_all   = arrays_store[_subj]["U"]                    # (T_total, n_U)
+    _X_sess  = _X_all[_sess_mask]
+    _U_sess  = _U_all[_sess_mask]
+    _X_cols  = arrays_store[_subj].get("X_cols", names.get("X_cols", []))
+    _U_cols_s = arrays_store[_subj].get("U_cols", names.get("U_cols", []))
+    _X_idx   = {f: i for i, f in enumerate(_X_cols)}
+    _U_idx   = {f: i for i, f in enumerate(_U_cols_s)}
+    # map each trace column to (array, column_index)
+    _trace_sources = {}
+    for _tc in ["A_plus", "A_minus"]:
+        if _tc in _U_idx:
+            _trace_sources[_tc] = (_U_sess, _U_idx[_tc])
+    for _tc in ["A_R"]:
+        if _tc in _X_idx:
+            _trace_sources[_tc] = (_X_sess, _X_idx[_tc])
+        elif _tc in _U_idx:
+            _trace_sources[_tc] = (_U_sess, _U_idx[_tc])
+    _trace_cols = list(_trace_sources.keys())
+    _trace_colors = {"A_plus": "royalblue", "A_minus": "gold", "A_R": "tomato"}
 
     # ── cumulative accuracy (non-zero stim) ───────────────────────────────────
     _nz = _stim != 0
@@ -1297,13 +1324,7 @@ def _(
     # Panel 1 – P(Engaged) line + cumulative accuracy on twin axis
     _ax1.plot(_x, _probs[:, _engaged_k], color=_engaged_col, lw=2,
               label=f"P({_slbl.get(_engaged_k, 'Engaged')})")
-    for _k in range(K):
-        if _k == _engaged_k:
-            continue
-        _rank = _label_rank.get(_slbl.get(_k, ""), _k)
-        _col = _palette[_rank % len(_palette)]
-        _ax1.plot(_x, _probs[:, _k], color=_col, lw=1.5, alpha=0.55,
-                  linestyle="--", label=_slbl.get(_k, f"State {_k}"))
+
     # choice tick marks
     _choice_cols = {0: "royalblue", 1: "gold", 2: "tomato"}
     _choice_lbls = {0: "L", 1: "C", 2: "R"}
@@ -1331,7 +1352,8 @@ def _(
     # Panel 2 – action traces
     if _trace_cols:
         for _tc in _trace_cols:
-            _ax2.plot(_x, _X_sess[:, _fname2idx[_tc]],
+            _arr, _ci = _trace_sources[_tc]
+            _ax2.plot(_x, _arr[:, _ci],
                       label=_tc, color=_trace_colors.get(_tc),
                       lw=1.5, alpha=0.85)
     else:
@@ -1422,6 +1444,11 @@ def _(K, mo, np, paths, pl, plt, sns, ui_model_id, ui_subjects):
         mo.md("**Best τ per subject (min BIC):**"),
         mo.plain_text(_best.to_pandas().to_string(index=False)),
     ], align="center")
+    return
+
+
+@app.cell
+def _():
     return
 
 

@@ -143,8 +143,8 @@ def build_sequence_from_df(
         pl.col("response").shift(1).fill_null(0.0).eq(2).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).alias("A_R"),
     ])
     df_sub = df_sub.with_columns([
-        pl.col("previous_outcome").shift(1).fill_null(0.0).ewm_mean(half_life=tau, adjust=False).alias("A_plus"),
-        (1.0 - pl.col("previous_outcome")).shift(1).fill_null(0.0).ewm_mean(half_life=tau, adjust=False).alias("A_minus"),
+        pl.col("previous_outcome").ewm_mean(half_life=tau, adjust=False).alias("A_plus"),
+        (1.0 - pl.col("previous_outcome")).ewm_mean(half_life=tau, adjust=False).alias("A_minus"),
         (pl.col("A_L") * pl.col("delay_d")).cast(pl.Float32).alias("ALxdelay"),
         (pl.col("A_R") * pl.col("delay_d")).cast(pl.Float32).alias("ARxdelay"),
     ])

@@ -623,7 +623,7 @@ def _(
     _selected_acc = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected_acc, mo.md("No fitted subjects available."))
 
-    _THRESH = 0.9
+    _THRESH = 0.5
     _palette = sns.color_palette("tab10", n_colors=K)
 
     _label_order = (
@@ -1202,7 +1202,7 @@ def _():
 
 
 @app.cell
-def _(K, mo, np, paths, pd, pl, plt, sns, ui_subjects):
+def _(K, mo, np, paths, pl, plt, sns, ui_subjects):
     # ── τ sweep analysis ────────────────────────────────────────────────────────
     # Loads results produced by:
     #   uv run python scripts/fit_tau_sweep.py --model glmhmm --K <K>
@@ -1213,7 +1213,7 @@ def _(K, mo, np, paths, pd, pl, plt, sns, ui_subjects):
         not _sweep_path.exists(),
         mo.md(
             f"**τ sweep results not found.**  \
- Run the sweep first:\n```\n"
+     Run the sweep first:\n```\n"
             f"uv run python scripts/fit_tau_sweep.py --model glmhmm --K {K}\n```"
         ),
     )
