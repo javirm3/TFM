@@ -1,9 +1,9 @@
+import numpy as np
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import jax.tree_util as jtu
+from jax import jit
 from jaxtyping import Float, Array
-from jax.scipy.special import logsumexp
 import optax
 import tensorflow_probability.substrates.jax.distributions as tfd
 from typing import NamedTuple, Optional, Tuple, Union
@@ -13,6 +13,7 @@ from dynamax.hidden_markov_model.models.abstractions import HMM, HMMEmissions, H
 from dynamax.hidden_markov_model.models.initial import StandardHMMInitialState, ParamsStandardHMMInitialState
 from dynamax.hidden_markov_model.models.transitions import StandardHMMTransitions, ParamsStandardHMMTransitions
 from dynamax.hidden_markov_model.models.abstractions import HMMTransitions
+from dynamax.hidden_markov_model.inference import hmm_two_filter_smoother
 from dynamax.types import IntScalar, Scalar
 
 
@@ -67,6 +68,38 @@ class SoftmaxGLMHMMEmissions(HMMEmissions):
         # logits full: [L, C(base=0), R]
         logits = jnp.array([eta[0], 0.0, eta[1]], dtype=jnp.float32)
         return tfd.Categorical(logits=logits)
+
+    def _compute_conditional_logliks(self, params, emissions, inputs=None):
+        """Like the base class but treats ``emission == num_classes`` as a padding sentinel.
+
+        Padded timesteps contribute log-likelihood 0 (uniform emission) so they
+        do not update the forward-backward probabilities.  This is the approach
+        recommended in dynamax/issues/99: replace the sentinel with a valid label
+        first (to avoid distribution errors), compute lls, then zero-mask.
+
+        Valid emissions are 0 … num_classes-1.  The sentinel ``num_classes``
+        (= 3 by default) can never appear in real data and does NOT collide with
+        the miss/no-response code of -1.
+        """
+        mask = (emissions == self.num_classes)             # (T,)  True = padding
+        safe_emissions = jnp.where(mask, 0, emissions)    # sentinel → 0, safe for Categorical
+        f = lambda emission, inpt: jax.vmap(
+            lambda state: self.distribution(params, state, inpt).log_prob(emission)
+        )(jnp.arange(self.num_states))
+        lls = jax.vmap(f)(safe_emissions, inputs)          # (T, K)
+        return jnp.where(mask[:, None], 0.0, lls)
+
+    def collect_suff_stats(self, params, posterior, emissions, inputs=None):
+        """Replace the padding sentinel (``num_classes``) with 0 before handing
+        emissions to the M-step gradient.  Padded positions are already zeroed
+        in ``smoothed_probs`` by ``SoftmaxGLMHMM.e_step``, so they contribute
+        nothing to the gradient.
+
+        Real miss-choice emissions (-1) are left untouched here; they are valid
+        observed data and must be handled by the model distribution if needed.
+        """
+        safe_emissions = jnp.where(emissions == self.num_classes, 0, emissions)
+        return posterior.smoothed_probs, safe_emissions, inputs
     
 class ParamsInputDrivenTransitions(NamedTuple):
     bias: Union[Float[Array, "num_states num_states"], ParameterProperties]
@@ -210,6 +243,20 @@ class SoftmaxGLMHMM(HMM):
 
         super().__init__(num_states, initial_component, transition_component, emission_component)
 
+        # JIT-compile once at construction time so every call reuses the same
+        # compiled function object and no retracing occurs across subjects.
+        self._e_step_jit   = jit(self.e_step)
+        self._m_step_jit   = jit(self.m_step)
+        self._smoother_jit = jit(self.smoother)
+        self._predict_jit  = jit(self.predict_choice_probs)
+
+        # Batched (vmap) versions used by the multisession helpers.
+        # JAX traces lazily on first call; subsequent calls with the same
+        # (S, T_max) shape reuse the compiled XLA executable.
+        self._batched_e_step_jit   = jit(jax.vmap(self.e_step,               in_axes=(None, 0, 0)))
+        self._batched_smoother_jit = jit(jax.vmap(self.smoother,             in_axes=(None, 0, 0)))
+        self._batched_predict_jit  = jit(jax.vmap(self.predict_choice_probs, in_axes=(None, 0, 0)))
+
     @property
     def inputs_shape(self) -> Tuple[int, ...]:
         return (self.inputs_dim,)
@@ -261,4 +308,163 @@ class SoftmaxGLMHMM(HMM):
         pred_z = jnp.vstack([pi, jnp.einsum("tk,tkj->tj", alpha[:-1], A)])
 
         return jnp.einsum("tk,tkc->tc", pred_z, p_y_given_z)
+
+    def e_step(self, params, emissions, inputs=None):
+        """E-step with padding-mask support.
+
+        Timesteps where ``emissions[t] == -1`` are treated as padding:
+
+        * ``_compute_conditional_logliks`` (overridden in the emission component)
+          sets their log-likelihoods to 0, so the forward-backward pass sees
+          a uniform emission at those positions.
+        * The posterior sufficient statistics (``smoothed_probs`` and
+          ``trans_probs``) at padded positions are zeroed here, so the M-step
+          only accumulates real-data information.
+
+        When there is no padding (all ``emissions < num_classes``) the result is
+        identical to the parent-class ``e_step``.
+        """
+        valid = (emissions != self.num_classes)           # (T,)  False = padding
+        args  = self._inference_args(params, emissions, inputs)
+        posterior = hmm_two_filter_smoother(*args)
+
+        # Zero smoothed marginals at padded steps
+        smoothed_probs = jnp.where(valid[:, None], posterior.smoothed_probs, 0.0)
+
+        # Zero pairwise marginals — shape can be (K,K) for time-homogeneous
+        # transitions (already summed) or (T-1,K,K) for input-driven ones.
+        if posterior.trans_probs.ndim == 2:               # (K, K) — pre-summed
+            trans_probs = posterior.trans_probs           # cannot mask per-step
+        else:                                             # (T-1, K, K)
+            valid_trans = (valid[:-1] & valid[1:])[:, None, None]
+            trans_probs = jnp.where(valid_trans, posterior.trans_probs, 0.0)
+
+        masked_post = posterior._replace(
+            smoothed_probs=smoothed_probs, trans_probs=trans_probs
+        )
+
+        initial_stats    = self.initial_component.collect_suff_stats(params.initial, masked_post, inputs)
+        transition_stats = self.transition_component.collect_suff_stats(params.transitions, masked_post, inputs)
+        emission_stats   = self.emission_component.collect_suff_stats(params.emissions, masked_post, emissions, inputs)
+        return (initial_stats, transition_stats, emission_stats), posterior.marginal_loglik
+
+    # ------------------------------------------------------------------
+    # Multi-session helpers
+    # ------------------------------------------------------------------
+
+    def _split_by_session(self, emissions, inputs, session_ids, min_length: int = 2):
+        """Split (emissions, inputs) into per-session lists, preserving original order.
+
+        Sessions shorter than ``min_length`` are dropped: they cannot produce
+        at least one transition step and would cause index errors in the forward
+        pass.
+        """
+        session_ids_np = np.asarray(session_ids)
+        _, first_idx    = np.unique(session_ids_np, return_index=True)
+        unique_sessions = session_ids_np[np.sort(first_idx)]
+        emissions_np = np.asarray(emissions)
+        inputs_np    = np.asarray(inputs)
+        sessions = []
+        for s in unique_sessions:
+            mask = session_ids_np == s
+            if mask.sum() < min_length:
+                continue
+            sessions.append((
+                jnp.array(emissions_np[mask]),
+                jnp.array(inputs_np[mask]),
+            ))
+        return sessions
+
+    def _pad_sessions(self, sessions):
+        """Pad a list of (emissions, inputs) tuples to a common length ``T_max``.
+
+        * Emissions are padded with **``num_classes``** (e.g. ``3`` for a
+          3-class model), the sentinel recognised by
+          ``_compute_conditional_logliks`` and ``e_step``.  This value can
+          never appear in real data (valid codes are ``0 … num_classes-1``)
+          and does **not** collide with the miss/no-response code ``-1``.
+        * Inputs are padded with **0**.
+
+        Returns
+        -------
+        e_pad    : jnp.ndarray  shape (S, T_max)       int32
+        i_pad    : jnp.ndarray  shape (S, T_max, D)    float32
+        lengths  : list[int]    true length of each session
+        """
+        lengths = [int(e.shape[0]) for e, _ in sessions]
+        T_max   = max(lengths)
+        S       = len(sessions)
+        D       = int(sessions[0][1].shape[-1])
+
+        e_pad = np.full((S, T_max), self.num_classes, dtype=np.int32)
+        i_pad = np.zeros((S, T_max, D), dtype=np.float32)
+        for idx, (e_s, i_s) in enumerate(sessions):
+            T_s = lengths[idx]
+            e_pad[idx, :T_s] = np.asarray(e_s)
+            i_pad[idx, :T_s] = np.asarray(i_s)
+        return jnp.array(e_pad), jnp.array(i_pad), lengths
+
+    def fit_em_multisession(self, params, props, emissions, inputs, session_ids,
+                             num_iters=50, verbose=True):
+        """Fit the model via EM treating each session as an independent sequence.
+
+        Each session resets to ``pi0`` so there is no probability leak across
+        session boundaries.  Sessions are padded to the same length with the
+        sentinel ``num_classes`` (e.g. ``3``) and processed in a single ``vmap``
+        call per iteration, which is compiled once by XLA and reused across EM steps.
+
+        See dynamax/issues/99 for the masking strategy.
+        """
+        from tqdm.auto import trange
+
+        sessions             = self._split_by_session(emissions, inputs, session_ids)
+        e_pad, i_pad, _      = self._pad_sessions(sessions)
+        m_step_state         = self.initialize_m_step_state(params, props)
+
+        log_probs = []
+        pbar = trange(num_iters, desc="EM") if verbose else range(num_iters)
+        for _ in pbar:
+            # Single vmapped E-step over all padded sessions (one XLA call)
+            batch_stats, ll_batch = self._batched_e_step_jit(params, e_pad, i_pad)
+            total_ll = float(jnp.sum(ll_batch))
+
+            lp = self.log_prior(params) + total_ll
+            log_probs.append(lp)
+            if verbose:
+                pbar.set_postfix({"log prob": f"{lp:.1f}"})
+
+            # M-step: batch_stats has a leading session axis added by vmap;
+            # each component's m_step sums over that axis internally.
+            params, m_step_state = self._m_step_jit(params, props, batch_stats, m_step_state)
+
+        return params, jnp.array(log_probs)
+
+    def smoother_multisession(self, params, emissions, inputs, session_ids):
+        """Run the smoother independently per session and concatenate results.
+
+        Returns
+        -------
+        smoothed_probs : np.ndarray  shape (T_total, K)
+        """
+        sessions             = self._split_by_session(emissions, inputs, session_ids)
+        e_pad, i_pad, lengths = self._pad_sessions(sessions)
+        posterior_batch      = self._batched_smoother_jit(params, e_pad, i_pad)
+        smoothed = np.asarray(posterior_batch.smoothed_probs)  # (S, T_max, K)
+        return np.concatenate(
+            [smoothed[i, :T_s] for i, T_s in enumerate(lengths)], axis=0
+        )
+
+    def predict_choice_probs_multisession(self, params, emissions, inputs, session_ids):
+        """Compute one-step-ahead predictive choice probabilities per session.
+
+        Returns
+        -------
+        choice_probs : np.ndarray  shape (T_total, C)
+        """
+        sessions              = self._split_by_session(emissions, inputs, session_ids)
+        e_pad, i_pad, lengths = self._pad_sessions(sessions)
+        probs_batch = np.asarray(self._batched_predict_jit(params, e_pad, i_pad))  # (S, T_max, C)
+        return np.concatenate(
+            [probs_batch[i, :T_s] for i, T_s in enumerate(lengths)], axis=0
+        )
 

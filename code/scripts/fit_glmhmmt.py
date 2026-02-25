@@ -10,7 +10,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
-def fit_subject(
+def _valid_trial_mask(session_ids: np.ndarray, min_length: int = 2) -> np.ndarray:
+    """Return a boolean mask keeping only trials from sessions with >= min_length trials."""
+    ids, counts = np.unique(session_ids, return_counts=True)
+    keep = set(ids[counts >= min_length])
+    return np.array([s in keep for s in session_ids])
+
+
     subject: str,
     K: int,
     num_iters: int = 50,
@@ -22,11 +28,18 @@ def fit_subject(
     transition_cols: list[str] | None = None,
 ) -> dict:
     df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
+    df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
     y, X, U, names, _ = build_sequence_from_df(
-        df.filter(pl.col("subject") == subject),
+        df_sub,
         emission_cols=emission_cols,
         transition_cols=transition_cols,
     )
+    session_ids = df_sub["session"].to_numpy()
+
+    # Drop trials from sessions too short for EM (must match _split_by_session)
+    mask = _valid_trial_mask(session_ids)
+    y, X, U = y[mask], X[mask], U[mask]
+    session_ids = session_ids[mask]
     inputs_all = jnp.concatenate([X, U], axis=1)
 
     model = SoftmaxGLMHMM(
@@ -42,19 +55,22 @@ def fit_subject(
     for r in range(n_restarts):
         key = jr.PRNGKey(base_seed + r)
         params, props = model.initialize(key=key)
-        fp, lps = model.fit_em(
+        fp, lps = model.fit_em_multisession(
             params=params, props=props,
             emissions=y, inputs=inputs_all,
+            session_ids=session_ids,
             num_iters=num_iters,
+            verbose=True,
         )
         if float(lps[-1]) > best_lp:
             best_lp = float(lps[-1])
             best_params = fp
             best_lps = np.asarray(lps)
 
-    posterior = model.smoother(
-        params=best_params, emissions=y, inputs=inputs_all)
-    p_pred = np.asarray(model.predict_choice_probs(best_params, y, inputs_all))
+    smoothed_probs = model.smoother_multisession(
+        params=best_params, emissions=y, inputs=inputs_all, session_ids=session_ids)
+    p_pred = model.predict_choice_probs_multisession(
+        best_params, y, inputs_all, session_ids=session_ids)
     T = int(y.shape[0])
 
     return {
@@ -63,7 +79,7 @@ def fit_subject(
         "model": model,
         "fitted_params": best_params,
         "lps": best_lps,
-        "posterior": posterior,
+        "smoothed_probs": smoothed_probs,
         "p_pred": p_pred,
         "T": T,
         "names": names,
@@ -100,7 +116,7 @@ def save_results(result: dict, out_dir: Path) -> None:
         str(prefix) + "_arrays.npz",
         lps=result["lps"],
         p_pred=p_pred,
-        smoothed_probs=np.asarray(result["posterior"].smoothed_probs),
+        smoothed_probs=result["smoothed_probs"],
         emission_weights=np.asarray(result["fitted_params"].emissions.weights),
         transition_bias=np.asarray(result["fitted_params"].transitions.bias),
         transition_weights=np.asarray(

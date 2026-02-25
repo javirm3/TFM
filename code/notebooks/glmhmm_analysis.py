@@ -478,6 +478,7 @@ def _(K, arrays_store, df_all, mo, np, pl, state_labels, ui_subjects):
         _df_sub = (
             df_all.filter(pl.col("subject") == _subj)
             .sort("trial_idx")
+            .filter(pl.col("session").count().over("session") >= 2)
             .with_columns(
                 [
                     pl.Series("pL", _p_pred[:, 0]),
@@ -509,6 +510,7 @@ def _(K, arrays_store, df_all, mo, np, pl, state_labels, ui_subjects):
         _df_s = (
             df_all.filter(pl.col("subject") == _subj)
             .sort("trial_idx")
+            .filter(pl.col("session").count().over("session") >= 2)
             .with_columns(
                 [
                     pl.Series("pL", _p_pred_s[:, 0]),
@@ -580,7 +582,7 @@ def _(
     _selected_acc = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected_acc, mo.md("No fitted subjects available."))
 
-    _THRESH = 0.5
+    _THRESH = 0.9
     _palette = sns.color_palette("tab10", n_colors=K)
 
     _label_order = (
@@ -605,6 +607,7 @@ def _(
         _df_sub = (
             df_all.filter(pl.col("subject") == _subj)
             .sort("trial_idx")
+            .filter(pl.col("session").count().over("session") >= 2)
             .select(["stimd_n", "performance"])
         )
         _stim = _df_sub["stimd_n"].to_numpy()  # signed, 0 = catch
@@ -791,6 +794,7 @@ def _(
         _df_sub = (
             df_all.filter(pl.col("subject") == _subj)
             .sort("trial_idx")
+            .filter(pl.col("session").count().over("session") >= 2)
             .select(["session", "trial"])
         )
         _sessions = _df_sub["session"].to_numpy()
@@ -894,6 +898,7 @@ def _(
         _df_sub = (
             df_all.filter(pl.col("subject") == _subj)
             .sort("trial_idx")
+            .filter(pl.col("session").count().over("session") >= 2)
             .select(["session", "trial"])
         )
         _sessions = _df_sub["session"].to_numpy()
@@ -967,7 +972,186 @@ def _(
 
 
 @app.cell
-def _():
+def _(arrays_store, mo, ui_subjects):
+    # ── Session deep-dive controls ─────────────────────────────────────────────
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _subj_opts = _selected if _selected else ["(no fitted subjects)"]
+
+    ui_session_subj = mo.ui.dropdown(
+        options=_subj_opts,
+        value=_subj_opts[0],
+        label="Subject",
+    )
+    return (ui_session_subj,)
+
+
+@app.cell
+def _(arrays_store, df_all, mo, pl, ui_session_subj):
+    _sess_opts = (
+        sorted(
+            df_all.filter(pl.col("subject") == ui_session_subj.value)
+            .filter(pl.col("session").count().over("session") >= 2)
+            ["session"].unique().to_list()
+        )
+        if ui_session_subj.value in arrays_store
+        else [0]
+    )
+    ui_session_id = mo.ui.dropdown(
+        options=[str(s) for s in _sess_opts],
+        value=str(_sess_opts[0]),
+        label="Session",
+    )
+    mo.vstack([
+        mo.md("### Session deep-dive"),
+        mo.hstack([ui_session_subj, ui_session_id]),
+    ])
+    return (ui_session_id,)
+
+
+@app.cell
+def _(
+    K,
+    arrays_store,
+    df_all,
+    mo,
+    names,
+    np,
+    pl,
+    plt,
+    sns,
+    state_labels,
+    ui_session_id,
+    ui_session_subj,
+):
+    # ── Session deep-dive plot ─────────────────────────────────────────────────
+    # 3-panel figure for the selected subject × session:
+    #   Panel 1 – smoothed state probabilities (Engaged / Disengaged)
+    #   Panel 2 – action traces A_L, A_C, A_R
+    #   Panel 3 – cumulative mean accuracy (non-zero-stim trials)
+
+    _subj = ui_session_subj.value
+    mo.stop(
+        _subj not in arrays_store,
+        mo.md("No fitted arrays for this subject — run the fit first."),
+    )
+
+    _sess = int(ui_session_id.value)
+    _df_sub = (
+        df_all.filter(
+            (pl.col("subject") == _subj) & (pl.col("session") == _sess)
+        )
+        .sort("trial_idx")
+    )
+    mo.stop(len(_df_sub) == 0, mo.md("No trials found for this session."))
+
+    # ── align smoothed_probs rows with this session ───────────────────────────
+    _df_all_sub = (
+        df_all.filter(pl.col("subject") == _subj)
+        .sort("trial_idx")
+        .filter(pl.col("session").count().over("session") >= 2)
+    )
+    _all_sessions = _df_all_sub["session"].to_numpy()
+    _sess_mask = _all_sessions == _sess
+
+    _probs_all = arrays_store[_subj]["smoothed_probs"]   # (T_total, K)
+    _probs = _probs_all[_sess_mask]                        # (T_sess, K)
+
+    _y = _df_sub["performance"].to_numpy()                 # 0/1 per trial
+    _stim = _df_sub["stimd_n"].to_numpy()                  # 0 for catch
+    _response = _df_sub["response"].to_numpy().astype(int) # 0=L,1=C,2=R
+    _T = _probs.shape[0]
+    _x = np.arange(_T)
+
+    # ── action traces from X ─────────────────────────────────────────────────
+    _X_all = arrays_store[_subj]["X"]                      # (T_total, n_feat)
+    _X_sess = _X_all[_sess_mask]                            # (T_sess, n_feat)
+    _feat_names = names.get("X_cols", [])
+    _fname2idx = {f: i for i, f in enumerate(_feat_names)}
+    _trace_cols = [c for c in ["A_L", "A_C", "A_R"] if c in _fname2idx]
+    _trace_colors = {"A_L": "royalblue", "A_C": "gold", "A_R": "tomato"}
+
+    # ── cumulative accuracy (non-zero stim) ───────────────────────────────────
+    _nz = _stim != 0
+    _cum_acc = np.full(_T, np.nan)
+    _cum_n = 0
+    _cum_sum = 0.0
+    for _ti in range(_T):
+        if _nz[_ti]:
+            _cum_sum += _y[_ti]
+            _cum_n += 1
+        if _cum_n > 0:
+            _cum_acc[_ti] = 100.0 * _cum_sum / _cum_n
+
+    # ── figure ────────────────────────────────────────────────────────────────
+    _palette = sns.color_palette("tab10", n_colors=K)
+    _label_rank = {
+        "Engaged": 0, "Disengaged": 1,
+        **{f"Disengaged {i}": i for i in range(1, K)},
+    }
+    _slbl = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
+
+    # Find which column index corresponds to Engaged
+    _engaged_k = next(
+        (k for k in range(K) if _label_rank.get(_slbl.get(k, ""), k) == 0), 0
+    )
+    _engaged_col = _palette[0]
+
+    _fig, (_ax1, _ax2) = plt.subplots(
+        2, 1, figsize=(14, 7), sharex=True,
+        gridspec_kw={"height_ratios": [2, 1.5]},
+    )
+
+    # Panel 1 – P(Engaged) line + cumulative accuracy on twin axis
+    _ax1.plot(_x, _probs[:, _engaged_k], color=_engaged_col, lw=2,
+              label=f"P({_slbl.get(_engaged_k, 'Engaged')})")
+
+    # choice tick marks
+    _choice_cols = {0: "royalblue", 1: "gold", 2: "tomato"}
+    _choice_lbls = {0: "L", 1: "C", 2: "R"}
+    for _resp, _c in _choice_cols.items():
+        _m = _response == _resp
+        _ax1.scatter(_x[_m], np.ones(_m.sum()) * 1.03, c=_c, s=5, marker="|",
+                     label=_choice_lbls[_resp],
+                     transform=_ax1.get_xaxis_transform(), clip_on=False)
+    _ax1.set_ylim(0, 1)
+    _ax1.set_ylabel("State probability")
+    _ax1.set_title(f"Subject {_subj}  —  session {_sess}  ({_T} trials)")
+    # twin axis: cumulative accuracy
+    _ax1r = _ax1.twinx()
+    _ax1r.plot(_x, _cum_acc, color="black", lw=1.8, linestyle="-", alpha=0.7,
+               label="Cumul. accuracy")
+    _ax1r.axhline(100 / 3, color="grey", lw=0.9, linestyle="--", alpha=0.5)
+    _ax1r.set_ylim(0, 105)
+    _ax1r.set_ylabel("Accuracy (%)", color="black")
+    # combined legend
+    _lines1, _labs1 = _ax1.get_legend_handles_labels()
+    _lines1r, _labs1r = _ax1r.get_legend_handles_labels()
+    _ax1.legend(_lines1 + _lines1r, _labs1 + _labs1r,
+                bbox_to_anchor=(1.08, 1), loc="upper left", fontsize=8, frameon=False)
+
+    # Panel 2 – action traces
+    if _trace_cols:
+        for _tc in _trace_cols:
+            _ax2.plot(_x, _X_sess[:, _fname2idx[_tc]],
+                      label=_tc, color=_trace_colors.get(_tc),
+                      lw=1.5, alpha=0.85)
+    else:
+        _ax2.text(0.5, 0.5, "No action-trace features found in X",
+                  ha="center", va="center", transform=_ax2.transAxes)
+    _ax2.set_ylabel("Action trace")
+    _ax2.set_ylim(0, None)
+    _ax2.set_xlabel("Trial within session")
+    _ax2.legend(bbox_to_anchor=(1.08, 1), loc="upper left", fontsize=8, frameon=False)
+
+    _fig.tight_layout()
+    _fig.subplots_adjust(right=0.82)
+    sns.despine(fig=_fig, right=False)
+
+    mo.vstack([
+        mo.md(f"### Session deep-dive  (K={K})"),
+        mo.hstack([ui_session_subj, ui_session_id]),
+        _fig,
+    ], align="center")
     return
 
 
