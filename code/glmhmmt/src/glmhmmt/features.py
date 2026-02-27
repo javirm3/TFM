@@ -90,14 +90,21 @@ def build_sequence_from_df(
 ):
     """Build (y, X, U, names, AU) arrays from a subject DataFrame.
 
-    Parameters
-    ----------
-    df_sub          : raw trial DataFrame for one (or more) subjects.
-    tau             : half-life for exponential action traces.
-    emission_cols   : subset of emission features to include in X.
-                      Defaults to all features in ``_ALL_EMISSION_COLS``.
-    transition_cols : subset of transition features to include in U.
-                      Defaults to all features in ``_ALL_TRANSITION_COLS``.
+    Args:
+        df_sub          : raw trial DataFrame for one (or more) subjects.
+        tau             : half-life for exponential action traces.
+        emission_cols   : subset of emission features to include in X. Defaults to all features in ``_ALL_EMISSION_COLS``.
+        transition_cols : subset of transition features to include in U. Defaults to all features in ``_ALL_TRANSITION_COLS``.
+
+    Returns:
+        y       : (T,) int {0,1,2} actions
+        X       : (T, n_emission_features) emission features
+        U       : (T, n_transition_features) transition features
+        names   : dict with keys "X_cols" and "U_cols" listing the column names of the features in X and U, respectively.
+        AU      : (T, 2) action traces for positive and negative outcomes (A_plus, A_minus), which can be included as features if desired.
+    
+    Notes:
+        - The returned features are z-scored within subject.
     """
     _ecols = emission_cols if emission_cols is not None else _ALL_EMISSION_COLS
     _ucols = transition_cols if transition_cols is not None else _ALL_TRANSITION_COLS

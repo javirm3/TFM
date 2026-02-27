@@ -788,6 +788,7 @@ dependencies = [
     { name = "websockets" },
     { name = "werkzeug" },
     { name = "widgetsnbextension" },
+    { name = "wigglystuff" },
     { name = "wrapt" },
     { name = "xarray" },
     { name = "xarray-einstats" },
@@ -982,6 +983,7 @@ requires-dist = [
     { name = "websockets", specifier = "==16.0" },
     { name = "werkzeug", specifier = "==3.1.5" },
     { name = "widgetsnbextension", specifier = "==4.0.15" },
+    { name = "wigglystuff", specifier = ">=0.2.32" },
     { name = "wrapt", specifier = "==2.1.1" },
     { name = "xarray", specifier = "==2026.1.0" },
     { name = "xarray-einstats", specifier = "==0.9.1" },
@@ -5816,6 +5818,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/bd/f4/c67440c7fb409a71b7404b7aefcd7569a9c0d6bd071299bf4198ae7a5d95/widgetsnbextension-4.0.15.tar.gz", hash = "sha256:de8610639996f1567952d763a5a41af8af37f2575a41f9852a38f947eb82a3b9", size = 1097402, upload-time = "2025-11-01T21:15:55.178Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3f/0e/fa3b193432cfc60c93b42f3be03365f5f909d2b3ea410295cf36df739e31/widgetsnbextension-4.0.15-py3-none-any.whl", hash = "sha256:8156704e4346a571d9ce73b84bee86a29906c9abfd7223b7228a28899ccf3366", size = 2196503, upload-time = "2025-11-01T21:15:53.565Z" },
+]
+
+[[package]]
+name = "wigglystuff"
+version = "0.2.32"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anywidget" },
+    { name = "drawdata" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "python-dotenv" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8d/87/aa0d8e7fe11096f084ecf7e86d689703f1ce349e63569c75b6a4c1aac05f/wigglystuff-0.2.32.tar.gz", hash = "sha256:e64d11bdbfbc0a78b11ade2a3347c3cf630d2eef0c313c83d6be5774b63ac6fe", size = 2551872, upload-time = "2026-02-25T15:41:06.982Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/0c/6ba5177b2e70f903477347fd1ffd4a00c2b6ab791ec168ca65585e667312/wigglystuff-0.2.32-py3-none-any.whl", hash = "sha256:d9e502a5dfb638b8a746589842ad0146c0c2584902103400d896a0aabe8ed24f", size = 2613388, upload-time = "2026-02-25T15:41:08.889Z" },
 ]
 
 [[package]]

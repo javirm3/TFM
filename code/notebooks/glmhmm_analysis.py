@@ -17,11 +17,27 @@ def _():
     import matplotlib.pyplot as plt
     import seaborn as sns
     import pandas as pd
+    import glmhmmt.plots as plots
+    from glmhmmt.features import build_sequence_from_df
+    from scripts.fit_glmhmm import main as fit_main
 
     sns.set_style("white")
 
     df_all = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-    return df_all, mo, np, paths, pd, pl, plt, sns
+    df_all = df_all.filter(pl.col("subject") != "A84")
+    return (
+        build_sequence_from_df,
+        df_all,
+        fit_main,
+        mo,
+        np,
+        paths,
+        pd,
+        pl,
+        plots,
+        plt,
+        sns,
+    )
 
 
 @app.cell
@@ -34,36 +50,42 @@ def _(df_all, mo):
         label="Subjects",
     )
     ui_tau = mo.ui.slider(
-        start=1, stop=200, value=50, step=5,
+        start=1,
+        stop=200,
+        value=50,
+        step=1,
         label="τ action trace half-life",
+    )
+    ui_model_id = mo.ui.text(
+        value="glmhmm_2",
+        label="Model ID (used as output folder name)",
+        full_width=True,
     )
     fit_button = mo.ui.run_button(label="Run fit")
     mo.vstack(
         [
             mo.md("### Configuration"),
             mo.hstack([ui_K, ui_tau, ui_subjects]),
-            mo.hstack([fit_button]),
+            mo.hstack([fit_button]), ui_model_id
         ],
         align="center",
     )
-    return fit_button, ui_K, ui_subjects, ui_tau
+    return fit_button, ui_K, ui_model_id, ui_subjects, ui_tau
 
 
 @app.cell
-def _(fit_button, mo, paths, ui_K, ui_subjects, ui_tau):
-    from scripts.fit_glmhmm import main as fit_main
-
+def _(fit_button, fit_main, mo, paths, ui_K, ui_model_id, ui_subjects, ui_tau):
     mo.stop(
         not fit_button.value, mo.md("Configure parameters and press **Run fit**.")
     )
-
+    _OUT =  paths.RESULTS / "fits" / ui_model_id.value
     with mo.status.spinner(
-        title=f"Fitting glmhmm K={ui_K.value} τ={ui_tau.value} for {ui_subjects.value}..."
+        title=f"Fitting GLM-HMM K={ui_K.value} τ={ui_tau.value} for {ui_subjects.value}..."
     ):
         fit_main(
             subjects=ui_subjects.value,
             K_list=[ui_K.value],
-            out_dir=paths.RESULTS / "fits/glmhmm",
+            out_dir=_OUT,
             tau=ui_tau.value,
         )
     mo.md("✅ Fit complete — plots below update automatically.")
@@ -71,12 +93,20 @@ def _(fit_button, mo, paths, ui_K, ui_subjects, ui_tau):
 
 
 @app.cell
-def _(df_all, np, paths, pl, ui_K, ui_subjects, ui_tau):
-    from glmhmmt.features import build_sequence_from_df
-
-    OUT = paths.RESULTS / "fits/glmhmm"
+def _(
+    build_sequence_from_df,
+    df_all,
+    np,
+    paths,
+    pl,
+    ui_K,
+    ui_model_id,
+    ui_subjects,
+    ui_tau,
+):
     K = ui_K.value
 
+    OUT =  paths.RESULTS / "fits" / ui_model_id.value
     # load feature names from data
     _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(
         "trial_idx"
@@ -89,10 +119,12 @@ def _(df_all, np, paths, pl, ui_K, ui_subjects, ui_tau):
         if _f.exists():
             _d = dict(np.load(_f, allow_pickle=True))
             # decode column names saved as string arrays; fall back to build output
-            _d["X_cols"] = list(_d["X_cols"]) if "X_cols" in _d else names["X_cols"]
+            _d["X_cols"] = (
+                list(_d["X_cols"]) if "X_cols" in _d else names["X_cols"]
+            )
             arrays_store[_subj] = _d
 
-    arrays_store
+    #arrays_store
     return K, arrays_store, names
 
 
@@ -145,13 +177,11 @@ def _(K, arrays_store, names, np, ui_subjects):
                 _dis_idx += 1
         state_labels[_subj] = _labels
         state_order[_subj] = [int(k) for k in _ranking]
-
-    state_labels, state_order
     return (state_labels,)
 
 
 @app.cell
-def _(K, arrays_store, mo, names, np, pd, plt, sns, state_labels, ui_subjects):
+def _(K, arrays_store, mo, names, paths, plots, state_labels, ui_subjects):
     # ── emission weights ───────────────────────────────────────────────────────
     # W shape: (K, 2, n_features)  — axis-1: [L-choice=0, R-choice=1]
     # Center = reference class (implicit weight 0).
@@ -164,159 +194,11 @@ def _(K, arrays_store, mo, names, np, pd, plt, sns, state_labels, ui_subjects):
     # Groups: (label, [(feat_name, class_idx), ...])
     # class_idx int = direct weight; "neg_mean"/"mean" = derived from both rows
     # Coherent = cue and choice on same side; Incoherent = opposite side
-    _AG_GROUPS = [
-        # bias: L/R context indicators
-        ("bias_coh", [("biasL", 0), ("biasR", 1)]),
-        ("bias_incoh", [("biasL", 1), ("biasR", 0)]),
-        # onset
-        ("onset_coh", [("onsetL", 0), ("onsetR", 1)]),
-        ("onset_incoh", [("onsetL", 1), ("onsetR", 0)]),
-        ("onsetC", [("onsetC", "neg_mean")]),
-        # delay (shared scalar)
-        ("delay", [("delay", "mean")]),
-        # delay × side
-        ("D_coh", [("DL", 0), ("DR", 1)]),
-        ("D_incoh", [("DL", 1), ("DR", 0)]),
-        ("DC", [("DC", "neg_mean")]),
-        # stimulus
-        ("S_coh", [("SL", 0), ("SR", 1)]),
-        ("S_incoh", [("SL", 1), ("SR", 0)]),
-        ("SC", [("SC", "neg_mean")]),
-        # stimulus × delay
-        ("Sxd_coh", [("SLxdelay", 0), ("SRxdelay", 1)]),
-        ("Sxd_incoh", [("SLxdelay", 1), ("SRxdelay", 0)]),
-        ("SCxd", [("SCxdelay", "neg_mean")]),
-        # action history (perseveration vs alternation)
-        ("A_coh", [("A_L", 0), ("A_R", 1)]),
-        ("A_incoh", [("A_L", 1), ("A_R", 0)]),
-    ]
-    _CLS_LABELS_ALL = ["Left (vs C)", "Right (vs C)"]
 
-    _records = []  # raw per-class records (for 3-panel plot)
-    _ag_records = []  # collapsed agonist records (for single-panel plot)
-
-    for _subj in ui_subjects.value:
-        if _subj not in arrays_store:
-            continue
-        _W = arrays_store[_subj]["emission_weights"]  # (K, 2, n_feat)
-        _n_fit_feat = _W.shape[2]
-        _feat_names = names["X_cols"][:_n_fit_feat]
-        _fname2idx = {f: i for i, f in enumerate(_feat_names)}
-
-        for _k in range(_W.shape[0]):
-            # per-class records (keep as-is)
-            for _c in range(_W.shape[1]):
-                for _fi, _fname in enumerate(_feat_names):
-                    _records.append(
-                        {
-                            "subject": _subj,
-                            "state": state_labels.get(_subj, {}).get(
-                                _k, f"State {_k}"
-                            ),
-                            "class": _c,
-                            "class_label": _CLS_LABELS_ALL[_c]
-                            if _c < len(_CLS_LABELS_ALL)
-                            else f"Class {_c}",
-                            "feature": _fname,
-                            "weight": float(_W[_k, _c, _fi]),
-                        }
-                    )
-
-            # agonist collapse per group
-            for _grp_label, _members in _AG_GROUPS:
-                _vals = []
-                for _fname, _mode in _members:
-                    if _fname not in _fname2idx:
-                        continue
-                    _fi = _fname2idx[_fname]
-                    if isinstance(_mode, int):
-                        _vals.append(float(_W[_k, _mode, _fi]))
-                    elif _mode == "neg_mean":
-                        _vals.append(-float(np.mean(_W[_k, :, _fi])))
-                    else:  # "mean"
-                        _vals.append(float(np.mean(_W[_k, :, _fi])))
-                if _vals:
-                    _ag_records.append(
-                        {
-                            "subject": _subj,
-                            "state": state_labels.get(_subj, {}).get(
-                                _k, f"State {_k}"
-                            ),
-                            "feature": _grp_label,
-                            "weight": float(np.mean(_vals)),
-                        }
-                    )
-
-    mo.stop(not _records, mo.md("No fitted arrays found — run the fit first."))
-
-    _df_w = pd.DataFrame(_records)
-    _df_ag = pd.DataFrame(_ag_records)
-    # preserve group order
-    _ag_order = [g for g, _ in _AG_GROUPS if g in _df_ag["feature"].values]
-
-    # ── 1. Collapsed (agonist) plot ────────────────────────────────────────────
-    _fig_ag, _ax_ag = plt.subplots(figsize=(len(_ag_order) * 0.75, 4))
-    sns.lineplot(
-        data=_df_ag,
-        x="feature",
-        y="weight",
-        hue="state",
-        ax=_ax_ag,
-        markers=True,
-        marker="o",
-        markersize=8,
-        markeredgewidth=0,
-        alpha=0.85,
-        errorbar="se",
-    )
-    _ax_ag.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
-    _ax_ag.set_xticks(range(len(_ag_order)))
-    _ax_ag.set_xticklabels(_ag_order, rotation=35, ha="right")
-    _ax_ag.set_xlabel("")
-    _ax_ag.set_ylabel("Agonist weight")
-    _ax_ag.set_title(f"Emission weights – agonist view  (K={K})")
-    if _ax_ag.get_legend() is not None:
-        _ax_ag.get_legend().set_title("")
-    _fig_ag.tight_layout()
-    sns.despine(fig=_fig_ag)
-
-    # ── 2. Per-class plot (L / C / R) ─────────────────────────────────────────
-    _n_classes = _df_w["class"].nunique()
-    _fig_cls, _axes_cls = plt.subplots(
-        1, _n_classes, figsize=(6 * _n_classes, 4), sharey=True
-    )
-    _axes_cls = np.atleast_1d(_axes_cls)
-
-    for _c, _ax in enumerate(_axes_cls):
-        _sub = _df_w[_df_w["class"] == _c]
-        sns.lineplot(
-            data=_sub,
-            x="feature",
-            y="weight",
-            hue="state",
-            ax=_ax,
-            markers=True,
-            marker="o",
-            markersize=8,
-            markeredgewidth=0,
-            alpha=0.8,
-            errorbar="se",
-        )
-        _ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
-        _ax.set_title(
-            _CLS_LABELS_ALL[_c] if _c < len(_CLS_LABELS_ALL) else f"Class {_c}"
-        )
-        _ax.set_xticks(range(len(_feat_names)))
-        _ax.set_xticklabels(_feat_names, rotation=35, ha="right")
-        _ax.set_xlabel("")
-        _ax.set_ylabel("Weight" if _c == 0 else "")
-        if _ax.get_legend() is not None:
-            _ax.get_legend().set_title("")
-
-    _fig_cls.suptitle(f"Emission weights per choice  (K={K})", y=1.02)
-    _fig_cls.tight_layout()
-    sns.despine(fig=_fig_cls)
-
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+    _fig_ag, _fig_cls = plots.plot_emission_weights( arrays_store=arrays_store, state_labels=state_labels, names=names, K=K, subjects=_selected, save_path=paths.RESULTS / "plots/GLMHMM/emissions_coefs.png",)
+    mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
     mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
     return
 
@@ -332,20 +214,8 @@ def _(K, arrays_store, mo, plt, sns, state_labels, ui_subjects):
         _slbl = state_labels.get(_subj, {k: f"S{k}" for k in range(K)})
         _tick_labels = [_slbl.get(k, f"S{k}") for k in range(K)]
         _fig_t, _ax_t = plt.subplots(figsize=(3.2, 2.8))
-        sns.heatmap(
-            _A,
-            ax=_ax_t,
-            cmap="bone",
-            annot=True,
-            fmt=".2f",
-            vmin=0,
-            vmax=1,
-            square=True,
-            linewidths=0.5,
-            xticklabels=_tick_labels,
-            yticklabels=_tick_labels,
-            cbar_kws={"shrink": 0.8, "label": "probability"},
-        )
+        sns.heatmap(_A, ax=_ax_t, cmap="bone", annot=True, fmt=".2f", vmin=0, vmax=1, square=True, linewidths=0.5, xticklabels=_tick_labels,     
+                    yticklabels=_tick_labels, cbar_kws={"shrink": 0.8, "label": "probability"},)
         _ax_t.set_title(f"Subject {_subj}")
         _ax_t.set_xlabel("To state")
         _ax_t.set_ylabel("From state")
@@ -368,18 +238,8 @@ def _(K, arrays_store, mo, plt, sns, state_labels, ui_subjects):
 def _(arrays_store, mo, ui_subjects):
     # ── trial-window slider (shared across all posterior plots) ──────────────
     _selected = [s for s in ui_subjects.value if s in arrays_store]
-    _T_max = (
-        max(arrays_store[s]["smoothed_probs"].shape[0] for s in _selected)
-        if _selected
-        else 200
-    )
-    ui_trial_range = mo.ui.range_slider(
-        start=0,
-        stop=_T_max - 1,
-        value=[0, min(_T_max - 1, 199)],
-        label="Trial window",
-        step=1,
-    )
+    _T_max = ( max(arrays_store[s]["smoothed_probs"].shape[0] for s in _selected) if _selected else 200 )
+    ui_trial_range = mo.ui.range_slider( start=0, stop=_T_max - 1, value=[0, min(_T_max - 1, 199)], label="Trial window", step=1,)
     mo.vstack([mo.md("### Trial window"), ui_trial_range])
     return (ui_trial_range,)
 
@@ -402,38 +262,23 @@ def _(
 
     _t0, _t1 = ui_trial_range.value
     _n_subj = len(_selected)
-    _fig_p, _axes_p = plt.subplots(
-        _n_subj, 1, figsize=(14, 3 * _n_subj), squeeze=False
-    )
+    _fig_p, _axes_p = plt.subplots( _n_subj, 1, figsize=(14, 3 * _n_subj), squeeze=False )
 
     for _i, _subj in enumerate(_selected):
         _ax = _axes_p[_i, 0]
-        _probs = arrays_store[_subj]["smoothed_probs"][
-            _t0 : _t1 + 1
-        ]  # (window, K)
+        _probs = arrays_store[_subj]["smoothed_probs"][_t0 : _t1 + 1]  # (window, K)
         _y = arrays_store[_subj]["y"].astype(int)[_t0 : _t1 + 1]  # (window,)
         _T_w = _probs.shape[0]
         _x = np.arange(_t0, _t0 + _T_w)
 
         # stacked area — color by label rank so Engaged is always palette[0]
         _colors = sns.color_palette("tab10", n_colors=K)
-        _label_rank = {
-            "Engaged": 0,
-            "Disengaged": 1,
-            **{f"Disengaged {i}": i for i in range(1, K)},
-        }
+        _label_rank = { "Engaged": 0, "Disengaged": 1, **{f"Disengaged {i}": i for i in range(1, K)},}
         _bottom = np.zeros(_T_w)
         _slbl = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
         for _k in range(K):
             _rank = _label_rank.get(_slbl.get(_k, ""), _k)
-            _ax.fill_between(
-                _x,
-                _bottom,
-                _bottom + _probs[:, _k],
-                alpha=0.7,
-                color=_colors[_rank],
-                label=_slbl.get(_k, f"State {_k}"),
-            )
+            _ax.fill_between( _x, _bottom, _bottom + _probs[:, _k], alpha=0.7, color=_colors[_rank], label=_slbl.get(_k, f"State {_k}"),)
             _bottom += _probs[:, _k]
 
         # choice markers on top
@@ -441,28 +286,13 @@ def _(
         _choice_labels = {0: "L", 1: "C", 2: "R"}
         for _resp, _col in _choice_colors.items():
             _mask = _y == _resp
-            _ax.scatter(
-                _x[_mask],
-                np.ones(_mask.sum()) * 1.03,
-                c=_col,
-                s=4,
-                marker="|",
-                label=_choice_labels[_resp],
-                transform=_ax.get_xaxis_transform(),
-                clip_on=False,
-            )
+            _ax.scatter( _x[_mask], np.ones(_mask.sum()) * 1.03, c=_col, s=4, marker="|", label=_choice_labels[_resp], transform=_ax.get_xaxis_transform(), clip_on=False,)
 
         _ax.set_xlim(_t0, _t0 + _T_w - 1)
         _ax.set_ylim(0, 1)
         _ax.set_ylabel("State probability")
         _ax.set_title(f"Subject {_subj}")
-        _ax.legend(
-            bbox_to_anchor=(1.01, 1),
-            loc="upper left",
-            fontsize=8,
-            ncol=1,
-            frameon=False,
-        )
+        _ax.legend( bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=8, ncol=1, frameon=False,)
 
     _axes_p[-1, 0].set_xlabel("Trial")
     _fig_p.tight_layout()
@@ -472,17 +302,13 @@ def _(
         [
             mo.md(f"### Posterior state probabilities  (K={K})"),
             _fig_p,
-        ],
-        align="center",
+        ], align="center",
     )
     return
 
 
 @app.cell
-def _(K, arrays_store, df_all, mo, np, pl, state_labels, ui_subjects):
-    import glmhmmt.plots as plots
-
-    # ── predictions & categorical performance ────────────────────────────────
+def _(K, arrays_store, df_all, mo, np, pl, plots, state_labels, ui_subjects):
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
@@ -512,11 +338,7 @@ def _(K, arrays_store, df_all, mo, np, pl, state_labels, ui_subjects):
 
     # ── per-state overlay — pool all subjects with normalised state ranks ─────
     # Normalise: 0 = Engaged, 1 = Disengaged, … per-subject regardless of raw idx
-    _lrank_map = {
-        "Engaged": 0,
-        "Disengaged": 1,
-        **{f"Disengaged {i}": i for i in range(1, K)},
-    }
+    _lrank_map = { "Engaged": 0, "Disengaged": 1, **{f"Disengaged {i}": i for i in range(1, K)},}
     _pool_dfs = []
     _pool_assigns = []
     for _subj in _selected:
@@ -540,27 +362,26 @@ def _(K, arrays_store, df_all, mo, np, pl, state_labels, ui_subjects):
         _gamma_s = arrays_store[_subj]["smoothed_probs"]
         # Both must have the same length — if not, session filtering diverged
         # between the fit script and this notebook.
-        assert _plot_df_s.height == _gamma_s.shape[0], (
-            f"{_subj}: df has {_plot_df_s.height} rows but smoothed_probs has "
-            f"{_gamma_s.shape[0]}. Check session-count filter consistency."
-        )
         _T_s = _gamma_s.shape[0]
 
         # ── per-state emission prediction: softmax(W_k × x) for MAP state k ───────
         # Using the marginal p_pred (blended over all states) makes every
         # state's model line look the same.  Instead look up the emission of
         # the MAP-assigned state directly from the saved weights.
-        _W = np.asarray(arrays_store[_subj]["emission_weights"])  # (K, C-1, n_feat)
-        _X_s = np.asarray(arrays_store[_subj]["X"])               # (T, n_feat)
-        _logits = np.einsum("kci,ti->tkc", _W, _X_s)              # (T, K, C-1)  → [L, R]
+        _W = np.asarray(
+            arrays_store[_subj]["emission_weights"]
+        )  # (K, C-1, n_feat)
+        _X_s = np.asarray(arrays_store[_subj]["X"])  # (T, n_feat)
+        _logits = np.einsum("kci,ti->tkc", _W, _X_s)  # (T, K, C-1)  → [L, R]
         _logits_full = np.concatenate(
-            [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]], axis=2  # (T, K, C) → [L, 0, R]
+            [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]],
+            axis=2,  # (T, K, C) → [L, 0, R]
         )
         _lse = _logits_full.max(axis=2, keepdims=True)
         _exp = np.exp(_logits_full - _lse)
-        _p_state = _exp / _exp.sum(axis=2, keepdims=True)         # (T, K, C)
-        _map_k = np.argmax(_gamma_s, axis=1).astype(int)          # (T,)
-        _stim = _plot_df_s["stimulus"].to_numpy().astype(int)      # (T,)
+        _p_state = _exp / _exp.sum(axis=2, keepdims=True)  # (T, K, C)
+        _map_k = np.argmax(_gamma_s, axis=1).astype(int)  # (T,)
+        _stim = _plot_df_s["stimulus"].to_numpy().astype(int)  # (T,)
         _p_state_correct = _p_state[np.arange(_T_s), _map_k, _stim]  # (T,)
         # build per-state df with state-k emission replacing the marginal
         _plot_df_state_s = _plot_df_s.with_columns(
@@ -579,13 +400,8 @@ def _(K, arrays_store, df_all, mo, np, pl, state_labels, ui_subjects):
         1: "Disengaged",
         **{i: f"Disengaged {i}" for i in range(2, K)},
     }
-    _fig_state, _ = plots.plot_categorical_performance_by_state(
-        df=_df_state_pool,
-        smoothed_probs=None,
-        state_assign=_assign_pool,
-        state_labels=_state_lbl_global,
-        model_name=f"glmhmm K={K} — per state",
-    )
+    _fig_state, _ = plots.plot_categorical_performance_by_state(df=_df_state_pool,smoothed_probs=None,state_assign=_assign_pool,
+                                                                state_labels=_state_lbl_global,model_name=f"glmhmm K={K} — per state",)
 
     mo.vstack(
         [
@@ -600,8 +416,23 @@ def _(K, arrays_store, df_all, mo, np, pl, state_labels, ui_subjects):
 
 
 @app.cell
+def _(mo):
+    from wigglystuff import TangleSlider
+    THRESH_ui = mo.ui.anywidget(
+                    TangleSlider(
+                        amount=0.9,
+                        min_value=0.0,
+                        max_value=1,
+                        step=0.01,
+                        digits=2,
+                    ))
+    return (THRESH_ui,)
+
+
+@app.cell
 def _(
     K,
+    THRESH_ui,
     arrays_store,
     df_all,
     mo,
@@ -623,14 +454,10 @@ def _(
     _selected_acc = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected_acc, mo.md("No fitted subjects available."))
 
-    _THRESH = 0.5
+    _THRESH = THRESH_ui.amount
     _palette = sns.color_palette("tab10", n_colors=K)
 
-    _label_order = (
-        ["Engaged", "Disengaged"]
-        if K == 2
-        else ["Engaged"] + [f"Disengaged {i}" for i in range(1, K)]
-    )
+    _label_order = ( ["Engaged", "Disengaged"] if K == 2 else ["Engaged"] + [f"Disengaged {i}" for i in range(1, K)])
     _cmap = {"All": "#999999"}
     for _ri, _lbl in enumerate(_label_order):
         _cmap[_lbl] = _palette[_ri]
@@ -721,51 +548,18 @@ def _(
             else 0.0
         )
 
-        _ax_acc.bar(
-            _li,
-            _mean,
-            color=_cmap.get(_lbl, "#999999"),
-            yerr=_sem,
-            error_kw={"linewidth": 1.2, "capsize": 4},
-            width=0.6,
-            alpha=0.9,
-            zorder=2,
-        )
-        _ax_acc.text(
-            _li,
-            _mean + _sem + 1.2,
-            f"{_mean:.0f}",
-            ha="center",
-            va="bottom",
-            fontsize=10,
-            fontweight="bold",
-        )
+        _ax_acc.bar( _li, _mean, color=_cmap.get(_lbl, "#999999"), yerr=_sem, error_kw={"linewidth": 1.2, "capsize": 4}, width=0.6, alpha=0.9, zorder=2,)
+        _ax_acc.text( _li, _mean + _sem + 1.2, f"{_mean:.0f}", ha="center", va="bottom", fontsize=10, fontweight="bold",)
         _jitter = _rng.uniform(-0.15, 0.15, size=len(_vals))
-        _ax_acc.scatter(
-            _li + _jitter,
-            _vals,
-            color="black",
-            s=20,
-            zorder=5,
-            alpha=0.6,
-        )
+        _ax_acc.scatter( _li + _jitter, _vals, color="black", s=20, zorder=5, alpha=0.6,)
 
-    _ax_acc.axhline(
-        100 / 3,
-        color="black",
-        linestyle="--",
-        linewidth=0.9,
-        alpha=0.5,
-        label="Chance (33%)",
-    )
+    _ax_acc.axhline( 100 / 3, color="black", linestyle="--", linewidth=0.9, alpha=0.5, label="Chance (33%)", )
     _ax_acc.set_xticks(range(len(_x_labels)))
     _ax_acc.set_xticklabels(_x_labels, rotation=20, ha="right")
     _ax_acc.set_xlabel("State")
     _ax_acc.set_ylabel("Accuracy (%)")
     _ax_acc.set_ylim(30, 105)
-    _ax_acc.set_title(
-        f"Per-state accuracy  (K={K},  posterior ≥ {_THRESH},  non-zero stim)"
-    )
+    _ax_acc.set_title( f"Per-state accuracy  (K={K},  posterior ≥ {_THRESH},  non-zero stim)")
     _ax_acc.legend(frameon=False, fontsize=8)
     _fig_acc.tight_layout()
     sns.despine(fig=_fig_acc)
@@ -774,7 +568,7 @@ def _(
         [
             mo.md("### Accuracy by state"),
             mo.md(
-                "> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ 0.9"
+                f"> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ {THRESH_ui}"
             ),
             _fig_acc,
             mo.md("**Trial counts & mean accuracy per label:**"),
@@ -867,13 +661,7 @@ def _(
             _lbl = _slbl.get(_k, f"State {_k}")
             _valid = ~np.isnan(_mean[:, _k])
             _ax.plot(_x[_valid], _mean[_valid, _k], color=_col, lw=2, label=_lbl)
-            _ax.fill_between(
-                _x[_valid],
-                (_mean[:, _k] - _sem[:, _k])[_valid],
-                (_mean[:, _k] + _sem[:, _k])[_valid],
-                color=_col,
-                alpha=0.25,
-            )
+            _ax.fill_between( _x[_valid], (_mean[:, _k] - _sem[:, _k])[_valid], (_mean[:, _k] + _sem[:, _k])[_valid], color=_col, alpha=0.25,)
 
         _ax.set_ylim(0, 1)
         _ax.set_xlabel("Trial within session")
@@ -882,9 +670,7 @@ def _(
             f"Subject {_subj} — avg. state trajectory  "
             f"(n={_sess_ids.size} sessions)"
         )
-        _ax.legend(
-            bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=8, frameon=False
-        )
+        _ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=8, frameon=False)
 
     _fig_traj.tight_layout()
     sns.despine(fig=_fig_traj)
@@ -929,7 +715,9 @@ def _(
     }
 
     _n_subj_occ = len(_selected_occ)
-    _fig_occ, _axes_occ = plt.subplots(_n_subj_occ, 2, figsize=(10, 3.5 * _n_subj_occ), squeeze=False)
+    _fig_occ, _axes_occ = plt.subplots(
+        _n_subj_occ, 2, figsize=(10, 3.5 * _n_subj_occ), squeeze=False
+    )
 
     for _i, _subj in enumerate(_selected_occ):
         _ax_bar = _axes_occ[_i, 0]
@@ -951,23 +739,14 @@ def _(
         _fracs = np.array([np.mean(_state_assign == _k) for _k in range(K)])
         _bar_labels = [_slbl.get(_k, f"State {_k}") for _k in range(K)]
         _bar_colors = [
-            _palette_occ[
-                _label_rank_occ.get(_slbl.get(_k, ""), _k) % len(_palette_occ)
-            ]
+            _palette_occ[ _label_rank_occ.get(_slbl.get(_k, ""), _k) % len(_palette_occ)]
             for _k in range(K)
         ]
         _rects = _ax_bar.bar(
             range(K), _fracs, color=_bar_colors, width=0.6, alpha=0.9
         )
         for _xi, _fv in enumerate(_fracs):
-            _ax_bar.text(
-                _xi,
-                _fv + 0.01,
-                f"{_fv:.2f}",
-                ha="center",
-                va="bottom",
-                fontsize=9,
-            )
+            _ax_bar.text( _xi, _fv + 0.01, f"{_fv:.2f}", ha="center", va="bottom", fontsize=9,)
         _ax_bar.set_xticks(range(K))
         _ax_bar.set_xticklabels(_bar_labels, rotation=15, ha="right")
         _ax_bar.set_ylim(0, 1.15)
@@ -1031,8 +810,9 @@ def _(arrays_store, df_all, mo, pl, ui_session_subj):
     _sess_opts = (
         sorted(
             df_all.filter(pl.col("subject") == ui_session_subj.value)
-            .filter(pl.col("session").count().over("session") >= 2)
-            ["session"].unique().to_list()
+            .filter(pl.col("session").count().over("session") >= 2)["session"]
+            .unique()
+            .to_list()
         )
         if ui_session_subj.value in arrays_store
         else [0]
@@ -1042,10 +822,12 @@ def _(arrays_store, df_all, mo, pl, ui_session_subj):
         value=str(_sess_opts[0]),
         label="Session",
     )
-    mo.vstack([
-        mo.md("### Session deep-dive"),
-        mo.hstack([ui_session_subj, ui_session_id]),
-    ])
+    mo.vstack(
+        [
+            mo.md("### Session deep-dive"),
+            mo.hstack([ui_session_subj, ui_session_id]),
+        ]
+    )
     return (ui_session_id,)
 
 
@@ -1077,12 +859,9 @@ def _(
     )
 
     _sess = int(ui_session_id.value)
-    _df_sub = (
-        df_all.filter(
-            (pl.col("subject") == _subj) & (pl.col("session") == _sess)
-        )
-        .sort("trial_idx")
-    )
+    _df_sub = df_all.filter(
+        (pl.col("subject") == _subj) & (pl.col("session") == _sess)
+    ).sort("trial_idx")
     mo.stop(len(_df_sub) == 0, mo.md("No trials found for this session."))
 
     # ── align smoothed_probs rows with this session ───────────────────────────
@@ -1094,18 +873,18 @@ def _(
     _all_sessions = _df_all_sub["session"].to_numpy()
     _sess_mask = _all_sessions == _sess
 
-    _probs_all = arrays_store[_subj]["smoothed_probs"]   # (T_total, K)
-    _probs = _probs_all[_sess_mask]                        # (T_sess, K)
+    _probs_all = arrays_store[_subj]["smoothed_probs"]  # (T_total, K)
+    _probs = _probs_all[_sess_mask]  # (T_sess, K)
 
-    _y = _df_sub["performance"].to_numpy()                 # 0/1 per trial
-    _stim = _df_sub["stimd_n"].to_numpy()                  # 0 for catch
-    _response = _df_sub["response"].to_numpy().astype(int) # 0=L,1=C,2=R
+    _y = _df_sub["performance"].to_numpy()  # 0/1 per trial
+    _stim = _df_sub["stimd_n"].to_numpy()  # 0 for catch
+    _response = _df_sub["response"].to_numpy().astype(int)  # 0=L,1=C,2=R
     _T = _probs.shape[0]
     _x = np.arange(_T)
 
     # ── action traces from X ─────────────────────────────────────────────────
-    _X_all = arrays_store[_subj]["X"]                      # (T_total, n_feat)
-    _X_sess = _X_all[_sess_mask]                            # (T_sess, n_feat)
+    _X_all = arrays_store[_subj]["X"]  # (T_total, n_feat)
+    _X_sess = _X_all[_sess_mask]  # (T_sess, n_feat)
     _feat_names = names.get("X_cols", [])
     _fname2idx = {f: i for i, f in enumerate(_feat_names)}
     _trace_cols = [c for c in ["A_L", "A_C", "A_R"] if c in _fname2idx]
@@ -1126,7 +905,8 @@ def _(
     # ── figure ────────────────────────────────────────────────────────────────
     _palette = sns.color_palette("tab10", n_colors=K)
     _label_rank = {
-        "Engaged": 0, "Disengaged": 1,
+        "Engaged": 0,
+        "Disengaged": 1,
         **{f"Disengaged {i}": i for i in range(1, K)},
     }
     _slbl = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
@@ -1138,61 +918,105 @@ def _(
     _engaged_col = _palette[0]
 
     _fig, (_ax1, _ax2) = plt.subplots(
-        2, 1, figsize=(14, 7), sharex=True,
+        2,
+        1,
+        figsize=(14, 7),
+        sharex=True,
         gridspec_kw={"height_ratios": [2, 1.5]},
     )
 
     # Panel 1 – P(Engaged) line + cumulative accuracy on twin axis
-    _ax1.plot(_x, _probs[:, _engaged_k], color=_engaged_col, lw=2,
-              label=f"P({_slbl.get(_engaged_k, 'Engaged')})")
+    _ax1.plot(
+        _x,
+        _probs[:, _engaged_k],
+        color=_engaged_col,
+        lw=2,
+        label=f"P({_slbl.get(_engaged_k, 'Engaged')})",
+    )
 
     # choice tick marks
     _choice_cols = {0: "royalblue", 1: "gold", 2: "tomato"}
     _choice_lbls = {0: "L", 1: "C", 2: "R"}
     for _resp, _c in _choice_cols.items():
         _m = _response == _resp
-        _ax1.scatter(_x[_m], np.ones(_m.sum()) * 1.03, c=_c, s=5, marker="|",
-                     label=_choice_lbls[_resp],
-                     transform=_ax1.get_xaxis_transform(), clip_on=False)
+        _ax1.scatter(
+            _x[_m],
+            np.ones(_m.sum()) * 1.03,
+            c=_c,
+            s=5,
+            marker="|",
+            label=_choice_lbls[_resp],
+            transform=_ax1.get_xaxis_transform(),
+            clip_on=False,
+        )
     _ax1.set_ylim(0, 1)
     _ax1.set_ylabel("State probability")
     _ax1.set_title(f"Subject {_subj}  —  session {_sess}  ({_T} trials)")
     # twin axis: cumulative accuracy
     _ax1r = _ax1.twinx()
-    _ax1r.plot(_x, _cum_acc, color="black", lw=1.8, linestyle="-", alpha=0.7,
-               label="Cumul. accuracy")
+    _ax1r.plot(
+        _x,
+        _cum_acc,
+        color="black",
+        lw=1.8,
+        linestyle="-",
+        alpha=0.7,
+        label="Cumul. accuracy",
+    )
     _ax1r.axhline(100 / 3, color="grey", lw=0.9, linestyle="--", alpha=0.5)
     _ax1r.set_ylim(0, 105)
     _ax1r.set_ylabel("Accuracy (%)", color="black")
     # combined legend
     _lines1, _labs1 = _ax1.get_legend_handles_labels()
     _lines1r, _labs1r = _ax1r.get_legend_handles_labels()
-    _ax1.legend(_lines1 + _lines1r, _labs1 + _labs1r,
-                bbox_to_anchor=(1.08, 1), loc="upper left", fontsize=8, frameon=False)
+    _ax1.legend(
+        _lines1 + _lines1r,
+        _labs1 + _labs1r,
+        bbox_to_anchor=(1.08, 1),
+        loc="upper left",
+        fontsize=8,
+        frameon=False,
+    )
 
     # Panel 2 – action traces
     if _trace_cols:
         for _tc in _trace_cols:
-            _ax2.plot(_x, _X_sess[:, _fname2idx[_tc]],
-                      label=_tc, color=_trace_colors.get(_tc),
-                      lw=1.5, alpha=0.85)
+            _ax2.plot(
+                _x,
+                _X_sess[:, _fname2idx[_tc]],
+                label=_tc,
+                color=_trace_colors.get(_tc),
+                lw=1.5,
+                alpha=0.85,
+            )
     else:
-        _ax2.text(0.5, 0.5, "No action-trace features found in X",
-                  ha="center", va="center", transform=_ax2.transAxes)
+        _ax2.text(
+            0.5,
+            0.5,
+            "No action-trace features found in X",
+            ha="center",
+            va="center",
+            transform=_ax2.transAxes,
+        )
     _ax2.set_ylabel("Action trace")
     _ax2.set_ylim(0, None)
     _ax2.set_xlabel("Trial within session")
-    _ax2.legend(bbox_to_anchor=(1.08, 1), loc="upper left", fontsize=8, frameon=False)
+    _ax2.legend(
+        bbox_to_anchor=(1.08, 1), loc="upper left", fontsize=8, frameon=False
+    )
 
     _fig.tight_layout()
     _fig.subplots_adjust(right=0.82)
     sns.despine(fig=_fig, right=False)
 
-    mo.vstack([
-        mo.md(f"### Session deep-dive  (K={K})"),
-        mo.hstack([ui_session_subj, ui_session_id]),
-        _fig,
-    ], align="center")
+    mo.vstack(
+        [
+            mo.md(f"### Session deep-dive  (K={K})"),
+            mo.hstack([ui_session_subj, ui_session_id]),
+            _fig,
+        ],
+        align="center",
+    )
     return
 
 
@@ -1202,13 +1026,19 @@ def _():
 
 
 @app.cell
-def _(K, mo, np, paths, pl, plt, sns, ui_subjects):
+def _(K, df_all, mo, np, paths, pl, plt, sns, ui_subjects):
     # ── τ sweep analysis ────────────────────────────────────────────────────────
     # Loads results produced by:
     #   uv run python scripts/fit_tau_sweep.py --model glmhmm --K <K>
     # Expects: RESULTS/fits/tau_sweep/glmhmm_K<K>/tau_sweep_summary.parquet
 
-    _sweep_path = paths.RESULTS / "fits" / "tau_sweep" / f"glmhmm_K{K}" / "tau_sweep_summary.parquet"
+    _sweep_path = (
+        paths.RESULTS
+        / "fits"
+        / "tau_sweep"
+        / f"glmhmm_K{K}"
+        / "tau_sweep_summary.parquet"
+    )
     mo.stop(
         not _sweep_path.exists(),
         mo.md(
@@ -1219,13 +1049,18 @@ def _(K, mo, np, paths, pl, plt, sns, ui_subjects):
     )
 
     _df_sweep = pl.read_parquet(_sweep_path)
-    _subjects = [s for s in ui_subjects.value if s in _df_sweep["subject"].unique().to_list()]
+    _subjects = [
+        s
+        for s in ui_subjects.value
+        if s in _df_sweep["subject"].unique().to_list()
+    ]
     mo.stop(not _subjects, mo.md("No sweep data for selected subjects."))
 
     # ── BIC vs τ plot ────────────────────────────────────────────────────
     _fig_sweep, _axes_sw = plt.subplots(1, 2, figsize=(12, 4))
     _ax_bic, _ax_ll = _axes_sw
     _palette = sns.color_palette("tab10", n_colors=len(_subjects))
+    n_trials = df_all.group_by("subject").agg(pl.len().alias("n_trials"))
 
     for _i, _subj in enumerate(_subjects):
         _d = _df_sweep.filter(
@@ -1233,17 +1068,19 @@ def _(K, mo, np, paths, pl, plt, sns, ui_subjects):
         ).sort("tau")
         _tau = _d["tau"].to_numpy()
         _bic = _d["bic"].to_numpy()
-        _ll  = _d["ll_per_trial"].to_numpy()
-        _c   = _palette[_i]
-        _ax_bic.plot(_tau, _bic,  "-o", ms=3, color=_c, label=_subj)
-        _ax_ll .plot(_tau, _ll,   "-o", ms=3, color=_c, label=_subj)
+        _ll = _d["ll_per_trial"].to_numpy()
+        _c = _palette[_i]
+        _ax_bic.plot(_tau, _bic, "-o", ms=3, color=_c, label=_subj)
+        _ax_ll.plot(_tau, _ll, "-o", ms=3, color=_c, label=_subj)
         # mark best τ
         _best_idx = int(np.argmin(_bic))
-        _ax_bic.axvline(_tau[_best_idx], color=_c, lw=0.8, linestyle="--", alpha=0.6)
-
+        _ax_bic.axvline(
+            _tau[_best_idx], color=_c, lw=0.8, linestyle="--", alpha=0.6
+        )
+    4
     for _ax, _ylabel, _title in [
-        (_ax_bic, "BIC",          "BIC vs τ  (lower is better)"),
-        (_ax_ll,  "LL / trial",   "Log-likelihood per trial vs τ"),
+        (_ax_bic, "BIC", "BIC vs τ  (lower is better)"),
+        (_ax_ll, "LL / trial", "Log-likelihood per trial vs τ"),
     ]:
         _ax.set_xlabel("τ (action-trace half-life)")
         _ax.set_ylabel(_ylabel)
@@ -1255,8 +1092,7 @@ def _(K, mo, np, paths, pl, plt, sns, ui_subjects):
 
     # ── best τ table ────────────────────────────────────────────────────────
     _best = (
-        _df_sweep
-        .filter(pl.col("subject").is_in(_subjects) & (pl.col("K") == K))
+        _df_sweep.filter(pl.col("subject").is_in(_subjects) & (pl.col("K") == K))
         .sort("bic")
         .group_by(["subject", "K"])
         .first()
@@ -1264,12 +1100,58 @@ def _(K, mo, np, paths, pl, plt, sns, ui_subjects):
         .sort(["subject", "K"])
     )
 
-    mo.vstack([
-        mo.md(f"### τ sweep results — glmhmm K={K}"),
-        _fig_sweep,
-        mo.md("**Best τ per subject (min BIC):**"),
-        mo.plain_text(_best.to_pandas().to_string(index=False)),
-    ], align="center")
+    _best_all = (
+        _df_sweep.filter(pl.col("subject").is_in(_subjects) & (pl.col("K") == K))
+        .join(n_trials, on="subject", how="left")
+        .group_by("tau")
+        .agg(
+            [
+                (pl.col("bic") * pl.col("n_trials")).sum().alias("bic_wsum"),
+                (pl.col("ll_per_trial") * pl.col("n_trials"))
+                .sum()
+                .alias("llpt_wsum"),
+                (pl.col("acc") * pl.col("n_trials")).sum().alias("acc_wsum"),
+                pl.col("n_trials").sum().alias("n_total"),
+                pl.n_unique("subject").alias("n_subjects"),
+            ]
+        )
+        .with_columns(
+            [
+                (pl.col("bic_wsum") / pl.col("n_total")).alias("bic_mean_w"),
+                (pl.col("llpt_wsum") / pl.col("n_total")).alias(
+                    "ll_per_trial_mean_w"
+                ),
+                (pl.col("acc_wsum") / pl.col("n_total")).alias("acc_mean_w"),
+            ]
+        )
+        .select(
+            [
+                "tau",
+                "bic_mean_w",
+                "ll_per_trial_mean_w",
+                "acc_mean_w",
+                "n_subjects",
+                "n_total",
+            ]
+        )
+        .sort("bic_mean_w")
+    )
+
+    mo.vstack(
+        [
+            mo.md(f"### τ sweep results — glmhmm K={K}"),
+            _fig_sweep,
+            mo.md("**Best τ per subject (min BIC):**"),
+            mo.plain_text(_best.to_pandas().to_string(index=False)),
+            mo.ui.dataframe(_best_all),
+        ],
+        align="center",
+    )
+    return
+
+
+@app.cell
+def _():
     return
 
 

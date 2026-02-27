@@ -7,6 +7,28 @@ num_states = 2
 num_classes = 3
 tau = 50
 
+# See SoftmaxGLMHMM and SoftmaxGLMHMMEmissions docstrings for full API docs.
+[glmhmm]
+# Ordered emission feature names — index = column index in W (K × C-1 × M).
+# Must match emission_cols passed to build_sequence_from_df.
+emission_features = [
+    "biasL", "biasR",
+    "onsetL", "onsetC", "onsetR",
+    "delay",
+    "DR", "DL",
+    "SL", "SC", "SR",
+    "SLxdelay", "SCxdelay", "SRxdelay",
+    "A_L", "A_R",
+]
+transition_features = ["A_plus", "A_minus", "A_L", "A_C", "A_R"]
+
+# Per-state weight constraints: {state_idx (str): {feature_name = value}}.
+# Keys are string integers; converted to int in fit scripts.
+# Leave empty to train all weights freely.
+# Example: "0" = {SL = 0.0, SC = 0.0, SR = 0.0}  → state 0 is bias-only
+[glmhmm.frozen_emissions]
+# "0" = {SL = 0.0, SC = 0.0, SR = 0.0}
+
 [encoding.stimd]
 0 = "SIL"
 1 = "SS"
@@ -103,10 +125,15 @@ palette = [
 [palettes]
 states_palette = "Dark2"
 states_palette_n = 3
+# Colours indexed by canonical rank: 0=Engaged, 1=Disengaged, 2=Disengaged 1, …
+# All state-plots in the notebook derive their colours from this list.
 states_hex = [
-    "#1B9E77",
-    "#D95F02",
-    "#7570B3",
+    "#1B9E77",   # rank 0 – Engaged
+    "#D95F02",   # rank 1 – Disengaged
+    "#7570B3",   # rank 2 – Disengaged 1
+    "#E7298A",   # rank 3 – Disengaged 2
+    "#66A61E",   # rank 4 – Disengaged 3
+    "#E6AB02",   # rank 5 – Disengaged 4
 ]
 
 [labels]

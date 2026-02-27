@@ -89,6 +89,7 @@ def fit_subject(
         "y": np.asarray(y),
         "X": np.asarray(X),
         "U": np.asarray(U),
+    
     }
 
 
@@ -124,6 +125,7 @@ def save_results(result: dict, out_dir: Path) -> None:
         transition_bias=np.asarray(result["fitted_params"].transitions.bias),
         transition_weights=np.asarray(
             result["fitted_params"].transitions.weights),
+        names=result["names"],
         y=result["y"],
         X=result["X"],
         U=result["U"],
@@ -134,7 +136,7 @@ def main(
     subjects: list[str] | None = None,
     K_list: list[int] = [2, 3],
     num_iters: int = 50,
-    n_restarts: int = 5,
+    n_restarts: int = 1,
     base_seed: int = 0,
     out_dir: Path | None = None,
     emission_cols: list[str] | None = None,

@@ -191,6 +191,7 @@ dependencies = [
     "websockets==16.0",
     "werkzeug==3.1.5",
     "widgetsnbextension==4.0.15",
+    "wigglystuff>=0.2.32",
     "wrapt==2.1.1",
     "xarray==2026.1.0",
     "xarray-einstats==0.9.1",
@@ -203,3 +204,10 @@ members = ["glmhmmt/"]
 
 [tool.uv.sources]
 glmhmmt = { workspace = true }
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
