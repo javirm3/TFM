@@ -194,6 +194,7 @@ def _(M, mo, np, ui_K, ui_emission_cols, ui_fit_subject, ui_load_fit):
         (0, "L", "SCxdelay"): -0.4,
         (0, "L", "SRxdelay"): 0.0,
         (0, "L", "A_L"): 0.2,
+        (0, "L", "A_C"): 0.2, 
         (0, "L", "A_R"): -0.3,
         (0, "R", "biasL"): 0.1,
         (0, "R", "biasR"): 0.5,
@@ -210,6 +211,7 @@ def _(M, mo, np, ui_K, ui_emission_cols, ui_fit_subject, ui_load_fit):
         (0, "R", "SCxdelay"): 0.3,
         (0, "R", "SRxdelay"): -0.4,
         (0, "R", "A_L"): 0.0,
+        (0, "R", "A_C"): 0.2,
         (0, "R", "A_R"): 0.6,
         (1, "L", "biasL"): 0.6,
         (1, "L", "biasR"): -0.1,
@@ -226,6 +228,7 @@ def _(M, mo, np, ui_K, ui_emission_cols, ui_fit_subject, ui_load_fit):
         (1, "L", "SCxdelay"): -0.1,
         (1, "L", "SRxdelay"): 0.1,
         (1, "L", "A_L"): 1.2,
+        (1, "L", "A_C"): 1.2,
         (1, "L", "A_R"): -0.9,
         (1, "R", "biasL"): 0.1,
         (1, "R", "biasR"): 0.9,
@@ -242,6 +245,7 @@ def _(M, mo, np, ui_K, ui_emission_cols, ui_fit_subject, ui_load_fit):
         (1, "R", "SCxdelay"): 0.0,
         (1, "R", "SRxdelay"): 0.1,
         (1, "R", "A_L"): -1.0,
+        (1, "R", "A_C"): 1.2,
         (1, "R", "A_R"): 1.1,
     }
 
@@ -1076,6 +1080,11 @@ def _(
         ],
         align="center",
     )
+    return
+
+
+@app.cell
+def _():
     return
 
 

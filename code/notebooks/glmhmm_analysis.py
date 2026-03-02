@@ -32,7 +32,6 @@ def _():
         mo,
         np,
         paths,
-        pd,
         pl,
         plots,
         plt,
@@ -42,6 +41,7 @@ def _():
 
 @app.cell
 def _(df_all, mo):
+    from glmhmmt.features import _ALL_EMISSION_COLS, _ALL_TRANSITION_COLS
     # ── controls ──────────────────────────────────────────────────────────────
     ui_K = mo.ui.slider(start=2, stop=6, value=2, label="K")
     ui_subjects = mo.ui.multiselect(
@@ -56,6 +56,13 @@ def _(df_all, mo):
         step=1,
         label="τ action trace half-life",
     )
+    ui_emission_cols = mo.ui.multiselect(
+        options=_ALL_EMISSION_COLS,
+        value=_ALL_EMISSION_COLS,
+        label="Emission regressors (X)",
+    )
+
+
     ui_model_id = mo.ui.text(
         value="glmhmm_2",
         label="Model ID (used as output folder name)",
@@ -65,16 +72,27 @@ def _(df_all, mo):
     mo.vstack(
         [
             mo.md("### Configuration"),
-            mo.hstack([ui_K, ui_tau, ui_subjects]),
+            mo.hstack([ui_K, ui_tau, ui_subjects, ui_emission_cols]),
             mo.hstack([fit_button]), ui_model_id
         ],
         align="center",
     )
-    return fit_button, ui_K, ui_model_id, ui_subjects, ui_tau
+
+    return fit_button, ui_K, ui_emission_cols, ui_model_id, ui_subjects, ui_tau
 
 
 @app.cell
-def _(fit_button, fit_main, mo, paths, ui_K, ui_model_id, ui_subjects, ui_tau):
+def _(
+    fit_button,
+    fit_main,
+    mo,
+    paths,
+    ui_K,
+    ui_emission_cols,
+    ui_model_id,
+    ui_subjects,
+    ui_tau,
+):
     mo.stop(
         not fit_button.value, mo.md("Configure parameters and press **Run fit**.")
     )
@@ -87,6 +105,7 @@ def _(fit_button, fit_main, mo, paths, ui_K, ui_model_id, ui_subjects, ui_tau):
             K_list=[ui_K.value],
             out_dir=_OUT,
             tau=ui_tau.value,
+            emission_cols=ui_emission_cols.value
         )
     mo.md("✅ Fit complete — plots below update automatically.")
     return
@@ -100,18 +119,20 @@ def _(
     paths,
     pl,
     ui_K,
+    ui_emission_cols,
     ui_model_id,
     ui_subjects,
     ui_tau,
 ):
     K = ui_K.value
 
+    selected = ui_subjects.value
     OUT =  paths.RESULTS / "fits" / ui_model_id.value
     # load feature names from data
     _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(
         "trial_idx"
     )
-    _, _, _, names, _ = build_sequence_from_df(_df_sel, tau=ui_tau.value)
+    _, _, _, names, _ = build_sequence_from_df(_df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value)
 
     arrays_store = {}
     for _subj in ui_subjects.value:
@@ -125,7 +146,7 @@ def _(
             arrays_store[_subj] = _d
 
     #arrays_store
-    return K, arrays_store, names
+    return K, arrays_store, names, selected
 
 
 @app.cell
@@ -436,11 +457,7 @@ def _(
     arrays_store,
     df_all,
     mo,
-    np,
-    pd,
-    pl,
-    plt,
-    sns,
+    plots,
     state_labels,
     ui_subjects,
 ):
@@ -453,128 +470,14 @@ def _(
 
     _selected_acc = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected_acc, mo.md("No fitted subjects available."))
-
-    _THRESH = THRESH_ui.amount
-    _palette = sns.color_palette("tab10", n_colors=K)
-
-    _label_order = ( ["Engaged", "Disengaged"] if K == 2 else ["Engaged"] + [f"Disengaged {i}" for i in range(1, K)])
-    _cmap = {"All": "#999999"}
-    for _ri, _lbl in enumerate(_label_order):
-        _cmap[_lbl] = _palette[_ri]
-
-    _x_labels = ["All"] + _label_order
-
-    # ── collect per-subject accuracies ────────────────────────────────────────
-    _acc_records = []
-    for _subj in _selected_acc:
-        _arr = arrays_store[_subj]
-        _gamma = _arr.get("smoothed_probs")  # (T, K)
-        if _gamma is None:
-            continue
-
-        _df_sub = (
-            df_all.filter(pl.col("subject") == _subj)
-            .sort("trial_idx")
-            .filter(pl.col("session").count().over("session") >= 2)
-            .select(["stimd_n", "performance"])
-        )
-        _stim = _df_sub["stimd_n"].to_numpy()  # signed, 0 = catch
-        _perf = _df_sub["performance"].to_numpy()  # 0/1
-
-        _T = min(len(_stim), _gamma.shape[0])
-        _stim = _stim[:_T]
-        _perf = _perf[:_T]
-        _gamma = _gamma[:_T]
-
-        # base mask: non-zero stimulus (same for All and every state)
-        _nz = _stim != 0
-        if _nz.sum() == 0:
-            continue
-
-        # ── All: full nonzero pool ────────────────────────────────────────────
-        _acc_records.append(
-            {
-                "subject": _subj,
-                "label": "All",
-                "acc": float(_perf[_nz].mean() * 100),
-                "n": int(_nz.sum()),
-            }
-        )
-
-        # ── per state: subset of the same nonzero pool ────────────────────────
-        _s_labels = state_labels[_subj]
-        for _k in range(K):
-            _lbl_k = _s_labels[_k]
-            # subset: nonzero stim AND high-confidence in state k
-            _mask_k = _nz & (_gamma[:, _k] >= _THRESH)
-            _n_k = int(_mask_k.sum())
-            _acc_k = (
-                float(_perf[_mask_k].mean() * 100) if _n_k > 0 else float("nan")
-            )
-
-            _acc_records.append(
-                {
-                    "subject": _subj,
-                    "label": _lbl_k,
-                    "acc": _acc_k,
-                    "n": _n_k,
-                }
-            )
-
-    _df_acc = pd.DataFrame(_acc_records)
-
-    # ── sanity check printed as marimo table ──────────────────────────────────
-    # shows n_trials per state so you can verify the subset relationship
-    _tbl = (
-        _df_acc.groupby("label")[["acc", "n"]]
-        .agg({"acc": "mean", "n": "sum"})
-        .reindex(_x_labels)
-        .rename(columns={"acc": "mean_acc (%)", "n": "total_trials"})
-        .round(1)
-    )
-
-    # ── plot ──────────────────────────────────────────────────────────────────
-    _fig_acc, _ax_acc = plt.subplots(figsize=(2 + len(_x_labels) * 0.9, 4))
-    _rng = np.random.default_rng(42)
-
-    for _li, _lbl in enumerate(_x_labels):
-        _vals = _df_acc[_df_acc["label"] == _lbl]["acc"].dropna().values
-        if len(_vals) == 0:
-            continue
-        _mean = float(_vals.mean())
-        _sem = (
-            float(_vals.std(ddof=1) / np.sqrt(len(_vals)))
-            if len(_vals) > 1
-            else 0.0
-        )
-
-        _ax_acc.bar( _li, _mean, color=_cmap.get(_lbl, "#999999"), yerr=_sem, error_kw={"linewidth": 1.2, "capsize": 4}, width=0.6, alpha=0.9, zorder=2,)
-        _ax_acc.text( _li, _mean + _sem + 1.2, f"{_mean:.0f}", ha="center", va="bottom", fontsize=10, fontweight="bold",)
-        _jitter = _rng.uniform(-0.15, 0.15, size=len(_vals))
-        _ax_acc.scatter( _li + _jitter, _vals, color="black", s=20, zorder=5, alpha=0.6,)
-
-    _ax_acc.axhline( 100 / 3, color="black", linestyle="--", linewidth=0.9, alpha=0.5, label="Chance (33%)", )
-    _ax_acc.set_xticks(range(len(_x_labels)))
-    _ax_acc.set_xticklabels(_x_labels, rotation=20, ha="right")
-    _ax_acc.set_xlabel("State")
-    _ax_acc.set_ylabel("Accuracy (%)")
-    _ax_acc.set_ylim(30, 105)
-    _ax_acc.set_title( f"Per-state accuracy  (K={K},  posterior ≥ {_THRESH},  non-zero stim)")
-    _ax_acc.legend(frameon=False, fontsize=8)
-    _fig_acc.tight_layout()
-    sns.despine(fig=_fig_acc)
-
-    mo.vstack(
-        [
-            mo.md("### Accuracy by state"),
-            mo.md(
-                f"> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ {THRESH_ui}"
-            ),
-            _fig_acc,
-            mo.md("**Trial counts & mean accuracy per label:**"),
-            mo.plain_text(_tbl.to_string()),
-        ]
-    )
+    _fig_acc, _tbl = plots.plot_state_accuracy(arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, K=K, subjects=_selected_acc, thresh=THRESH_ui.amount)
+    mo.vstack([
+        mo.md("### Accuracy by state"),
+        mo.md(f"> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ {THRESH_ui}"),
+        _fig_acc,
+        mo.md("**Trial counts & mean accuracy per label:**"),
+        mo.plain_text(_tbl.to_string()),
+    ])
     return
 
 
@@ -590,204 +493,31 @@ def _(df_all, mo):
 
 
 @app.cell
-def _(
-    K,
-    arrays_store,
-    df_all,
-    mo,
-    np,
-    pl,
-    plt,
-    sns,
-    state_labels,
-    ui_subjects_traj,
-):
-    # ── c. Average state-probability trajectories within a session ────────────
-    # For each selected subject: align smoothed_probs with (session, trial)
-    # info, compute mean ± s.e.m. across sessions, plot one line per state.
-    _selected_traj = [s for s in ui_subjects_traj.value if s in arrays_store]
-    mo.stop(
-        not _selected_traj,
-        mo.md("Select subjects above to view session trajectories."),
-    )
-
-    _palette_traj = sns.color_palette("tab10", n_colors=K)
-    _label_rank_traj = {
-        "Engaged": 0,
-        "Disengaged": 1,
-        **{f"Disengaged {i}": i for i in range(1, K)},
-    }
-
-    _n_subj_traj = len(_selected_traj)
-    _fig_traj, _axes_traj = plt.subplots(
-        _n_subj_traj, 1, figsize=(10, 3.5 * _n_subj_traj), squeeze=False
-    )
-
-    for _i, _subj in enumerate(_selected_traj):
-        _ax = _axes_traj[_i, 0]
-        _probs = arrays_store[_subj]["smoothed_probs"]  # (T, K)
-        _df_sub = (
-            df_all.filter(pl.col("subject") == _subj)
-            .sort("trial_idx")
-            .filter(pl.col("session").count().over("session") >= 2)
-            .select(["session", "trial"])
-        )
-        _sessions = _df_sub["session"].to_numpy()
-        _trials = _df_sub["trial"].to_numpy()
-
-        _sess_ids = np.unique(_sessions)
-        _max_len = max(int((_sessions == _s).sum()) for _s in _sess_ids)
-
-        # (n_sessions, max_len, K) — NaN-padded
-        _mat = np.full((_sess_ids.size, _max_len, K), np.nan)
-        for _si, _s in enumerate(_sess_ids):
-            _mask = _sessions == _s
-            _p_s = _probs[_mask]
-            _order = np.argsort(_trials[_mask])
-            _p_s = _p_s[_order]
-            _mat[_si, : _p_s.shape[0], :] = _p_s
-
-        _mean = np.nanmean(_mat, axis=0)  # (max_len, K)
-        _n_obs = np.sum(~np.isnan(_mat[:, :, 0]), axis=0)  # (max_len,)
-        _sem = np.nanstd(_mat, axis=0, ddof=1) / np.maximum(
-            _n_obs[:, None] ** 0.5, 1
-        )
-        _x = np.arange(_max_len)
-
-        _slbl = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
-        for _k in range(K):
-            _rank = _label_rank_traj.get(_slbl.get(_k, ""), _k)
-            _col = _palette_traj[_rank % len(_palette_traj)]
-            _lbl = _slbl.get(_k, f"State {_k}")
-            _valid = ~np.isnan(_mean[:, _k])
-            _ax.plot(_x[_valid], _mean[_valid, _k], color=_col, lw=2, label=_lbl)
-            _ax.fill_between( _x[_valid], (_mean[:, _k] - _sem[:, _k])[_valid], (_mean[:, _k] + _sem[:, _k])[_valid], color=_col, alpha=0.25,)
-
-        _ax.set_ylim(0, 1)
-        _ax.set_xlabel("Trial within session")
-        _ax.set_ylabel("State probability")
-        _ax.set_title(
-            f"Subject {_subj} — avg. state trajectory  "
-            f"(n={_sess_ids.size} sessions)"
-        )
-        _ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=8, frameon=False)
-
-    _fig_traj.tight_layout()
-    sns.despine(fig=_fig_traj)
-
-    mo.vstack(
-        [
-            mo.md(
-                f"### c. Average state-probability trajectories within a session  (K={K})"
-            ),
-            mo.md("> Mean ± 1 s.e.m. across sessions for the selected subjects."),
-            _fig_traj,
-        ],
-        align="center",
-    )
+def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
+    selected_traj = [s for s in ui_subjects_traj.value if s in arrays_store]
+    mo.stop(not selected_traj, mo.md("Select subjects above to view session trajectories."))
+    _fig_traj = plots.plot_session_trajectories( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, K=K, subjects=selected_traj,)
+    mo.vstack([
+        mo.md(f"### c. Average state-probability trajectories within a session  (K={K})"),
+        mo.md("> Mean ± 1 s.e.m. across sessions for the selected subjects."),
+        _fig_traj,
+    ], align="center")
     return
 
 
 @app.cell
-def _(
-    K,
-    arrays_store,
-    df_all,
-    mo,
-    np,
-    pl,
-    plt,
-    sns,
-    state_labels,
-    ui_subjects_traj,
-):
-    # ── d. Fractional occupancy & state-change histogram ─────────────────────
-    # Left panel : fraction of trials assigned to each state (argmax posterior).
-    # Right panel: histogram of #state-changes per session.
-    _selected_occ = [s for s in ui_subjects_traj.value if s in arrays_store]
-    mo.stop(not _selected_occ, mo.md("Select subjects above."))
-
-    _palette_occ = sns.color_palette("tab10", n_colors=K)
-    _label_rank_occ = {
-        "Engaged": 0,
-        "Disengaged": 1,
-        **{f"Disengaged {i}": i for i in range(1, K)},
-    }
-
-    _n_subj_occ = len(_selected_occ)
-    _fig_occ, _axes_occ = plt.subplots(
-        _n_subj_occ, 2, figsize=(10, 3.5 * _n_subj_occ), squeeze=False
-    )
-
-    for _i, _subj in enumerate(_selected_occ):
-        _ax_bar = _axes_occ[_i, 0]
-        _ax_hist = _axes_occ[_i, 1]
-
-        _probs = arrays_store[_subj]["smoothed_probs"]  # (T, K)
-        _df_sub = (
-            df_all.filter(pl.col("subject") == _subj)
-            .sort("trial_idx")
-            .filter(pl.col("session").count().over("session") >= 2)
-            .select(["session", "trial"])
-        )
-        _sessions = _df_sub["session"].to_numpy()
-        _state_assign = np.argmax(_probs, axis=1)  # (T,) most-likely state
-
-        _slbl = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
-
-        # ── fractional occupancy bar plot ──────────────────────────────────
-        _fracs = np.array([np.mean(_state_assign == _k) for _k in range(K)])
-        _bar_labels = [_slbl.get(_k, f"State {_k}") for _k in range(K)]
-        _bar_colors = [
-            _palette_occ[ _label_rank_occ.get(_slbl.get(_k, ""), _k) % len(_palette_occ)]
-            for _k in range(K)
-        ]
-        _rects = _ax_bar.bar(
-            range(K), _fracs, color=_bar_colors, width=0.6, alpha=0.9
-        )
-        for _xi, _fv in enumerate(_fracs):
-            _ax_bar.text( _xi, _fv + 0.01, f"{_fv:.2f}", ha="center", va="bottom", fontsize=9,)
-        _ax_bar.set_xticks(range(K))
-        _ax_bar.set_xticklabels(_bar_labels, rotation=15, ha="right")
-        _ax_bar.set_ylim(0, 1.15)
-        _ax_bar.set_ylabel("Fractional occupancy")
-        _ax_bar.set_title(f"Subject {_subj} — state occupancy")
-
-        # ── state-change histogram per session ──────────────────────────────
-        _sess_ids = np.unique(_sessions)
-        _n_changes = [
-            int(np.sum(np.diff(_state_assign[_sessions == _s]) != 0))
-            for _s in _sess_ids
-        ]
-        _max_changes = max(_n_changes) if _n_changes else 0
-        _ax_hist.hist(
-            _n_changes,
-            bins=_max_changes + 1,
-            range=(-0.5, _max_changes + 0.5),
-            color=_palette_occ[0],
-            edgecolor="white",
-            alpha=0.85,
-        )
-        _ax_hist.set_xlabel("State changes per session")
-        _ax_hist.set_ylabel("Number of sessions")
-        _ax_hist.set_title(f"Subject {_subj} — state changes / session")
-
-    _fig_occ.tight_layout()
-    sns.despine(fig=_fig_occ)
-
-    mo.vstack(
-        [
-            mo.md(
-                f"### d. Fractional occupancy & state changes per session  (K={K})"
-            ),
-            mo.md(
-                "> **Left**: fraction of all trials assigned to each state (argmax of posterior).  \n"
-                "> **Right**: histogram of inferred state changes per session."
-            ),
-            _fig_occ,
-        ],
-        align="center",
-    )
+def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
+    selected_occ = [s for s in ui_subjects_traj.value if s in arrays_store]
+    mo.stop(not selected_occ, mo.md("Select subjects above."))
+    _fig_occ = plots.plot_state_occupancy(arrays_store=arrays_store,state_labels=state_labels,df_all=df_all,K=K,subjects=selected_occ,)
+    mo.vstack([
+        mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
+        mo.md(
+            "> **Left**: fraction of all trials assigned to each state (argmax of posterior).  \n"
+            "> **Right**: histogram of inferred state changes per session."
+        ),
+        _fig_occ,
+    ], align="center")
     return
 
 
@@ -837,21 +567,12 @@ def _(
     arrays_store,
     df_all,
     mo,
-    names,
-    np,
-    pl,
-    plt,
-    sns,
+    plots,
+    selected,
     state_labels,
     ui_session_id,
     ui_session_subj,
 ):
-    # ── Session deep-dive plot ─────────────────────────────────────────────────
-    # 3-panel figure for the selected subject × session:
-    #   Panel 1 – smoothed state probabilities (Engaged / Disengaged)
-    #   Panel 2 – action traces A_L, A_C, A_R
-    #   Panel 3 – cumulative mean accuracy (non-zero-stim trials)
-
     _subj = ui_session_subj.value
     mo.stop(
         _subj not in arrays_store,
@@ -859,164 +580,12 @@ def _(
     )
 
     _sess = int(ui_session_id.value)
-    _df_sub = df_all.filter(
-        (pl.col("subject") == _subj) & (pl.col("session") == _sess)
-    ).sort("trial_idx")
-    mo.stop(len(_df_sub) == 0, mo.md("No trials found for this session."))
-
-    # ── align smoothed_probs rows with this session ───────────────────────────
-    _df_all_sub = (
-        df_all.filter(pl.col("subject") == _subj)
-        .sort("trial_idx")
-        .filter(pl.col("session").count().over("session") >= 2)
-    )
-    _all_sessions = _df_all_sub["session"].to_numpy()
-    _sess_mask = _all_sessions == _sess
-
-    _probs_all = arrays_store[_subj]["smoothed_probs"]  # (T_total, K)
-    _probs = _probs_all[_sess_mask]  # (T_sess, K)
-
-    _y = _df_sub["performance"].to_numpy()  # 0/1 per trial
-    _stim = _df_sub["stimd_n"].to_numpy()  # 0 for catch
-    _response = _df_sub["response"].to_numpy().astype(int)  # 0=L,1=C,2=R
-    _T = _probs.shape[0]
-    _x = np.arange(_T)
-
-    # ── action traces from X ─────────────────────────────────────────────────
-    _X_all = arrays_store[_subj]["X"]  # (T_total, n_feat)
-    _X_sess = _X_all[_sess_mask]  # (T_sess, n_feat)
-    _feat_names = names.get("X_cols", [])
-    _fname2idx = {f: i for i, f in enumerate(_feat_names)}
-    _trace_cols = [c for c in ["A_L", "A_C", "A_R"] if c in _fname2idx]
-    _trace_colors = {"A_L": "royalblue", "A_C": "gold", "A_R": "tomato"}
-
-    # ── cumulative accuracy (non-zero stim) ───────────────────────────────────
-    _nz = _stim != 0
-    _cum_acc = np.full(_T, np.nan)
-    _cum_n = 0
-    _cum_sum = 0.0
-    for _ti in range(_T):
-        if _nz[_ti]:
-            _cum_sum += _y[_ti]
-            _cum_n += 1
-        if _cum_n > 0:
-            _cum_acc[_ti] = 100.0 * _cum_sum / _cum_n
-
-    # ── figure ────────────────────────────────────────────────────────────────
-    _palette = sns.color_palette("tab10", n_colors=K)
-    _label_rank = {
-        "Engaged": 0,
-        "Disengaged": 1,
-        **{f"Disengaged {i}": i for i in range(1, K)},
-    }
-    _slbl = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
-
-    # Find which column index corresponds to Engaged
-    _engaged_k = next(
-        (k for k in range(K) if _label_rank.get(_slbl.get(k, ""), k) == 0), 0
-    )
-    _engaged_col = _palette[0]
-
-    _fig, (_ax1, _ax2) = plt.subplots(
-        2,
-        1,
-        figsize=(14, 7),
-        sharex=True,
-        gridspec_kw={"height_ratios": [2, 1.5]},
-    )
-
-    # Panel 1 – P(Engaged) line + cumulative accuracy on twin axis
-    _ax1.plot(
-        _x,
-        _probs[:, _engaged_k],
-        color=_engaged_col,
-        lw=2,
-        label=f"P({_slbl.get(_engaged_k, 'Engaged')})",
-    )
-
-    # choice tick marks
-    _choice_cols = {0: "royalblue", 1: "gold", 2: "tomato"}
-    _choice_lbls = {0: "L", 1: "C", 2: "R"}
-    for _resp, _c in _choice_cols.items():
-        _m = _response == _resp
-        _ax1.scatter(
-            _x[_m],
-            np.ones(_m.sum()) * 1.03,
-            c=_c,
-            s=5,
-            marker="|",
-            label=_choice_lbls[_resp],
-            transform=_ax1.get_xaxis_transform(),
-            clip_on=False,
-        )
-    _ax1.set_ylim(0, 1)
-    _ax1.set_ylabel("State probability")
-    _ax1.set_title(f"Subject {_subj}  —  session {_sess}  ({_T} trials)")
-    # twin axis: cumulative accuracy
-    _ax1r = _ax1.twinx()
-    _ax1r.plot(
-        _x,
-        _cum_acc,
-        color="black",
-        lw=1.8,
-        linestyle="-",
-        alpha=0.7,
-        label="Cumul. accuracy",
-    )
-    _ax1r.axhline(100 / 3, color="grey", lw=0.9, linestyle="--", alpha=0.5)
-    _ax1r.set_ylim(0, 105)
-    _ax1r.set_ylabel("Accuracy (%)", color="black")
-    # combined legend
-    _lines1, _labs1 = _ax1.get_legend_handles_labels()
-    _lines1r, _labs1r = _ax1r.get_legend_handles_labels()
-    _ax1.legend(
-        _lines1 + _lines1r,
-        _labs1 + _labs1r,
-        bbox_to_anchor=(1.08, 1),
-        loc="upper left",
-        fontsize=8,
-        frameon=False,
-    )
-
-    # Panel 2 – action traces
-    if _trace_cols:
-        for _tc in _trace_cols:
-            _ax2.plot(
-                _x,
-                _X_sess[:, _fname2idx[_tc]],
-                label=_tc,
-                color=_trace_colors.get(_tc),
-                lw=1.5,
-                alpha=0.85,
-            )
-    else:
-        _ax2.text(
-            0.5,
-            0.5,
-            "No action-trace features found in X",
-            ha="center",
-            va="center",
-            transform=_ax2.transAxes,
-        )
-    _ax2.set_ylabel("Action trace")
-    _ax2.set_ylim(0, None)
-    _ax2.set_xlabel("Trial within session")
-    _ax2.legend(
-        bbox_to_anchor=(1.08, 1), loc="upper left", fontsize=8, frameon=False
-    )
-
-    _fig.tight_layout()
-    _fig.subplots_adjust(right=0.82)
-    sns.despine(fig=_fig, right=False)
-
-    mo.vstack(
-        [
-            mo.md(f"### Session deep-dive  (K={K})"),
-            mo.hstack([ui_session_subj, ui_session_id]),
-            _fig,
-        ],
-        align="center",
-    )
+    _fig = plots.plot_session_deepdive( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, names=arrays_store[selected[0]], K=K, subj=_subj, sess=_sess,)
+    mo.vstack([
+        mo.md(f"### Session statistics  (K={K})"),
+        mo.hstack([ui_session_subj, ui_session_id]),
+        _fig,
+    ], align="center")
     return
 
 

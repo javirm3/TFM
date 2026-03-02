@@ -8,6 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import t
+from scipy.special import softmax as _softmax
 import tomllib
 from matplotlib import cm, colors
 sns.set_style("white")
@@ -654,29 +655,26 @@ def plot_delay_binned_1d(df, model_name, subject=None, n_bins=7):
 # ─────────────────────────────────────────────────────────────────────────────
 
 _AG_GROUPS = [
-    # bias: L/R context indicators
-    ("$bias_{coh}$", [("biasL", 0), ("biasR", 1)]),
+    # bias: L/R context indicators (no C equivalent)
+    ("$bias_{coh}$",  [("biasL", 0), ("biasR", 1)]),
     ("$bias_{incoh}$", [("biasL", 1), ("biasR", 0)]),
-    # onset
-    ("$onset_{coh}$", [("onsetL", 0), ("onsetR", 1)]),
-    ("$onset_{incoh}$", [("onsetL", 1), ("onsetR", 0)]),
-    ("onsetC", [("onsetC", "neg_mean")]),
+    # onset — C side merged in: coh=P(C)|onsetC, incoh=(P(L)+P(R))/2|onsetC
+    ("$onset_{coh}$",  [("onsetL", 0), ("onsetR", 1), ("onsetC", "neg_mean")]),
+    ("$onset_{incoh}$", [("onsetL", 1), ("onsetR", 0), ("onsetC", "mean")]),
     # delay (shared scalar)
     ("delay", [("delay", "mean")]),
     # delay × side
-    ("$D_{coh}$", [("DL", 0), ("DR", 1)]),
+    ("$D_{coh}$",  [("DL", 0), ("DR", 1)]),
     ("$D_{incoh}$", [("DL", 1), ("DR", 0)]),
     ("DC", [("DC", "neg_mean")]),
-    # stimulus
-    ("$S_{coh}$", [("SL", 0), ("SR", 1)]),
-    ("$S_{incoh}$", [("SL", 1), ("SR", 0)]),
-    ("SC", [("SC", "neg_mean")]),
-    # stimulus × delay
-    ("$Sxd_{coh}$", [("SLxdelay", 0), ("SRxdelay", 1)]),
-    ("$Sxd_{incoh}$", [("SLxdelay", 1), ("SRxdelay", 0)]),
-    ("SCxd", [("SCxdelay", "neg_mean")]),
+    # stimulus — SC merged in
+    ("$S_{coh}$",  [("SL", 0), ("SR", 1), ("SC", "neg_mean")]),
+    ("$S_{incoh}$", [("SL", 1), ("SR", 0), ("SC", "mean")]),
+    # stimulus × delay — SCxdelay merged in
+    ("$Sxd_{coh}$",  [("SLxdelay", 0), ("SRxdelay", 1), ("SCxdelay", "neg_mean")]),
+    ("$Sxd_{incoh}$", [("SLxdelay", 1), ("SRxdelay", 0), ("SCxdelay", "mean")]),
     # action history (perseveration vs alternation)
-    ("$A_{coh}$", [("A_L", 0), ("A_R", 1)]),
+    ("$A_{coh}$",  [("A_L", 0), ("A_R", 1)]),
     ("$A_{incoh}$", [("A_L", 1), ("A_R", 0)]),
 ]
 
@@ -768,18 +766,29 @@ def plot_emission_weights(
                         "feature":     _fn,
                         "weight":      float(_W[_k, _c, _fi]),
                     })
+            # ── agonist: softmax ΔP (same convention as fit_glm.py) ──────────
+            # logits = [W[k,0,f], 0.0, W[k,1,f]]  →  p = [P(L), P(C), P(R)]
+            # mode=0 (L-vs-C weight, coh L feat) → P(L) − 1/3
+            # mode=1 (R-vs-C weight, coh R feat) → P(R) − 1/3
+            # mode="neg_mean" (C-only)           → P(C) − 1/3
+            # mode="mean"    (neutral)           → (P(L)+P(R))/2 − 1/3
+            _BASE = 1.0 / 3.0
             for _grp_label, _members in _AG_GROUPS:
                 _vals = []
                 for _fn, _mode in _members:
                     if _fn not in _f2i:
                         continue
                     _fi = _f2i[_fn]
-                    if isinstance(_mode, int):
-                        _vals.append(float(_W[_k, _mode, _fi]))
+                    _logits = [float(_W[_k, 0, _fi]), 0.0, float(_W[_k, 1, _fi])]
+                    _p = _softmax(_logits)
+                    if _mode == 0:
+                        _vals.append(_p[0] - _BASE)                # P(L) − baseline
+                    elif _mode == 1:
+                        _vals.append(_p[2] - _BASE)                # P(R) − baseline
                     elif _mode == "neg_mean":
-                        _vals.append(-float(np.mean(_W[_k, :, _fi])))
-                    else:
-                        _vals.append(float(np.mean(_W[_k, :, _fi])))
+                        _vals.append(_p[1] - _BASE)                # P(C) − baseline
+                    else:  # "mean" — neutral
+                        _vals.append((_p[0] + _p[2]) / 2 - _BASE) # avg lateral
                 if _vals:
                     _ag_records.append({
                         "subject": _subj,
@@ -810,7 +819,7 @@ def plot_emission_weights(
     ax_ag.set_xticks(range(len(_ag_order)))
     ax_ag.set_xticklabels(_ag_order)
     ax_ag.set_xlabel("")
-    ax_ag.set_ylabel("Agonist weight")
+    ax_ag.set_ylabel("ΔP (from 1/3 baseline)")
     ax_ag.set_title(f"Emission weights - collapsed view  (K={K})")
     ax_ag.get_legend().set_title("")
     ax_ag.legend(frameon=False)

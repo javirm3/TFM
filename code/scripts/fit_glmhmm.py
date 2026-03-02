@@ -26,12 +26,13 @@ def fit_subject(
     n_restarts: int = 5,
     base_seed: int = 0,
     m_step_num_iters: int = 100,
+    emission_cols: list[str] | None = None,
     stickiness: float = 10.0,
     tau: float = 50.0,
 ) -> dict:
     df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
     df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
-    y, X, _, names, _ = build_sequence_from_df(df_sub, tau=tau)
+    y, X, _, names, _ = build_sequence_from_df(df_sub, tau=tau, emission_cols=emission_cols)
     session_ids = df_sub["session"].to_numpy()
 
     # Drop trials from sessions too short for EM (must match _split_by_session)
@@ -124,6 +125,7 @@ def main(
     n_restarts: int = 5,
     base_seed: int = 0,
     out_dir: Path | None = None,
+    emission_cols: list[str] | None = None,
     tau: float = 50.0,
 ):
     if out_dir is None:
@@ -137,7 +139,7 @@ def main(
             print(f"Fitting glmhmm | subject={subj} K={K} tau={tau} ...")
             result = fit_subject(subj, K, num_iters=num_iters,
                                  n_restarts=n_restarts, base_seed=base_seed,
-                                 tau=tau)
+                                 tau=tau, emission_cols=emission_cols)
             print("Fitted, waiting to save")
             save_results(result, out_dir)
             print(f"  ✓ saved to {out_dir}")

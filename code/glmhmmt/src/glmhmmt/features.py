@@ -71,14 +71,13 @@ def action_trace_plus_minus(
 
     return A_plus[:, None], A_minus[:, None]
 
-
-
 _ALL_EMISSION_COLS: list[str] = [
     "biasL", "biasR", "onsetL", "onsetC", "onsetR", "delay",
-    "DR", "DL", "SL", "SC", "SR",
+    "SL", "SC", "SR",
     "SLxdelay", "SCxdelay", "SRxdelay",
-    "A_L", "A_R",
+    "A_L", "A_C", "A_R",
 ]
+
 _ALL_TRANSITION_COLS: list[str] = ["A_plus", "A_minus", "A_L", "A_C", "A_R"]
 
 
@@ -102,9 +101,9 @@ def build_sequence_from_df(
         U       : (T, n_transition_features) transition features
         names   : dict with keys "X_cols" and "U_cols" listing the column names of the features in X and U, respectively.
         AU      : (T, 2) action traces for positive and negative outcomes (A_plus, A_minus), which can be included as features if desired.
-    
-    Notes:
-        - The returned features are z-scored within subject.
+
+    Raises:
+        ValueError if requested column names are not in the available sets.
     """
     _ecols = emission_cols if emission_cols is not None else _ALL_EMISSION_COLS
     _ucols = transition_cols if transition_cols is not None else _ALL_TRANSITION_COLS
@@ -131,17 +130,17 @@ def build_sequence_from_df(
         ((pl.col("x_c") == "C") * pl.col("onset")).cast(pl.Float32).alias("onsetC"),
         ((pl.col("x_c") == "R") * pl.col("onset")).cast(pl.Float32).alias("onsetR"),
 
-        ((pl.col("x_c") == "L") * pl.col("stim_d")).cast(pl.Float32).alias("SL"),
-        ((pl.col("x_c") == "C") * pl.col("stim_d")).cast(pl.Float32).alias("SC"),
-        ((pl.col("x_c") == "R") * pl.col("stim_d")).cast(pl.Float32).alias("SR"),
+        ((pl.col("x_c") == "L") * pl.col("stimd_n")).cast(pl.Float32).alias("SL"),
+        ((pl.col("x_c") == "C") * pl.col("stimd_n")).cast(pl.Float32).alias("SC"),
+        ((pl.col("x_c") == "R") * pl.col("stimd_n")).cast(pl.Float32).alias("SR"),
 
         ((pl.col("x_c") == "L") * pl.col("delay_d")).cast(pl.Float32).alias("DL"),
         ((pl.col("x_c") == "C") * pl.col("delay_d")).cast(pl.Float32).alias("DC"),
         ((pl.col("x_c") == "R") * pl.col("delay_d")).cast(pl.Float32).alias("DR"),
         
-        ((pl.col("x_c") == "L") * pl.col("stim_d") * pl.col("delay_d")).cast(pl.Float32).alias("SLxdelay"),
-        ((pl.col("x_c") == "C") * pl.col("stim_d") * pl.col("delay_d")).cast(pl.Float32).alias("SCxdelay"),
-        ((pl.col("x_c") == "R") * pl.col("stim_d") * pl.col("delay_d")).cast(pl.Float32).alias("SRxdelay"),
+        ((pl.col("x_c") == "L") * pl.col("stimd_n") * pl.col("delay_d")).cast(pl.Float32).alias("SLxdelay"),
+        ((pl.col("x_c") == "C") * pl.col("stimd_n") * pl.col("delay_d")).cast(pl.Float32).alias("SCxdelay"),
+        ((pl.col("x_c") == "R") * pl.col("stimd_n") * pl.col("delay_d")).cast(pl.Float32).alias("SRxdelay"),
 
 
         pl.col("performance").shift(1).fill_null(0).cast(pl.Float32).alias("previous_outcome"),

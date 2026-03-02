@@ -128,7 +128,7 @@ def _(df_all, np, paths, pl, ui_K, ui_model_id, ui_subjects):
             _d["U_cols"] = list(_d["names"].item()["U_cols"])
             arrays_store[_subj] = _d
 
-    #arrays_store
+    arrays_store
     return K, arrays_store, selected
 
 
@@ -349,12 +349,26 @@ def _(K, arrays_store, mo, plots, selected, state_labels):
 
 
 @app.cell
-def _(K, arrays_store, df_all, mo, plots, selected, state_labels):
+def _(mo):
+    from wigglystuff import TangleSlider
+    THRESH_ui = mo.ui.anywidget(
+                    TangleSlider(
+                        amount=0.9,
+                        min_value=0.0,
+                        max_value=1,
+                        step=0.01,
+                        digits=2,
+                    ))
+    return (THRESH_ui,)
+
+
+@app.cell
+def _(K, THRESH_ui, arrays_store, df_all, mo, plots, selected, state_labels):
     mo.stop(not selected, mo.md("No fitted subjects available."))
-    _fig_acc, _tbl = plots.plot_state_accuracy(arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, K=K, subjects=selected, thresh=0.5)
+    _fig_acc, _tbl = plots.plot_state_accuracy(arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, K=K, subjects=selected, thresh=THRESH_ui.amount)
     mo.vstack([
         mo.md("### Accuracy by state"),
-        mo.md("> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ 0.5"),
+        mo.md(f"> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ {THRESH_ui}"),
         _fig_acc,
         mo.md("**Trial counts & mean accuracy per label:**"),
         mo.plain_text(_tbl.to_string()),
@@ -434,8 +448,8 @@ def _(
     arrays_store,
     df_all,
     mo,
-    names,
     plots,
+    selected,
     state_labels,
     ui_session_id,
     ui_session_subj,
@@ -447,7 +461,7 @@ def _(
     )
 
     _sess = int(ui_session_id.value)
-    _fig = plots.plot_session_deepdive( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, names=names, K=K, subj=_subj, sess=_sess,)
+    _fig = plots.plot_session_deepdive( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, names=arrays_store[selected[0]], K=K, subj=_subj, sess=_sess,)
     mo.vstack([
         mo.md(f"### Session statistics  (K={K})"),
         mo.hstack([ui_session_subj, ui_session_id]),
