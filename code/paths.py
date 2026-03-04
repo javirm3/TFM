@@ -13,6 +13,7 @@ EXPRESSIONS = CODE_DIR / "expressions"
 PLOTS = ROOT / "plots"
 CSV_PATH = DATA_PATH / "df_filtered.csv"
 CSV_BAD_PATH = DATA_PATH / "df_filtered_bad.csv"
+ALEXIS = DATA_PATH / "Alexis"
 
 def show_paths():
     print(f"ROOT         = {ROOT}")

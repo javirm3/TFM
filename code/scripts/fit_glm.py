@@ -1,237 +1,328 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import polars as pl
 import sys
+import argparse
+import os
+import json
+import hashlib
 from pathlib import Path
+from scipy.special import log_softmax, softmax
+from scipy.optimize import minimize
+
+# Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
-import jax.numpy as jnp
-import seaborn as sns
-from scipy.special import softmax, log_softmax
-from scipy.optimize import minimize
-# from glmhmmt.features import build_sequence_from_df
-import glmhmmt.plots as plots
 
-sns.set_style("white")
-
-# ── Data ──────────────────────────────────────────────────────────────────────
-
-def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
-    df_sub = df_sub.sort("trial_idx")
-    df_sub = df_sub.with_columns([
-        pl.col("response").cast(pl.Int32),
-
-        (pl.col("x_c") == "L").cast(pl.Float32).alias("biasL"),
-        (pl.col("x_c") == "R").cast(pl.Float32).alias("biasR"),
-        
-        pl.lit(1.0).cast(pl.Float32).alias("bias"),
-        
-        pl.col("delay_d").cast(pl.Float32).alias("delay"),
-        ((pl.col("x_c") == "L") * pl.col("onset")).cast(pl.Float32).alias("onsetL"),
-        ((pl.col("x_c") == "C") * pl.col("onset")).cast(pl.Float32).alias("onsetC"),
-        ((pl.col("x_c") == "R") * pl.col("onset")).cast(pl.Float32).alias("onsetR"),
-
-        ((pl.col("x_c") == "L") * pl.col("stimd_n")).cast(pl.Float32).alias("SL"),
-        ((pl.col("x_c") == "C") * pl.col("stimd_n")).cast(pl.Float32).alias("SC"),
-        ((pl.col("x_c") == "R") * pl.col("stimd_n")).cast(pl.Float32).alias("SR"),
-
-        ((pl.col("x_c") == "L") * pl.col("delay_d")).cast(pl.Float32).alias("DL"),
-        ((pl.col("x_c") == "C") * pl.col("delay_d")).cast(pl.Float32).alias("DC"),
-        ((pl.col("x_c") == "R") * pl.col("delay_d")).cast(pl.Float32).alias("DR"),
-        
-        ((pl.col("x_c") == "L") * pl.col("stimd_n") * pl.col("delay_d")).cast(pl.Float32).alias("SLxdelay"),
-        ((pl.col("x_c") == "C") * pl.col("stimd_n") * pl.col("delay_d")).cast(pl.Float32).alias("SCxdelay"),
-        ((pl.col("x_c") == "R") * pl.col("stimd_n") * pl.col("delay_d")).cast(pl.Float32).alias("SRxdelay"),
+try:
+    from glmhmmt.features import build_sequence_from_df, build_sequence_from_df_2afc
+except ImportError:
+    # Fallback if running from scripts dir directly without package install
+    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+    from glmhmmt.features import build_sequence_from_df, build_sequence_from_df_2afc
 
 
-        pl.col("performance").shift(1).fill_null(0).cast(pl.Float32).alias("previous_outcome"),
-        pl.col("response").shift(1).fill_null(0.0).eq(0).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).alias("A_L"),
-        pl.col("response").shift(1).fill_null(0.0).eq(1).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).alias("A_C"),
-        pl.col("response").shift(1).fill_null(0.0).eq(2).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).alias("A_R"),
-    ])
-    df_sub = df_sub.with_columns([
-        pl.col("previous_outcome").shift(1).fill_null(0.0).ewm_mean(half_life=tau, adjust=False).alias("A_plus"),
-        (1.0 - pl.col("previous_outcome")).shift(1).fill_null(0.0).ewm_mean(half_life=tau, adjust=False).alias("A_minus"),
-        (pl.col("A_L") * pl.col("delay_d")).cast(pl.Float32).alias("ALxdelay"),
-        (pl.col("A_R") * pl.col("delay_d")).cast(pl.Float32).alias("ARxdelay"),
-    ])
-
-    y = df_sub["response"].to_numpy()
+def fit_subject(
+    subject: str,
+    emission_cols: list[str] | None = None,
+    tau: float = 5.0,
+    num_classes: int = 3,
+    task: str = "MCDR",
+    lapse: bool = False,
+    lapse_max: float = 0.2,
+) -> dict:
+    """Fit a GLM (K=1) to a single subject."""
     
-    X_base = df_sub.select(["biasL", "biasR", "delay", "onsetL", "onsetC", "onsetR", "SL", "SC", "SR", "SLxdelay", "SCxdelay", "SRxdelay", "A_L", "A_C", "A_R"])
-    X = jnp.asarray(X_base.to_numpy().astype(jnp.float32))
-    U_base = df_sub.select(["A_plus", "A_minus"]).to_numpy().astype(jnp.float32)
-    U = jnp.asarray(U_base)
+    # Force binary for 2AFC
+    if task == "2AFC":
+        num_classes = 2
 
-    A_plus = jnp.asarray(df_sub["A_plus"].to_numpy())[:, None]
-    A_minus = jnp.asarray(df_sub["A_minus"].to_numpy())[:, None]
+    # 1. Load Data
+    if task == "MCDR":
+        df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
+        if "subject" not in df.columns: return None
+        df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
+        if len(df_sub) == 0: return None
+        
+        # GLM-HMM features builder returns (y, X, U, names, AU)
+        res = build_sequence_from_df(df_sub, tau=tau, emission_cols=emission_cols)
+        if len(res) == 5:
+             y, X, _, names, _ = res
+        else:
+             y, X, names = res
 
-    names = {
-        "X_cols": X_base.columns,
-        "U_cols": ["A_plus", "A_minus"],
+    else:  # 2AFC
+        df = pl.read_parquet(paths.DATA_PATH / "alexis_combined.parquet")
+        df_sub = df.filter(pl.col("subject") == subject)
+        if len(df_sub) == 0: return None
+        y, X, names = build_sequence_from_df_2afc(df_sub, emission_cols=emission_cols)
+
+    # 2. Minimize Negative Log Likelihood
+    T, M = X.shape
+    y_np = np.asarray(y, dtype=int)
+    X_np = np.asarray(X, dtype=float)
+
+    # Use lapse model only for 2AFC
+    fit_lapse = lapse and (num_classes == 2)
+
+    if fit_lapse:
+        # Parameters: [w (M,), gamma_L, gamma_R]
+        # gamma_L = P(right | truly left), gamma_R = P(left | truly right)
+        def neg_log_likelihood(w_flat):
+            w      = w_flat[:M]
+            gL     = w_flat[M]       # lapse → right when stimulus is left
+            gR     = w_flat[M + 1]   # lapse → left  when stimulus is right
+            p_right_base = 1.0 / (1.0 + np.exp(-(X_np @ w)))
+            p_right = gL + (1.0 - gL - gR) * p_right_base
+            p_right = np.clip(p_right, 1e-10, 1 - 1e-10)
+            log_p_R = np.log(p_right)
+            log_p_L = np.log(1.0 - p_right)
+            return -np.sum(np.where(y_np == 1, log_p_R, log_p_L))
+
+        n_params = M + 2
+        bounds   = [(-np.inf, np.inf)] * M + [(0.0, lapse_max), (0.0, lapse_max)]
+        x0       = np.zeros(n_params)
+    else:
+        def neg_log_likelihood(w_flat):
+            W_pair = w_flat.reshape(num_classes - 1, M)
+            if num_classes == 3:
+                logits = np.stack([X_np @ W_pair[0], np.zeros(T), X_np @ W_pair[1]], axis=1)
+            else:
+                logits = np.stack([np.zeros(T), X_np @ W_pair[0]], axis=1)
+            log_p = log_softmax(logits, axis=1)
+            return -np.sum(log_p[np.arange(T), y_np])
+
+        n_params = (num_classes - 1) * M
+        bounds   = None
+        x0       = np.zeros(n_params)
+
+    if T > 0:
+        res = minimize(
+            neg_log_likelihood,
+            x0,
+            method="L-BFGS-B",
+            bounds=bounds,
+            options={"maxiter": 2000, "ftol": 1e-9}
+        )
+        success = res.success
+        w_flat  = res.x
+        nll     = res.fun
+    else:
+        success = False
+        w_flat  = np.zeros(n_params)
+        nll     = np.nan
+
+    # Extract lapse rates
+    if fit_lapse:
+        lapse_rates = np.array([w_flat[M], w_flat[M + 1]])  # [gamma_L, gamma_R]
+        w_flat_w    = w_flat[:M]
+    else:
+        lapse_rates = np.zeros(2)
+        w_flat_w    = w_flat
+
+    # Reconstruct W_full (C, M)
+    W_pair = w_flat_w.reshape(num_classes - 1, M)
+    if num_classes == 3:
+        W_full = np.stack([W_pair[0], np.zeros(M), W_pair[1]], axis=0)  # [L, C=0, R]
+    else:
+        W_full = np.stack([np.zeros(M), W_pair[0]], axis=0)  # [L=0, R]
+
+    # Predict (with lapses if fitted)
+    if num_classes == 3:
+        logits = np.stack([X_np @ W_pair[0], np.zeros(T), X_np @ W_pair[1]], axis=1)
+        p_pred = softmax(logits, axis=1)
+    else:
+        p_right_base = 1.0 / (1.0 + np.exp(-(X_np @ W_pair[0])))
+        if fit_lapse:
+            gL, gR = lapse_rates
+            p_right = gL + (1.0 - gL - gR) * p_right_base
+        else:
+            p_right = p_right_base
+        p_pred = np.stack([1.0 - p_right, p_right], axis=1)
+
+    return {
+        "subject": subject,
+        "W": W_full,              # (C, M)
+        "p_pred": p_pred,         # (T, C)
+        "lapse_rates": lapse_rates,  # [gamma_L, gamma_R]
+        "nll": nll,
+        "success": success,
+        "y": y_np,
+        "X": X_np,
+        "names": names,
+        "T": T
     }
-    return jnp.asarray(y), jnp.asarray(X), jnp.asarray(U), names, jnp.concatenate([A_plus, A_minus], axis=1)
 
-df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-y, X, U, names, _ = build_sequence_from_df(df.filter(pl.col("subject") == "A92"))
+def save_results(result: dict, out_dir: Path, tau: float):
+    if result is None: return
+    
+    subj = result["subject"]
+    out_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save as {subj}_glm_arrays.npz
+    prefix = out_dir / f"{subj}_glm"
+    
+    # Prepare W for saving in glmhmm compatible format (K, C-1, M)
+    # result["W"] is (C, M) including the reference 0.
+    # We want to exclude the reference.
+    # For 3 classes (L, C, R), ref is C (idx 1). We want [L, R] -> indices [0, 2].
+    # For 2 classes (L, R), ref is R (idx 1). We want [L] -> index [0].
+    
+    W_full = result["W"]
+    C, M = W_full.shape
+    if C == 3:
+        W_save = W_full[[0, 2]]  # (2, M) — L and R, skip C=ref
+    else:
+        W_save = W_full[[1]]     # (1, M) — R is active, L=ref(idx 0) is zeros
+    
+    W_save = W_save[None, ...] # (1, C-1, M)
 
-y_np = np.asarray(y)        # (T,)  int {0,1,2}
-X_np = np.asarray(X)        # (T, M)
-T, M = X_np.shape
-print(f"T: {T}  input_dim: {M}")
-print("Features:", names["X_cols"])
+    np.savez(
+        str(prefix) + "_arrays.npz",
+        emission_weights=W_save,
+        p_pred=result["p_pred"],
+        y=result["y"],
+        X=result["X"],
+        smoothed_probs=np.ones((result["T"], 1)),  # K=1, prob=1 everywhere
+        X_cols=result["names"]["X_cols"] if "X_cols" in result["names"] else [],
+        lapse_rates=result.get("lapse_rates", np.zeros(2)),
+        success=result["success"],
+    )
 
-# ── Fit multinomial softmax GLM with C (class 1) as base category ─────────────
-# Directly fixes C's logit to 0 — no remapping needed.
-# logits = [W[0]@x,  0.0 (base=C),  W[1]@x]
-# W shape (2, M): row 0 = L-vs-C, row 1 = R-vs-C  (matches model.py convention)
+    # Metrics — count lapse params in k if non-zero
+    _lapse = result.get("lapse_rates", np.zeros(2))
+    _n_lapse_params = int(np.any(_lapse > 0)) * 2
+    acc = float(np.mean(np.argmax(result["p_pred"], axis=1) == result["y"])) if result["T"] > 0 else 0.0
+    k = (result["W"].shape[0] - 1) * result["W"].shape[1] + _n_lapse_params
+    bic = k * np.log(result["T"]) + 2 * result["nll"] if result["T"] > 0 else np.nan
+    
+    pl.DataFrame({
+        "subject": [subj],
+        "model_kind": ["glm"],
+        "tau": [tau],
+        "nll": [result["nll"]],
+        "bic": [bic],
+        "acc": [acc],
+        "k": [k],
+        "n_trials": [result["T"]]
+    }).write_parquet(str(prefix) + "_metrics.parquet")
 
-def neg_log_likelihood(w_flat):
-    W_ = w_flat.reshape(2, M)
-    eta_L = X_np @ W_[0]                                     # (T,)
-    eta_R = X_np @ W_[1]                                     # (T,)
-    logits = np.stack([eta_L, np.zeros(T), eta_R], axis=1)  # (T, 3): [L, C, R]
-    log_p = log_softmax(logits, axis=1)                      # (T, 3)
-    return -np.sum(log_p[np.arange(T), y_np])
 
-result = minimize(neg_log_likelihood, np.zeros(2 * M), method="L-BFGS-B",
-                  options={"maxiter": 2000, "ftol": 1e-12})
-print("Optimisation success:", result.success, "|", result.message)
+def generate_model_id(task, tau, emission_cols, lapse: bool = False):
+    cols = sorted(emission_cols) if emission_cols else []
+    config = {
+        "task": task,
+        "tau": float(tau),
+        "emission_cols": cols,
+        "lapse": lapse,
+    }
+    config_str = json.dumps(config, sort_keys=True)
+    return hashlib.md5(config_str.encode()).hexdigest()[:8]
 
-W = result.x.reshape(2, M)
-C = 3   # total number of classes
+def main(
+    subjects: list[str] | None = None,
+    out_dir: Path | None = None,
+    tau: float = 5.0,
+    emission_cols: list[str] | None = None,
+    num_classes: int = 3,
+    task: str = "MCDR",
+    model_alias: str | None = None,
+    lapse: bool = False,
+    lapse_max: float = 0.2,
+):
+    # Compute base output directory
+    base_out_dir = paths.RESULTS / "fits" / task 
 
-# ── Log-likelihood per trial ──────────────────────────────────────────────────
-eta_L = X_np @ W[0]
-eta_R = X_np @ W[1]
-logits_all = np.stack([eta_L, np.zeros(T), eta_R], axis=1)  # (T, 3): [L, C, R]
-p_pred = softmax(logits_all, axis=1)                         # (T, 3): [L, C, R]
-ll_per_trial = np.mean(np.log(p_pred[np.arange(T), y_np] + 1e-12))
-print(f"LL per trial: {ll_per_trial:.4f}")
+    # Generate Hash
+    model_hash = generate_model_id(task, tau, emission_cols, lapse=lapse)
+    out_dirs = [base_out_dir / model_hash]
 
-n_params = 2 * M    # only L and R weight vectors; C is the base (no params)
-bic = -2 * ll_per_trial * T + n_params * np.log(T)
-print(f"BIC: {bic:.1f}")
+    if model_alias:
+        out_dirs.append(base_out_dir / model_alias)
+        # If out_dir provided as argument, it overrides only if model_alias is not set?
+        # But wait, out_dir was previously just `paths.RESULTS / "fits" / task / "glm_baseline"`.
+        # So I will overwrite out_dir based on logic now.
 
-# ── Fold into congruent / incongruent using softmax (same as model.py) ────────
-# For each L/R/C triple, average all three congruent/incongruent contributions:
-#   cong   = (P(L)|fL + P(R)|fR + P(C)|fC) / 3 − BASE
-#   incong = (P(R)|fL + P(L)|fR + (P(L)+P(R))/2|fC) / 3 − BASE
-# bias has no C counterpart so averages only 2 terms.
-feat = names["X_cols"]
-idx = {f: i for i, f in enumerate(feat)}
+    if out_dir is not None:
+         # If user explicitly passed out_dir, use it instead (legacy support or rigorous override)
+         out_dirs = [out_dir]
+         if model_alias:
+             # If alias is also provided, perhaps save to both?
+             out_dirs.append(base_out_dir / model_alias)
+    
+    # Ensure directories exist
+    for d in out_dirs:
+        d.mkdir(parents=True, exist_ok=True)
+        # Save config
+        with open(d / "config.json", "w") as f:
+             json.dump({
+                 "task": task,
+                 "tau": tau,
+                 "emission_cols": emission_cols,
+                 "num_classes": num_classes,
+                 "lapse": lapse,
+                 "lapse_max": lapse_max,
+                 "model_id": d.name
+             }, f, indent=4)
+        
+    print(f"Fitting GLM | Task={task} Tau={tau} Hash={model_hash} Alias={model_alias} N={len(subjects) if subjects else 'All'}")
 
-# (fL, fR, fC or None, label)
-lr_triples = [("biasL",    "biasR",    None,        "bias"),
-              ("onsetL",   "onsetR",   "onsetC",    "onset"),
-              ("SL",       "SR",       "SC",        "S"),
-              ("SLxdelay", "SRxdelay", "SCxdelay",  "Sxdelay")]
+    # Force binary for 2AFC
+    if task == "2AFC":
+        num_classes = 2
 
-neutral = ["delay"]   # no side — average P(L) and P(R) symmetrically
+    if subjects is None:
+        if task == "MCDR":
+            df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
+            df = df.filter(pl.col("subject") != "A84")
+        else:
+            df = pl.read_parquet(paths.DATA_PATH / "alexis_combined.parquet")
+        subjects = df["subject"].unique().sort().to_list()
 
-BASE = 1 / 3
+    print(f"Fitting GLM | Task={task} Tau={tau} N={len(subjects)}")
+    
+    for subj in subjects:
+        print(f"  Fitting {subj}...")
+        try:
+            res = fit_subject(
+                subj,
+                tau=tau,
+                emission_cols=emission_cols,
+                num_classes=num_classes,
+                task=task,
+                lapse=lapse,
+                lapse_max=lapse_max,
+            )
+            for d in out_dirs:
+                save_results(res, d, tau)
+        except Exception as e:
+            print(f"  Failed {subj}: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    print("Done.")
 
-folded_labels = []
-P_cong   = []
-P_incong = []
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--subjects", nargs="+", default=None)
+    parser.add_argument("--out_dir", type=str, default=None)
+    parser.add_argument("--tau", type=float, default=50.0) 
+    parser.add_argument("--task", type=str, default="MCDR", choices=["MCDR", "2AFC"])
+    parser.add_argument("--num_classes", type=int, default=3)
+    parser.add_argument("--model_alias", type=str, default=None)
+    parser.add_argument("--lapse", action="store_true", default=False,
+                        help="Fit symmetric lapse rates γ_L, γ_R ∈ [0, lapse_max]")
+    parser.add_argument("--lapse_max", type=float, default=0.2,
+                        help="Upper bound for each lapse rate (default 0.20)")
 
-for fL, fR, fC, lbl in lr_triples:
-    iL, iR = idx[fL], idx[fR]
-    p_fL = softmax([W[0, iL], 0.0, W[1, iL]])   # logits = [W[0,fL], 0, W[1,fL]]
-    p_fR = softmax([W[0, iR], 0.0, W[1, iR]])
+    args = parser.parse_args()
 
-    cong_vals  = [p_fL[0] - BASE, p_fR[2] - BASE]   # P(L)|fL, P(R)|fR
-    incong_vals = [p_fL[2] - BASE, p_fR[0] - BASE]  # P(R)|fL, P(L)|fR
-
-    if fC is not None and fC in idx:
-        iC = idx[fC]
-        p_fC = softmax([W[0, iC], 0.0, W[1, iC]])
-        cong_vals.append(p_fC[1] - BASE)              # P(C)|fC  — congruent
-        incong_vals.append((p_fC[0] + p_fC[2]) / 2 - BASE)  # lateral|fC — incong
-
-    P_cong.append(float(np.mean(cong_vals)))
-    P_incong.append(float(np.mean(incong_vals)))
-    folded_labels.append(lbl)
-
-for fn in neutral:
-    i = idx[fn]
-    p_fn = softmax([W[0, i], 0.0, W[1, i]])
-    p_avg = float((p_fn[0] + p_fn[2]) / 2 - BASE)   # symmetric — same for both
-    P_cong.append(p_avg)
-    P_incong.append(p_avg)
-    folded_labels.append(fn)
-
-P_cong   = np.array(P_cong)
-P_incong = np.array(P_incong)
-n_folded = len(folded_labels)
-
-print("\nFolded congruency (ΔP from 1/3 baseline):")
-for lbl, pc, pi in zip(folded_labels, P_cong, P_incong):
-    print(f"  {lbl:12s}  cong={pc:+.3f}  incong={pi:+.3f}")
-
-# ── Plot folded weights ───────────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(5, 0.5 * n_folded + 1.5))
-x = np.arange(n_folded)
-w = 0.35
-ax.barh(x + w/2, P_cong,   w, label="congruent",   color="steelblue")
-ax.barh(x - w/2, P_incong, w, label="incongruent", color="tomato")
-ax.set_yticks(x)
-ax.set_yticklabels(folded_labels)
-ax.axvline(0, color="k", lw=0.8)
-ax.set_xlabel("ΔP (from 1/3 baseline)")
-ax.set_title("GLM — congruent vs incongruent (probability scale)")
-ax.legend()
-plt.tight_layout()
-plt.show()
-
-# ── Plot weights ──────────────────────────────────────────────────────────────
-# W shape (2, M): row 0 = L-vs-C, row 1 = R-vs-C  (matches model.py convention)
-fig, ax = plt.subplots(figsize=(max(6, 0.8 * M), 3))
-vmax = np.max(np.abs(W))
-im = ax.imshow(W, aspect="auto", interpolation="none",
-               cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-ax.set_title("GLM weights (softmax, base = C)")
-ax.set_xlabel("input feature")
-ax.set_ylabel("contrast vs C")
-ax.set_xticks(np.arange(M))
-ax.set_xticklabels(names["X_cols"], rotation=45, ha="right")
-ax.set_yticks([0, 1])
-ax.set_yticklabels(["L vs C", "R vs C"])
-plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-plt.tight_layout()
-plt.show()
-
-# ── Bar plot per feature ──────────────────────────────────────────────────────
-contrast_names = ["L vs C", "R vs C"]
-fig, axs = plt.subplots(1, 2, figsize=(8, 4), sharey=False)
-for c in range(2):
-    axs[c].barh(np.arange(M), W[c], color=["steelblue" if v >= 0 else "tomato" for v in W[c]])
-    axs[c].set_title(contrast_names[c])
-    axs[c].set_yticks(np.arange(M))
-    axs[c].set_yticklabels(names["X_cols"])
-    axs[c].axvline(0, color="k", lw=0.8)
-    axs[c].set_xlabel("weight")
-plt.suptitle("GLM weights per contrast (base = C)", y=1.01)
-plt.tight_layout()
-plt.show()
-
-# ── Save predictions ──────────────────────────────────────────────────────────
-pL, pC, pR = p_pred[:, 0], p_pred[:, 1], p_pred[:, 2]
-df_sub = df.filter(pl.col("subject") == "A92").sort("trial_idx")
-df_sub = df_sub.with_columns([
-    pl.Series("pL", pL),
-    pl.Series("pC", pC),
-    pl.Series("pR", pR),
-    pl.Series("pred_choice", np.argmax(p_pred, axis=1)),
-])
-df_sub.write_parquet(paths.DATA_PATH / "predictions_glm.parquet")
-print("Saved:", paths.DATA_PATH / "predictions_glm.parquet")
-
-plot_df = plots.prepare_predictions_df(df_sub)
-plots.plot_categorical_performance_all(plot_df, "glm")
-plots.plot_categorical_strat_by_side(plot_df, subject = "A92", model_name = "GLM")
-
-fig, (ax1, ax2) = plt.subplots(1,2, figsize=(10,4))
-plots.plot_delay_or_stim_1d_on_ax(ax1, plot_df, subject="A92", n_bins=7, which="delay")
-plots.plot_delay_or_stim_1d_on_ax(ax2, plot_df, subject="A92", n_bins=7, which="stim")
-plt.show()
+    main(
+        subjects=args.subjects,
+        out_dir=Path(args.out_dir) if args.out_dir else None,
+        tau=args.tau,
+        task=args.task,
+        num_classes=args.num_classes,
+        model_alias=args.model_alias,
+        lapse=args.lapse,
+        lapse_max=args.lapse_max,
+    )

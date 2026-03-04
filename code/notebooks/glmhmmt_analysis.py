@@ -16,15 +16,13 @@ def _():
     import matplotlib.pyplot as plt
     import seaborn as sns
     import pandas as pd
-    import glmhmmt.plots as plots
     sns.set_style("white")
 
     df_all = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-    df_all = df_all.filter(pl.col("subject") != "A84")
-    return df_all, mo, np, paths, pl, plots, plt, sns
+    return df_all, mo, np, paths, pd, pl, plt, sns
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(df_all, mo):
     from glmhmmt.features import _ALL_EMISSION_COLS, _ALL_TRANSITION_COLS
 
@@ -109,35 +107,37 @@ def _(
 
 
 @app.cell
-def _(df_all, np, paths, pl, ui_K, ui_model_id, ui_subjects):
+def _(df_all, np, paths, pl, ui_K, ui_model_id, ui_subjects, ui_tau):
     from glmhmmt.features import build_sequence_from_df
 
     K = ui_K.value
 
     OUT = paths.RESULTS / "fits" / ui_model_id.value
-
-    selected = [s for s in ui_subjects.value if s in ui_subjects.value]
-    _df_sel = df_all.filter(pl.col("subject").is_in(selected)).sort("trial_idx")
+    # load feature names from data (use first available subject for a representative build)
+    _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort("trial_idx")
+    _, _, _, names, _ = build_sequence_from_df(_df_sel, tau=ui_tau.value)
 
     arrays_store = {}
-    for _subj in selected:
+    for _subj in ui_subjects.value:
         _f = OUT / f"{_subj}_K{K}_glmhmmt_arrays.npz"
         if _f.exists():
             _d = dict(np.load(_f, allow_pickle=True))
-            _d["X_cols"] = list(_d["names"].item()["X_cols"])
-            _d["U_cols"] = list(_d["names"].item()["U_cols"])
+            # decode column names saved as string arrays; fall back to build output
+            _d["X_cols"] = list(_d["X_cols"]) if "X_cols" in _d else names["X_cols"]
+            _d["U_cols"] = list(_d["U_cols"]) if "U_cols" in _d else names["U_cols"]
             arrays_store[_subj] = _d
 
     arrays_store
-    return K, arrays_store, selected
+    return K, arrays_store, names
 
 
 @app.cell
-def _(K, arrays_store, np, selected):
+def _(K, arrays_store, names, np, ui_subjects):
     # ── State labelling: Engaged / Disengaged per subject ────────────────────
     # S_coh score = mean(W[k, class_L, fi_SL], W[k, class_R, fi_SR])
     # The state with highest S_coh is "Engaged"; the rest are "Disengaged".
     # SC is excluded (no lateralised direction → not informative for engagement).
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
 
     def _scoh_score(W, feat_names):
         """Return S_coh engagement score per state (shape: K,)."""
@@ -152,11 +152,11 @@ def _(K, arrays_store, np, selected):
             n_terms += 1
         return scores / max(1, n_terms)
 
-    _feat_names = arrays_store[selected[0]]["X_cols"] + arrays_store[selected[0]]["U_cols"]
+    _feat_names = names.get("X_cols", [])  # fallback; per-subject override below
     state_labels = {}   # subj -> {state_idx: label_str}
     state_order  = {}   # subj -> [state_idx, ...] sorted by S_coh desc
 
-    for _subj in selected:
+    for _subj in _selected:
         _W = arrays_store[_subj].get("emission_weights")
         if _W is None:
             state_labels[_subj] = {k: f"State {k+1}" for k in range(K)}
@@ -182,7 +182,9 @@ def _(K, arrays_store, np, selected):
 
 
 @app.cell
-def _(K, arrays_store, mo, paths, plots, selected, state_labels):
+def _(K, arrays_store, mo, names, paths, state_labels, ui_subjects):
+    import glmhmmt.plots as plots
+
     # ── emission weights ───────────────────────────────────────────────────────
     #
     # Agonist collapse: for symmetric L/R feature pairs, take
@@ -193,17 +195,27 @@ def _(K, arrays_store, mo, paths, plots, selected, state_labels):
     # Groups: (label, [(feat_name, class_idx), ...])
     # class_idx int = direct weight; "neg_mean"/"mean" = derived from both rows
     # Coherent = cue and choice on same side; Incoherent = opposite side
-    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
-    _fig_ag, _fig_cls = plots.plot_emission_weights( arrays_store=arrays_store, state_labels=state_labels, names=arrays_store[selected[0]], K=K, subjects=selected,
-                                                    save_path=paths.RESULTS / "plots/GLMHMMT/emissions_coefs.png",)
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+    _fig_ag, _fig_cls = plots.plot_emission_weights(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        K=K,
+        subjects=_selected,
+        save_path=paths.RESULTS / "plots/GLMHMMT/emissions_coefs.png",
+    )
     mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
     return
 
 
 @app.cell
-def _(K, arrays_store, mo, np, plt, selected, sns, state_labels):
+def _(K, arrays_store, mo, np, plt, sns, state_labels, ui_subjects):
+    # ── transition matrix heatmap — marimo grid (3 per row) ──────────────────
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _COLS = 3
     _figs_t = []
-    for _subj in selected:
+    for _subj in _selected:
         _arr = arrays_store[_subj]
         if "transition_matrix" in _arr:
             _A = _arr["transition_matrix"]
@@ -213,15 +225,26 @@ def _(K, arrays_store, mo, np, plt, selected, sns, state_labels):
         _slbl = state_labels.get(_subj, {k: f"S{k}" for k in range(K)})
         _tick_labels = [_slbl.get(k, f"S{k}") for k in range(K)]
         _fig_t, _ax_t = plt.subplots(figsize=(3.2, 2.8))
-        sns.heatmap( _A, ax=_ax_t, cmap="bone", annot=True, fmt=".2f", vmin=0, vmax=1, square=True, linewidths=0.5, xticklabels=_tick_labels, yticklabels=_tick_labels, cbar_kws={"shrink": 0.8, "label": "probability"},)
+        sns.heatmap(
+            _A,
+            ax=_ax_t,
+            cmap="bone",
+            annot=True, fmt=".2f",
+            vmin=0, vmax=1,
+            square=True,
+            linewidths=0.5,
+            xticklabels=_tick_labels,
+            yticklabels=_tick_labels,
+            cbar_kws={"shrink": 0.8, "label": "probability"},
+        )
         _ax_t.set_title(f"Subject {_subj}")
         _ax_t.set_xlabel("To state")
         _ax_t.set_ylabel("From state")
         _fig_t.tight_layout()
         _figs_t.append(_fig_t)
     _rows_t = [
-        mo.hstack(_figs_t[i : i + 3], justify="start")
-        for i in range(0, len(_figs_t), 3)
+        mo.hstack(_figs_t[i : i + _COLS], justify="start")
+        for i in range(0, len(_figs_t), _COLS)
     ]
     mo.vstack([
         mo.md(f"### Transition matrices — bias-only component  (K={K})"),
@@ -231,17 +254,40 @@ def _(K, arrays_store, mo, np, plt, selected, sns, state_labels):
 
 
 @app.cell
-def _(arrays_store, mo, selected):
-    _T_max = (max(arrays_store[s]["smoothed_probs"].shape[0] for s in selected) if selected else 20 )
-    ui_trial_range = mo.ui.range_slider( start=0, stop=_T_max - 1, value=[0, min(_T_max - 1, 199)], label="Trial window", step=1,)
+def _(arrays_store, mo, ui_subjects):
+    # ── trial-window slider (shared across all posterior plots) ──────────────
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _T_max = (
+        max(arrays_store[s]["smoothed_probs"].shape[0] for s in _selected)
+        if _selected else 200
+    )
+    ui_trial_range = mo.ui.range_slider(
+        start=0,
+        stop=_T_max - 1,
+        value=[0, min(_T_max - 1, 199)],
+        label="Trial window",
+        step=1,
+    )
+    mo.vstack([mo.md("### Trial window"), ui_trial_range])
     return (ui_trial_range,)
 
 
 @app.cell
-def _(K, arrays_store, mo, plots, selected, state_labels, ui_trial_range):
-    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
+def _(K, arrays_store, mo, state_labels, ui_subjects, ui_trial_range):
+    import glmhmmt.plots as plots
+
+    # ── posterior state probabilities ─────────────────────────────────────────
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
     _t0, _t1 = ui_trial_range.value
-    _fig_p = plots.plot_posterior_probs( arrays_store=arrays_store, state_labels=state_labels, K=K, subjects=selected, t0=_t0, t1=_t1,)
+    _fig_p = plots.plot_posterior_probs(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        K=K,
+        subjects=_selected,
+        t0=_t0,
+        t1=_t1,
+    )
     mo.vstack([
         mo.md(f"### Posterior state probabilities  (K={K})"),
         ui_trial_range,
@@ -251,11 +297,15 @@ def _(K, arrays_store, mo, plots, selected, state_labels, ui_trial_range):
 
 
 @app.cell
-def _(K, arrays_store, df_all, mo, np, pl, plots, selected, state_labels):
-    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
+def _(K, arrays_store, df_all, mo, np, pl, state_labels, ui_subjects):
+    import glmhmmt.plots as plots
+
+    # ── predictions & categorical performance ────────────────────────────────
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
     _frames = []
-    for _subj in selected:
+    for _subj in _selected:
         _p_pred = arrays_store[_subj]["p_pred"]        # (T, 3): pL, pC, pR
         _df_sub = (
             df_all
@@ -275,11 +325,13 @@ def _(K, arrays_store, df_all, mo, np, pl, plots, selected, state_labels):
     _plot_df = plots.prepare_predictions_df(_df_all_pred)
     _fig_all, _ = plots.plot_categorical_performance_all(_plot_df, f"glmhmmt K={K}")
 
+    # ── per-state overlay — pool all subjects with normalised state ranks ─────
+    # Normalise: 0 = Engaged, 1 = Disengaged, … per-subject regardless of raw idx
     _lrank_map = {"Engaged": 0, "Disengaged": 1,
                   **{f"Disengaged {i}": i for i in range(1, K)}}
     _pool_dfs     = []
     _pool_assigns = []
-    for _subj in selected:
+    for _subj in _selected:
         _p_pred_s = arrays_store[_subj]["p_pred"]
         _df_s = (
             df_all
@@ -295,6 +347,12 @@ def _(K, arrays_store, df_all, mo, np, pl, plots, selected, state_labels):
         )
         _plot_df_s = plots.prepare_predictions_df(_df_s)
         _gamma_s   = arrays_store[_subj]["smoothed_probs"]
+        # Both must have the same length — if not, session filtering diverged
+        # between the fit script and this notebook.
+        assert _plot_df_s.height == _gamma_s.shape[0], (
+            f"{_subj}: df has {_plot_df_s.height} rows but smoothed_probs has "
+            f"{_gamma_s.shape[0]}. Check session-count filter consistency."
+        )
         _T_s = _gamma_s.shape[0]
 
         # ── per-state emission prediction: softmax(W_k × x) for MAP state k ───────
@@ -325,9 +383,15 @@ def _(K, arrays_store, df_all, mo, np, pl, plots, selected, state_labels):
 
     _df_state_pool  = pl.concat(_pool_dfs)
     _assign_pool    = np.concatenate(_pool_assigns)
-    states = {0: "Engaged", 1: "Disengaged",
+    _state_lbl_global = {0: "Engaged", 1: "Disengaged",
                          **{i: f"Disengaged {i}" for i in range(2, K)}}
-    _fig_state, _   = plots.plot_categorical_performance_by_state( df=_df_state_pool, smoothed_probs=None, state_assign=_assign_pool, state_labels=states, model_name=f"glmhmmt K={K} — per state",)
+    _fig_state, _   = plots.plot_categorical_performance_by_state(
+        df=_df_state_pool,
+        smoothed_probs=None,
+        state_assign=_assign_pool,
+        state_labels=_state_lbl_global,
+        model_name=f"glmhmmt K={K} — per state",
+    )
 
     mo.vstack([
         mo.md("### Categorical plots for accuracy"),
@@ -339,36 +403,44 @@ def _(K, arrays_store, df_all, mo, np, pl, plots, selected, state_labels):
 
 
 @app.cell
-def _(K, arrays_store, mo, plots, selected, state_labels):
-    mo.stop( not selected or "transition_weights" not in arrays_store.get(selected[0], {}), mo.md("No transition weights found — run the glmhmm-t fit first."))
+def _(K, arrays_store, mo, names, ui_subjects):
+    import glmhmmt.plots as plots
 
-    _fig_line, _fig_std, _fig_raw = plots.plot_transition_weights( arrays_store=arrays_store, names=arrays_store[selected[0]], K=K, subjects=selected, state_labels=state_labels,)
-
+    # ── Input-dependent transition weights ────────────────────────────────────
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    mo.stop(
+        not _selected or "transition_weights" not in arrays_store.get(_selected[0], {}),
+        mo.md("No transition weights found — run the glmhmm-t fit first."),
+    )
+    _fig_line, _fig_std, _fig_raw = plots.plot_transition_weights(
+        arrays_store=arrays_store,
+        names=names,
+        K=K,
+        subjects=_selected,
+    )
     mo.vstack([mo.md("### Transition weights"), mo.hstack([_fig_line, _fig_std]), _fig_raw])
     return
 
 
-@app.cell
-def _(mo):
-    from wigglystuff import TangleSlider
-    THRESH_ui = mo.ui.anywidget(
-                    TangleSlider(
-                        amount=0.9,
-                        min_value=0.0,
-                        max_value=1,
-                        step=0.01,
-                        digits=2,
-                    ))
-    return (THRESH_ui,)
 
 
 @app.cell
-def _(K, THRESH_ui, arrays_store, df_all, mo, plots, selected, state_labels):
-    mo.stop(not selected, mo.md("No fitted subjects available."))
-    _fig_acc, _tbl = plots.plot_state_accuracy(arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, K=K, subjects=selected, thresh=THRESH_ui.amount)
+def _(K, arrays_store, df_all, mo, state_labels, ui_subjects):
+    import glmhmmt.plots as plots
+
+    # ── Per-state accuracy ────────────────────────────────────────────────────
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    mo.stop(not _selected, mo.md("No fitted subjects available."))
+    _fig_acc, _tbl = plots.plot_state_accuracy(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        df_all=df_all,
+        K=K,
+        subjects=_selected,
+    )
     mo.vstack([
         mo.md("### Accuracy by state"),
-        mo.md(f"> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ {THRESH_ui}"),
+        mo.md("> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ 0.5"),
         _fig_acc,
         mo.md("**Trial counts & mean accuracy per label:**"),
         mo.plain_text(_tbl.to_string()),
@@ -385,16 +457,28 @@ def _():
 @app.cell
 def _(df_all, mo):
     # ── controls for session-trajectory & occupancy plots ─────────────────────
-    ui_subjects_traj = mo.ui.multiselect( options=df_all["subject"].unique().to_list(), label="Subjects (session trajectories & occupancy)",)
+    ui_subjects_traj = mo.ui.multiselect(
+        options=df_all["subject"].unique().to_list(),
+        label="Subjects (session trajectories & occupancy)",
+    )
     mo.vstack([mo.md("### Session trajectory & occupancy"), ui_subjects_traj])
     return (ui_subjects_traj,)
 
 
 @app.cell
-def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
-    selected_traj = [s for s in ui_subjects_traj.value if s in arrays_store]
-    mo.stop(not selected_traj, mo.md("Select subjects above to view session trajectories."))
-    _fig_traj = plots.plot_session_trajectories( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, K=K, subjects=selected_traj,)
+def _(K, arrays_store, df_all, mo, state_labels, ui_subjects_traj):
+    import glmhmmt.plots as plots
+
+    # ── c. Average state-probability trajectories within a session ────────────
+    _selected_traj = [s for s in ui_subjects_traj.value if s in arrays_store]
+    mo.stop(not _selected_traj, mo.md("Select subjects above to view session trajectories."))
+    _fig_traj = plots.plot_session_trajectories(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        df_all=df_all,
+        K=K,
+        subjects=_selected_traj,
+    )
     mo.vstack([
         mo.md(f"### c. Average state-probability trajectories within a session  (K={K})"),
         mo.md("> Mean ± 1 s.e.m. across sessions for the selected subjects."),
@@ -404,10 +488,19 @@ def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
 
 
 @app.cell
-def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
-    selected_occ = [s for s in ui_subjects_traj.value if s in arrays_store]
-    mo.stop(not selected_occ, mo.md("Select subjects above."))
-    _fig_occ = plots.plot_state_occupancy(arrays_store=arrays_store,state_labels=state_labels,df_all=df_all,K=K,subjects=selected_occ,)
+def _(K, arrays_store, df_all, mo, state_labels, ui_subjects_traj):
+    import glmhmmt.plots as plots
+
+    # ── d. Fractional occupancy & state-change histogram ─────────────────────
+    _selected_occ = [s for s in ui_subjects_traj.value if s in arrays_store]
+    mo.stop(not _selected_occ, mo.md("Select subjects above."))
+    _fig_occ = plots.plot_state_occupancy(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        df_all=df_all,
+        K=K,
+        subjects=_selected_occ,
+    )
     mo.vstack([
         mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
         mo.md(
@@ -418,17 +511,23 @@ def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
     ], align="center")
     return
 
-
 @app.cell
-def _(mo, selected):
-    _subj_opts = selected if selected else ["(no fitted subjects)"]
+def _(arrays_store, mo, ui_subjects):
+    # ── Session deep-dive controls ─────────────────────────────────────────────
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _subj_opts = _selected if _selected else ["(no fitted subjects)"]
 
-    ui_session_subj = mo.ui.dropdown( options=_subj_opts, value=_subj_opts[0], label="Subject",)
+    ui_session_subj = mo.ui.dropdown(
+        options=_subj_opts,
+        value=_subj_opts[0],
+        label="Subject",
+    )
     return (ui_session_subj,)
 
 
 @app.cell
 def _(arrays_store, df_all, mo, pl, ui_session_subj):
+
     _sess_opts = (
         sorted(
             df_all.filter(pl.col("subject") == ui_session_subj.value)
@@ -438,22 +537,23 @@ def _(arrays_store, df_all, mo, pl, ui_session_subj):
         if ui_session_subj.value in arrays_store
         else [0]
     )
-    ui_session_id = mo.ui.dropdown( options=[str(s) for s in _sess_opts], value=str(_sess_opts[0]), label="Session",)
+    ui_session_id = mo.ui.dropdown(
+        options=[str(s) for s in _sess_opts],
+        value=str(_sess_opts[0]),
+        label="Session",
+    )
+    mo.vstack([
+        mo.md("### Session deep-dive"),
+        mo.hstack([ui_session_subj, ui_session_id]),
+    ])
     return (ui_session_id,)
 
 
 @app.cell
-def _(
-    K,
-    arrays_store,
-    df_all,
-    mo,
-    plots,
-    selected,
-    state_labels,
-    ui_session_id,
-    ui_session_subj,
-):
+def _(K, arrays_store, df_all, mo, names, state_labels, ui_session_id, ui_session_subj):
+    import glmhmmt.plots as plots
+
+    # ── Session deep-dive plot ─────────────────────────────────────────────────
     _subj = ui_session_subj.value
     mo.stop(
         _subj not in arrays_store,
@@ -461,17 +561,26 @@ def _(
     )
 
     _sess = int(ui_session_id.value)
-    _fig = plots.plot_session_deepdive( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, names=arrays_store[selected[0]], K=K, subj=_subj, sess=_sess,)
+    _fig = plots.plot_session_deepdive(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        df_all=df_all,
+        names=names,
+        K=K,
+        subj=_subj,
+        sess=_sess,
+    )
     mo.vstack([
-        mo.md(f"### Session statistics  (K={K})"),
-        mo.hstack([ui_session_subj, ui_session_id]),
+        mo.md(f"### Session deep-dive  (K={K})"),
         _fig,
     ], align="center")
     return
 
 
 @app.cell
-def _(K, mo, paths, plots, selected, ui_model_id):
+def _(K, mo, paths, ui_model_id, ui_subjects):
+    import glmhmmt.plots as plots
+
     # ── τ sweep analysis ────────────────────────────────────────────────────────
     _sweep_path = paths.RESULTS / "fits" / "tau_sweep" / f"glmhmmt_K{K}" / "tau_sweep_summary.parquet"
     mo.stop(
@@ -482,26 +591,18 @@ def _(K, mo, paths, plots, selected, ui_model_id):
             f"uv run python scripts/fit_tau_sweep.py --model glmhmmt --K {K}\n```"
         ),
     )
-    _fig_sweep, _best = plots.plot_tau_sweep(sweep_path=_sweep_path,subjects=selected,K=K,)
+    _subjects = list(ui_subjects.value)
+    _fig_sweep, _best = plots.plot_tau_sweep(
+        sweep_path=_sweep_path,
+        subjects=_subjects,
+        K=K,
+    )
     mo.vstack([
         mo.md(f"### τ sweep results — {ui_model_id.value} K={K}"),
         _fig_sweep,
         mo.md("**Best τ per subject (min BIC):**"),
         mo.plain_text(_best.to_pandas().to_string(index=False)),
     ], align="center")
-    return
-
-
-@app.cell
-def _():
-    from wigglystuff import ApiDoc
-
-    return (ApiDoc,)
-
-
-@app.cell
-def tour(ApiDoc, mo, plots):
-    mo.ui.anywidget(ApiDoc(plots.plot_categorical_performance_by_state))
     return
 
 

@@ -6,6 +6,7 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
+
     import marimo as mo
     import sys, os
     from pathlib import Path
@@ -17,32 +18,56 @@ def _():
     import matplotlib.pyplot as plt
     import seaborn as sns
     import pandas as pd
-    import glmhmmt.plots as plots
     from glmhmmt.features import build_sequence_from_df
     from scripts.fit_glmhmm import main as fit_main
 
     sns.set_style("white")
 
-    df_all = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-    df_all = df_all.filter(pl.col("subject") != "A84")
+    ui_task = mo.ui.dropdown(
+        options=["2AFC", "MCDR"],
+        value="MCDR",
+        label="Task:",
+    )
+    ui_task
     return (
         build_sequence_from_df,
-        df_all,
         fit_main,
         mo,
         np,
         paths,
         pl,
-        plots,
         plt,
         sns,
+        ui_task,
     )
 
 
 @app.cell
+def _(paths, pl, ui_task):
+    df_all = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
+    df_all = df_all.filter(pl.col("subject") != "A84")
+    if ui_task.value == "2AFC":
+        df_all = pl.read_parquet(paths.DATA_PATH / "alexis_combined.parquet")
+        df_all = df_all.filter(pl.col("experiment").is_in(['2AFC_2', '2AFC_3', '2AFC_4', '2AFC_6']))
+        import glmhmmt.plots_alexis as plots
+    else:
+        import glmhmmt.plots as plots
+    df_all
+    return df_all, plots
+
+
+@app.cell
 def _(df_all, mo):
-    from glmhmmt.features import _ALL_EMISSION_COLS, _ALL_TRANSITION_COLS
+    from glmhmmt.features import _ALL_EMISSION_COLS, _ALL_TRANSITION_COLS, _ALL_2AFC_EMISSION_COLS, _SF_COL_PREFIX
     # ── controls ──────────────────────────────────────────────────────────────
+
+    is_2afc = "experiment" in df_all.columns
+    if is_2afc:
+        _sf_cols = [c for c in df_all.columns if c.startswith(_SF_COL_PREFIX)]
+        emission_cols = [c for c in _ALL_2AFC_EMISSION_COLS if c != "stim_strength"] + _sf_cols
+    else:
+        emission_cols = _ALL_EMISSION_COLS
+
     ui_K = mo.ui.slider(start=2, stop=6, value=2, label="K")
     ui_subjects = mo.ui.multiselect(
         value=df_all["subject"].unique(),
@@ -57,8 +82,8 @@ def _(df_all, mo):
         label="τ action trace half-life",
     )
     ui_emission_cols = mo.ui.multiselect(
-        options=_ALL_EMISSION_COLS,
-        value=_ALL_EMISSION_COLS,
+        options=emission_cols,
+        value=emission_cols,
         label="Emission regressors (X)",
     )
 
@@ -68,6 +93,9 @@ def _(df_all, mo):
         label="Model ID (used as output folder name)",
         full_width=True,
     )
+
+
+
     fit_button = mo.ui.run_button(label="Run fit")
     mo.vstack(
         [
@@ -77,36 +105,47 @@ def _(df_all, mo):
         ],
         align="center",
     )
-
-    return fit_button, ui_K, ui_emission_cols, ui_model_id, ui_subjects, ui_tau
+    return (
+        fit_button,
+        is_2afc,
+        ui_K,
+        ui_emission_cols,
+        ui_model_id,
+        ui_subjects,
+        ui_tau,
+    )
 
 
 @app.cell
 def _(
     fit_button,
     fit_main,
+    is_2afc,
     mo,
     paths,
     ui_K,
     ui_emission_cols,
     ui_model_id,
     ui_subjects,
+    ui_task,
     ui_tau,
 ):
     mo.stop(
         not fit_button.value, mo.md("Configure parameters and press **Run fit**.")
     )
-    _OUT =  paths.RESULTS / "fits" / ui_model_id.value
+    _OUT =  paths.RESULTS / "fits" / ui_task.value / ui_model_id.value
     with mo.status.spinner(
         title=f"Fitting GLM-HMM K={ui_K.value} τ={ui_tau.value} for {ui_subjects.value}..."
     ):
         fit_main(
-            subjects=ui_subjects.value,
-            K_list=[ui_K.value],
-            out_dir=_OUT,
-            tau=ui_tau.value,
-            emission_cols=ui_emission_cols.value
-        )
+                subjects=ui_subjects.value,
+                K_list=[ui_K.value],
+                out_dir=_OUT,
+                tau=ui_tau.value,
+                emission_cols=ui_emission_cols.value,
+                num_classes=2 if is_2afc else 3,
+                task = ui_task.value,
+            )
     mo.md("✅ Fit complete — plots below update automatically.")
     return
 
@@ -115,6 +154,7 @@ def _(
 def _(
     build_sequence_from_df,
     df_all,
+    is_2afc,
     np,
     paths,
     pl,
@@ -122,17 +162,21 @@ def _(
     ui_emission_cols,
     ui_model_id,
     ui_subjects,
+    ui_task,
     ui_tau,
 ):
     K = ui_K.value
 
     selected = ui_subjects.value
-    OUT =  paths.RESULTS / "fits" / ui_model_id.value
+    OUT =  paths.RESULTS / "fits"/ ui_task.value / ui_model_id.value
     # load feature names from data
-    _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(
-        "trial_idx"
-    )
-    _, _, _, names, _ = build_sequence_from_df(_df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value)
+    _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value))
+    if is_2afc:
+        from glmhmmt.features import build_sequence_from_df_2afc
+        _, _, names = build_sequence_from_df_2afc(_df_sel, emission_cols=ui_emission_cols.value)
+    else:
+        _df_sel = _df_sel.sort("trial_idx")
+        _, _, _, names, _ = build_sequence_from_df(_df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value)
 
     arrays_store = {}
     for _subj in ui_subjects.value:
@@ -145,7 +189,7 @@ def _(
             )
             arrays_store[_subj] = _d
 
-    #arrays_store
+    arrays_store
     return K, arrays_store, names, selected
 
 
@@ -329,28 +373,38 @@ def _(
 
 
 @app.cell
-def _(K, arrays_store, df_all, mo, np, pl, plots, state_labels, ui_subjects):
+def _(
+    K,
+    arrays_store,
+    df_all,
+    is_2afc,
+    mo,
+    np,
+    pl,
+    plots,
+    state_labels,
+    ui_subjects,
+):
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
+
+    _sort_col = "trial" if is_2afc else "trial_idx"
     _frames = []
     for _subj in _selected:
-        _p_pred = arrays_store[_subj]["p_pred"]  # (T, 3): pL, pC, pR
+        _p_pred = arrays_store[_subj]["p_pred"]  # (T, 2) for 2AFC, (T, 3) for 3AFC
+        _n_classes = _p_pred.shape[1]
         _df_sub = (
             df_all.filter(pl.col("subject") == _subj)
-            .sort("trial_idx")
+            .sort(_sort_col)
             .filter(pl.col("session").count().over("session") >= 2)
-            .with_columns(
-                [
-                    pl.Series("pL", _p_pred[:, 0]),
-                    pl.Series("pC", _p_pred[:, 1]),
-                    pl.Series("pR", _p_pred[:, 2]),
-                    pl.Series(
-                        "pred_choice", np.argmax(_p_pred, axis=1).astype(int)
-                    ),
-                ]
-            )
         )
+        _cols = [pl.Series("pred_choice", np.argmax(_p_pred, axis=1).astype(int))]
+        if _n_classes == 2:
+            _cols += [pl.Series("pL", _p_pred[:, 0]), pl.Series("pR", _p_pred[:, 1])]
+        else:
+            _cols += [pl.Series("pL", _p_pred[:, 0]), pl.Series("pC", _p_pred[:, 1]), pl.Series("pR", _p_pred[:, 2])]
+        _df_sub = _df_sub.with_columns(_cols)
         _frames.append(_df_sub)
 
     _df_all_pred = pl.concat(_frames)
@@ -364,20 +418,17 @@ def _(K, arrays_store, df_all, mo, np, pl, plots, state_labels, ui_subjects):
     _pool_assigns = []
     for _subj in _selected:
         _p_pred_s = arrays_store[_subj]["p_pred"]
+        _nc_s = _p_pred_s.shape[1]
+        _pred_cols_s = [pl.Series("pred_choice", np.argmax(_p_pred_s, axis=1).astype(int))]
+        if _nc_s == 2:
+            _pred_cols_s += [pl.Series("pL", _p_pred_s[:, 0]), pl.Series("pR", _p_pred_s[:, 1])]
+        else:
+            _pred_cols_s += [pl.Series("pL", _p_pred_s[:, 0]), pl.Series("pC", _p_pred_s[:, 1]), pl.Series("pR", _p_pred_s[:, 2])]
         _df_s = (
             df_all.filter(pl.col("subject") == _subj)
-            .sort("trial_idx")
+            .sort(_sort_col)
             .filter(pl.col("session").count().over("session") >= 2)
-            .with_columns(
-                [
-                    pl.Series("pL", _p_pred_s[:, 0]),
-                    pl.Series("pC", _p_pred_s[:, 1]),
-                    pl.Series("pR", _p_pred_s[:, 2]),
-                    pl.Series(
-                        "pred_choice", np.argmax(_p_pred_s, axis=1).astype(int)
-                    ),
-                ]
-            )
+            .with_columns(_pred_cols_s)
         )
         _plot_df_s = plots.prepare_predictions_df(_df_s)
         _gamma_s = arrays_store[_subj]["smoothed_probs"]
@@ -393,11 +444,19 @@ def _(K, arrays_store, df_all, mo, np, pl, plots, state_labels, ui_subjects):
             arrays_store[_subj]["emission_weights"]
         )  # (K, C-1, n_feat)
         _X_s = np.asarray(arrays_store[_subj]["X"])  # (T, n_feat)
-        _logits = np.einsum("kci,ti->tkc", _W, _X_s)  # (T, K, C-1)  → [L, R]
-        _logits_full = np.concatenate(
-            [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]],
-            axis=2,  # (T, K, C) → [L, 0, R]
-        )
+        _logits = np.einsum("kci,ti->tkc", _W, _X_s)  # (T, K, C-1)
+        _nc_logits = _logits.shape[2] + 1  # actual number of classes
+        if _nc_logits == 2:
+            # binary: logits shape (T, K, 1) → append reference class 0
+            _logits_full = np.concatenate(
+                [_logits, np.zeros((_T_s, K, 1))], axis=2
+            )  # (T, K, 2) → [L, ref=R]
+        else:
+            # 3-class: insert reference class C in middle
+            _logits_full = np.concatenate(
+                [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]],
+                axis=2,
+            )  # (T, K, 3) → [L, 0, R]
         _lse = _logits_full.max(axis=2, keepdims=True)
         _exp = np.exp(_logits_full - _lse)
         _p_state = _exp / _exp.sum(axis=2, keepdims=True)  # (T, K, C)
@@ -579,7 +638,8 @@ def _(
         mo.md("No fitted arrays for this subject — run the fit first."),
     )
 
-    _sess = int(ui_session_id.value)
+    _sess = ui_session_id.value
+    _sort_col_dd = "trial" if "2AFC" in str(df_all["experiment"][0]) else "trial_idx"
     _fig = plots.plot_session_deepdive( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, names=arrays_store[selected[0]], K=K, subj=_subj, sess=_sess,)
     mo.vstack([
         mo.md(f"### Session statistics  (K={K})"),

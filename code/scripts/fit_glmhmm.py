@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
 from glmhmmt.model import SoftmaxGLMHMM
-from glmhmmt.features import build_sequence_from_df
+from glmhmmt.features import build_sequence_from_df, build_sequence_from_df_2afc
 
 
 
@@ -29,11 +29,19 @@ def fit_subject(
     emission_cols: list[str] | None = None,
     stickiness: float = 10.0,
     tau: float = 50.0,
+    num_classes: int = 3,
+    task: str = "MCDR",
 ) -> dict:
-    df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-    df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
-    y, X, _, names, _ = build_sequence_from_df(df_sub, tau=tau, emission_cols=emission_cols)
-    session_ids = df_sub["session"].to_numpy()
+    if task == "MCDR":
+        df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
+        df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
+        y, X, _, names, _ = build_sequence_from_df(df_sub, tau=tau, emission_cols=emission_cols)
+        session_ids = df_sub["session"].to_numpy()
+    else:  # 2AFC task
+        df = pl.read_parquet(paths.DATA_PATH / "alexis_combined.parquet")
+        df_sub = df.filter(pl.col("subject") == subject)
+        y, X, names = build_sequence_from_df_2afc(df_sub, emission_cols=emission_cols)
+        session_ids = df_sub["session"].to_numpy()
 
     # Drop trials from sessions too short for EM (must match _split_by_session)
     mask = _valid_trial_mask(session_ids)
@@ -42,7 +50,7 @@ def fit_subject(
 
     model = SoftmaxGLMHMM(
         num_states=K,
-        num_classes=3,
+        num_classes=num_classes,
         emission_input_dim=X.shape[1],
         transition_input_dim=0,
         m_step_num_iters=m_step_num_iters,
@@ -72,6 +80,7 @@ def fit_subject(
     return {
         "subject": subject,
         "K": K,
+        "num_classes": num_classes,
         "model": model,
         "fitted_params": best_params,
         "lps": best_lps,
@@ -95,8 +104,9 @@ def save_results(result: dict, out_dir: Path) -> None:
     p_pred = result["p_pred"]
     acc = float(np.mean(np.argmax(p_pred, axis=1) == result["y"]))
     ll_per_trial = float(result["lps"][-1]) / T
+    num_classes = result["num_classes"]
     n_params = result["K"] * (result["K"] - 1) + \
-        result["K"] * 2 * result["X"].shape[1]
+        result["K"] * (num_classes - 1) * result["X"].shape[1]
     bic = -2 * float(result["lps"][-1]) + n_params * np.log(T)
 
     pl.DataFrame({
@@ -127,19 +137,23 @@ def main(
     out_dir: Path | None = None,
     emission_cols: list[str] | None = None,
     tau: float = 50.0,
+    num_classes: int = 3,
+    task: str = "MCDR",
 ):
     if out_dir is None:
         out_dir = paths.RESULTS_PATH / "glmhmm"
     if subjects is None:
-        df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
+        src = "df_filtered.parquet" if task == "MCDR" else "alexis_combined.parquet"
+        df = pl.read_parquet(paths.DATA_PATH / src)
         subjects = df["subject"].unique().sort().to_list()
 
     for subj in subjects:
         for K in K_list:
-            print(f"Fitting glmhmm | subject={subj} K={K} tau={tau} ...")
+            print(f"Fitting glmhmm | subject={subj} K={K} tau={tau} num_classes={num_classes} ...")
             result = fit_subject(subj, K, num_iters=num_iters,
                                  n_restarts=n_restarts, base_seed=base_seed,
-                                 tau=tau, emission_cols=emission_cols)
+                                 tau=tau, emission_cols=emission_cols,
+                                 num_classes=num_classes, task=task)
             print("Fitted, waiting to save")
             save_results(result, out_dir)
             print(f"  ✓ saved to {out_dir}")
@@ -159,6 +173,10 @@ if __name__ == "__main__":
                         help="Output directory. Defaults to RESULTS_PATH/glmhmm.")
     parser.add_argument("--tau", type=float, default=50.0,
                         help="Half-life for exponential action traces.")
+    parser.add_argument("--num_classes", type=int, default=3,
+                        help="Number of choice classes: 2 for 2AFC, 3 for 3AFC.")
+    parser.add_argument("--task", type=str, default="MCDR", choices=["MCDR", "2AFC"],
+                        help="Task to fit: 'MCDR' or '2AFC'. Affects data loading and features.")
     args = parser.parse_args()
     main(
         subjects=args.subjects,
@@ -168,4 +186,6 @@ if __name__ == "__main__":
         base_seed=args.seed,
         out_dir=Path(args.out_dir) if args.out_dir else None,
         tau=args.tau,
+        num_classes=args.num_classes,
+        task = args.task,
     )

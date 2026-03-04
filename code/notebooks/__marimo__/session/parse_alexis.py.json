@@ -1,0 +1,92 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.20.4",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "3a9a2e5be750eae2c723288cc406be7c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "fd5946f38e1abe4a21c75d894b5c18cd",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "Removed 3000 trials from session start (AW and Warm Up trials)\nTotal:15k trials\nRemoved 660 trials from session start (AW and Warm Up trials)\nTotal:17k trials\nRemoved 3084 trials from session start (AW and Warm Up trials)\nTotal:17k trials\nRemoved 2311 trials from session start (AW and Warm Up trials)\nTotal:18k trials\nRemoved 2080 trials from session start (AW and Warm Up trials)\nTotal:16k trials\nRemoved 3120 trials from session start (AW and Warm Up trials)\nTotal:21k trials\nRemoved 1440 trials from session start (AW and Warm Up trials)\nTotal:12k trials\nRemoved 1628 trials from session start (AW and Warm Up trials)\nTotal:18k trials\nRemoved 926 trials from session start (AW and Warm Up trials)\nTotal:11k trials\nRemoved 3928 trials from session start (AW and Warm Up trials)\nTotal:19k trials\nRemoved 1380 trials from session start (AW and Warm Up trials)\nTotal:20k trials\nRemoved 900 trials from session start (AW and Warm Up trials)\nTotal:9k trials\nRemoved 4218 trials from session start (AW and Warm Up trials)\nTotal:34k trials\nRemoved 1551 trials from session start (AW and Warm Up trials)\nTotal:17k trials\nRemoved 1812 trials from session start (AW and Warm Up trials)\nTotal:44k trials\nRemoved 530 trials from session start (AW and Warm Up trials)\nTotal:27k trials\nRemoved 3960 trials from session start (AW and Warm Up trials)\nTotal:26k trials\nRemoved 3577 trials from session start (AW and Warm Up trials)\nTotal:26k trials\nRemoved 2692 trials from session start (AW and Warm Up trials)\nTotal:15k trials\nRemoved 780 trials from session start (AW and Warm Up trials)\nTotal:21k trials\nRemoved 2033 trials from session start (AW and Warm Up trials)\nTotal:19k trials\nRemoved 4205 trials from session start (AW and Warm Up trials)\nTotal:30k trials\nRemoved 1625 trials from session start (AW and Warm Up trials)\nTotal:16k trials\nRemoved 2000 trials from session start (AW and Warm Up trials)\nTotal:14k trials\nRemoved 1920 trials from session start (AW and Warm Up trials)\nTotal:16k trials\nRemoved 1844 trials from session start (AW and Warm Up trials)\nTotal:13k trials\nRemoved 1380 trials from session start (AW and Warm Up trials)\nTotal:17k trials\nRemoved 2266 trials from session start (AW and Warm Up trials)\nTotal:24k trials\nRemoved 3430 trials from session start (AW and Warm Up trials)\nTotal:19k trials\nRemoved 3260 trials from session start (AW and Warm Up trials)\nTotal:28k trials\nRemoved 250 trials from session start (AW and Warm Up trials)\nTotal:7k trials\nRemoved 6360 trials from session start (AW and Warm Up trials)\nTotal:64k trials\nRemoved 6130 trials from session start (AW and Warm Up trials)\nTotal:37k trials\nRemoved 660 trials from session start (AW and Warm Up trials)\nTotal:8k trials\nRemoved 2297 trials from session start (AW and Warm Up trials)\nTotal:30k trials\nRemoved 2780 trials from session start (AW and Warm Up trials)\nTotal:12k trials\nRemoved 2224 trials from session start (AW and Warm Up trials)\nTotal:24k trials\nRemoved 3560 trials from session start (AW and Warm Up trials)\nTotal:16k trials\nRemoved 2141 trials from session start (AW and Warm Up trials)\nTotal:16k trials\nRemoved 3960 trials from session start (AW and Warm Up trials)\nTotal:20k trials\nRemoved 1499 trials from session start (AW and Warm Up trials)\nTotal:17k trials\nRemoved 1720 trials from session start (AW and Warm Up trials)\nTotal:20k trials\nRemoved 3800 trials from session start (AW and Warm Up trials)\nTotal:12k trials\nRemoved 1738 trials from session start (AW and Warm Up trials)\nTotal:13k trials\nRemoved 100 trials from session start (AW and Warm Up trials)\nTotal:3k trials\nSaved to /Users/javierrodriguezmartinez/Documents/MAMME/TFM/data/alexis_combined.parquet\nshape: (28, 2)\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 subject \u2506 n_trials \u2502\n\u2502 ---     \u2506 ---      \u2502\n\u2502 str     \u2506 u32      \u2502\n\u255e\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u256a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2561\n\u2502 334.0   \u2506 82       \u2502\n\u2502 620.0   \u2506 869      \u2502\n\u2502 617.0   \u2506 1529     \u2502\n\u2502 326.0   \u2506 2087     \u2502\n\u2502 876.0   \u2506 2114     \u2502\n\u2502 \u2026       \u2506 \u2026        \u2502\n\u2502 332.0   \u2506 25961    \u2502\n\u2502 820.0   \u2506 29568    \u2502\n\u2502 911.0   \u2506 32512    \u2502\n\u2502 821.0   \u2506 33569    \u2502\n\u2502 907.0   \u2506 33597    \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "2f07a0e2427584b033d904d7e19e27a5",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "eb55cfcc03fa8dc0d8ef04ebeda315e1",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "df287eac7f4f5807cb5c20dd4c1bdbea",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "multiple-defs",
+          "evalue": "The variable 'filter_behavior' was defined by another cell",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "f0a594796877ae6f3414f4e1522c5f19",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "2dbfa0cd4bd329c1dbe8e4bf1ffba311",
+      "outputs": [],
+      "console": []
+    }
+  ]
+}

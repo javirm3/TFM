@@ -272,11 +272,13 @@ class SoftmaxGLMHMMEmissions(HMMEmissions):
 
     def distribution(self, params, state, inputs):
         x = inputs[:self.emission_input_dim]              # (M,)
-        # (2,) -> [eta_L, eta_R]
-        eta = params.weights[state] @ x
+        # eta: (C-1,) — one contrast per non-base class
+        eta = params.weights[state] @ x                  # (C-1,)
 
-        # logits full: [L, C(base=0), R]
-        logits = jnp.array([eta[0], 0.0, eta[1]], dtype=jnp.float32)
+        # Last class is always the reference (logit = 0).
+        # 2-class:  logits = [eta[0],           0]       (class 1 = base)
+        # 3-class:  logits = [eta[0], eta[1],   0]       (class 2 = R = base)
+        logits = jnp.concatenate([eta, jnp.zeros(1, dtype=jnp.float32)])
         return tfd.Categorical(logits=logits)
 
     def _compute_conditional_logliks(self, params, emissions, inputs=None):

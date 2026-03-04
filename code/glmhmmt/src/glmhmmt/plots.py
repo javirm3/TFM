@@ -346,7 +346,6 @@ def plot_categorical_performance_all(df, model_name):
                     xlabel="Trial difficulty",
                     ylabel="Accuracy",
                     palette=cfg["plots"]["ttype"]["palette"], labels=cfg["plots"]["ttype"]["labels"])
-    
     # b) Stim duration (DS, SS/SM/SL)
     df_b = df.filter(pl.col("ttype_c") == "DS")
     plot_cat_panel(ax2, df_b, "stimd_c", cfg["plots"]["stimd"]["order"],
@@ -474,7 +473,7 @@ def plot_categorical_strat_by_side(df, subject, model_name, df_silent = None, co
 
     side_palette = {'L': '#e41a1c', 'C': '#4daf4a', 'R': '#377eb8'}
 
-    fig, ax = plt.subplots(figsize=(5,5))
+    fig, ax = plt.subplots(figsize=(4,4))
 
     for side in ["L", "C", "R"]:
         sub = g[g["x_c"] == side].dropna(subset=["x_pos"])
@@ -506,9 +505,8 @@ def plot_categorical_strat_by_side(df, subject, model_name, df_silent = None, co
 
     fname = f"fig_categorical_strat_by_side_{subject}.pdf"
     out_path = get_plot_path("strat_by_side", fname, model_name)
-    plt.show()
 
-    return True
+    return fig, ax
 
 def plot_delay_binned_1d(df, model_name, subject=None, n_bins=7):
     # n_bins=3

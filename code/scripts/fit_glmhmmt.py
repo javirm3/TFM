@@ -1,4 +1,4 @@
-from glmhmmt.features import build_sequence_from_df
+from glmhmmt.features import build_sequence_from_df, build_sequence_from_df_2afc
 from glmhmmt.model import SoftmaxGLMHMM
 import paths
 import numpy as np
@@ -28,16 +28,23 @@ def fit_subject(
     emission_cols: list[str] | None = None,
     transition_cols: list[str] | None = None,
     tau: float = 50.0,
+    num_classes: int = 3,
 ) -> dict:
-    df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-    df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
-    y, X, U, names, _ = build_sequence_from_df(
-        df_sub,
-        tau=tau,
-        emission_cols=emission_cols,
-        transition_cols=transition_cols,
-    )
-    session_ids = df_sub["session"].to_numpy()
+    if num_classes == 2:
+        df = pl.read_parquet(paths.DATA_PATH / "df_alexis.parquet")
+        df_sub = df.filter(pl.col("Subject") == subject)
+        y, X, names, session_ids = build_sequence_from_df_2afc(df_sub, emission_cols=emission_cols)
+        U = jnp.zeros((len(y), 0), dtype=jnp.float32)   # no transition features for 2AFC
+    else:
+        df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
+        df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
+        y, X, U, names, _ = build_sequence_from_df(
+            df_sub,
+            tau=tau,
+            emission_cols=emission_cols,
+            transition_cols=transition_cols,
+        )
+        session_ids = df_sub["session"].to_numpy()
 
     # Drop trials from sessions too short for EM (must match _split_by_session)
     mask = _valid_trial_mask(session_ids)
@@ -47,7 +54,7 @@ def fit_subject(
 
     model = SoftmaxGLMHMM(
         num_states=K,
-        num_classes=3,
+        num_classes=num_classes,
         emission_input_dim=X.shape[1],
         transition_input_dim=U.shape[1],
         m_step_num_iters=m_step_num_iters,
@@ -79,6 +86,7 @@ def fit_subject(
     return {
         "subject": subject,
         "K": K,
+        "num_classes": num_classes,
         "model": model,
         "fitted_params": best_params,
         "lps": best_lps,
@@ -89,7 +97,6 @@ def fit_subject(
         "y": np.asarray(y),
         "X": np.asarray(X),
         "U": np.asarray(U),
-    
     }
 
 
@@ -103,11 +110,12 @@ def save_results(result: dict, out_dir: Path) -> None:
     p_pred = result["p_pred"]
     acc = float(np.mean(np.argmax(p_pred, axis=1) == result["y"]))
     ll_per_trial = float(result["lps"][-1]) / T
+    num_classes = result["num_classes"]
     n_params = (
         result["K"] * (result["K"] - 1) *
         (1 + result["U"].shape[1])  # transition
         # emission
-        + result["K"] * 2 * result["X"].shape[1]
+        + result["K"] * (num_classes - 1) * result["X"].shape[1]
     )
     bic = -2 * float(result["lps"][-1]) + n_params * np.log(T)
 
@@ -142,12 +150,15 @@ def main(
     emission_cols: list[str] | None = None,
     transition_cols: list[str] | None = None,
     tau: float = 50.0,
+    num_classes: int = 3,
 ):
     if out_dir is None:
         out_dir = paths.RESULTS_PATH / "glmhmmt"
     if subjects is None:
-        df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-        subjects = df["subject"].unique().sort().to_list()
+        src = "df_alexis.parquet" if num_classes == 2 else "df_filtered.parquet"
+        subj_col = "Subject" if num_classes == 2 else "subject"
+        df = pl.read_parquet(paths.DATA_PATH / src)
+        subjects = df[subj_col].unique().sort().to_list()
 
     for subj in subjects:
         for K in K_list:
@@ -160,6 +171,7 @@ def main(
                 emission_cols=emission_cols,
                 transition_cols=transition_cols,
                 tau=tau,
+                num_classes=num_classes,
             )
             save_results(result, out_dir)
             print(f"  ✓ saved to {out_dir}")
@@ -176,6 +188,8 @@ if __name__ == "__main__":
     parser.add_argument("--out_dir", type=str, default=None)
     parser.add_argument("--tau", type=float, default=50.0,
                         help="Half-life for exponential action traces.")
+    parser.add_argument("--num_classes", type=int, default=3,
+                        help="Number of choice classes: 2 for 2AFC, 3 for 3AFC.")
     args = parser.parse_args()
     main(
         subjects=args.subjects,
@@ -185,4 +199,5 @@ if __name__ == "__main__":
         base_seed=args.seed,
         out_dir=Path(args.out_dir) if args.out_dir else None,
         tau=args.tau,
+        num_classes=args.num_classes,
     )
