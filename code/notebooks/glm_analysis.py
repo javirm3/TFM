@@ -18,9 +18,20 @@ def _():
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     import paths
     from scripts.fit_glm import main as fit_main, generate_model_id
+    from tasks import get_adapter
 
     sns.set_style("white")
-    return fit_main, generate_model_id, mo, np, paths, pl, plt, sns
+    return (
+        fit_main,
+        generate_model_id,
+        get_adapter,
+        mo,
+        np,
+        paths,
+        pl,
+        plt,
+        sns,
+    )
 
 
 @app.cell
@@ -35,18 +46,48 @@ def _(mo):
 
 
 @app.cell
-def _(paths, pl, ui_task):
-    df_all = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-    df_all = df_all.filter(pl.col("subject") != "A84")
+def _(get_adapter, paths, pl, ui_task):
+    adapter = get_adapter(ui_task.value)
+    df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+    df_all = adapter.subject_filter(df_all)
+    plots = adapter.get_plots()
+    return adapter, df_all, plots
 
-    if ui_task.value == "2AFC":
-        df_all = pl.read_parquet(paths.DATA_PATH / "alexis_combined.parquet")
-        # Filter typical experiments if needed
-        # df_all = df_all.filter(pl.col("experiment").is_in(['2AFC_2', '2AFC_3', '2AFC_4', '2AFC_6']))
-        import glmhmmt.plots_alexis as plots
-    else:
-        import glmhmmt.plots as plots
-    return df_all, plots
+
+@app.cell
+def _(mo, paths, ui_task):
+    import json as _json
+    fits_path = paths.RESULTS / "fits" / ui_task.value / "glm"
+    _existing_opts = []
+    if fits_path.exists():
+        _existing_opts = sorted([
+            d.name for d in fits_path.iterdir()
+            if d.is_dir() and (d / "config.json").exists()
+        ])
+    ui_existing = mo.ui.dropdown(
+        options=_existing_opts,
+        value=None,
+        label="Load existing model (overrides params below)",
+    )
+    ui_alias = mo.ui.text(
+        value="",
+        label="Custom alias (optional)",
+        placeholder="e.g. my_best_fit",
+    )
+    return ui_alias, ui_existing
+
+
+@app.cell
+def _(paths, ui_existing, ui_task):
+    import json as _json
+    loaded_cfg: dict = {}
+    if ui_existing.value:
+        _cfg_path = (
+            paths.RESULTS / "fits" / ui_task.value/ "glm" / ui_existing.value / "config.json"
+        )
+        if _cfg_path.exists():
+            loaded_cfg = _json.loads(_cfg_path.read_text())
+    return (loaded_cfg,)
 
 
 @app.cell(disabled=True)
@@ -100,18 +141,23 @@ def _(df_all, pl, plt, sns):
 
 
 @app.cell
-def _(df_all, mo, ui_task):
-    from glmhmmt.features import _ALL_EMISSION_COLS, _ALL_2AFC_EMISSION_COLS, _SF_COL_PREFIX
-
-    is_2afc = (ui_task.value == "2AFC")
+def _(adapter, df_all, loaded_cfg: dict, mo, ui_task):
+    is_2afc = adapter.num_classes == 2
     task_name = ui_task.value
 
-    if is_2afc:
-        # Load columns dynamically if possible, or use standard lists
-        _sf_cols = [c for c in df_all.columns if c.startswith(_SF_COL_PREFIX)]
-        emission_cols_opts = [c for c in _ALL_2AFC_EMISSION_COLS if c != "stim_strength"] + _sf_cols
-    else:
-        emission_cols_opts = _ALL_EMISSION_COLS
+    emission_cols_opts = (
+        adapter.default_emission_cols() + adapter.sf_cols(df_all)
+        if is_2afc
+        else adapter.default_emission_cols()
+    )
+
+    # Seed initial widget values from loaded config (if a model was selected)
+    _tau_val   = loaded_cfg.get("tau", 5)
+    _lapse_val = loaded_cfg.get("lapse", False)
+    _lapse_max_val = loaded_cfg.get("lapse_max", 0.2)
+    _ecols_saved = loaded_cfg.get("emission_cols", [])
+    _ecols_valid = [c for c in _ecols_saved if c in emission_cols_opts]
+    _ecols_val = _ecols_valid if _ecols_valid else emission_cols_opts[:10]
 
     ui_subjects = mo.ui.multiselect(
         value=df_all["subject"].unique().to_list(),
@@ -120,76 +166,59 @@ def _(df_all, mo, ui_task):
     )
 
     ui_tau = mo.ui.slider(
-        start=1, stop=100, value=5, step=1, label="τ (History)"
+        start=1, stop=100, value=_tau_val, step=1, label="τ (History)"
     )
 
-    ui_lapse = mo.ui.checkbox(value=False, label="Fit lapse rates γ_L, γ_R")
+    ui_lapse = mo.ui.checkbox(value=_lapse_val, label="Fit lapse rates γ_L, γ_R")
 
     ui_lapse_max = mo.ui.slider(
-        start=0.01, stop=0.5, value=0.2, step=0.01, label="Max lapse"
+        start=0.01, stop=0.5, value=_lapse_max_val, step=0.01, label="Max lapse"
     )
 
     ui_emission_cols = mo.ui.multiselect(
         options=emission_cols_opts,
-        value=emission_cols_opts[:10], # Default selection
+        value=_ecols_val,
         label="Regressors (X)",
     )
-    return is_2afc, task_name, ui_emission_cols, ui_lapse, ui_lapse_max, ui_subjects, ui_tau
+    return (
+        is_2afc,
+        task_name,
+        ui_emission_cols,
+        ui_lapse,
+        ui_lapse_max,
+        ui_subjects,
+        ui_tau,
+    )
 
 
 @app.cell
 def _(
     generate_model_id,
+    is_2afc,
     mo,
-    paths,
     task_name,
+    ui_alias,
     ui_emission_cols,
+    ui_existing,
     ui_lapse,
+    ui_lapse_max,
     ui_subjects,
     ui_tau,
 ):
-
-    # Compute Hash based on current selection
     current_hash = generate_model_id(task_name, ui_tau.value, ui_emission_cols.value, lapse=ui_lapse.value)
-
-    # Existing Models Logic
-    _fits_path = paths.RESULTS / "fits" / task_name
-    _existing_opts = []
-    if _fits_path.exists():
-        # List dirs that have config.json (valid fits)
-        _existing_opts = sorted([
-            d.name for d in _fits_path.iterdir() 
-            if d.is_dir() and (d / "config.json").exists()
-        ])
-    ui_existing = mo.ui.dropdown(
-        options=_existing_opts,
-        value=None,
-        label="Load Existing Model (Select to Override Params)",
-    )
-
-    ui_alias = mo.ui.text(
-        value="",
-        label="Custom Alias (Optional)",
-        placeholder="e.g. my_best_fit"
-    )
 
     fit_button = mo.ui.run_button(label="Run GLM Fit")
 
     mo.vstack([
         mo.md("### GLM Configuration"),
+        mo.hstack([ui_existing, ui_alias]),
         mo.hstack([ui_subjects, ui_tau]),
-        mo.hstack([ui_lapse, ui_lapse_max]),
+        (mo.hstack([ui_lapse, ui_lapse_max]) if is_2afc else mo.md("")),
         ui_emission_cols,
-        mo.md(f"**Current Params Hash:** `{current_hash}`"),
-        mo.hstack([ui_alias, ui_existing]),
+        mo.md(f"**Current params hash:** `{current_hash}`"),
         fit_button,
     ])
-    return current_hash, fit_button, ui_alias, ui_existing
-
-
-@app.cell
-def _():
-    return
+    return current_hash, fit_button
 
 
 @app.cell
@@ -201,7 +230,6 @@ def _():
 def _(
     fit_button,
     fit_main,
-    is_2afc,
     mo,
     ui_alias,
     ui_emission_cols,
@@ -219,7 +247,6 @@ def _(
             out_dir=None,
             tau=ui_tau.value,
             emission_cols=ui_emission_cols.value,
-            num_classes=2 if is_2afc else 3,
             task=ui_task.value,
             model_alias=ui_alias.value if ui_alias.value else None,
             lapse=ui_lapse.value,
@@ -232,9 +259,9 @@ def _(
 
 @app.cell
 def _(
+    adapter,
     current_hash,
     df_all,
-    is_2afc,
     mo,
     np,
     paths,
@@ -255,29 +282,17 @@ def _(
     else:
         selected_model_id = current_hash 
 
-    OUT = paths.RESULTS / "fits" / ui_task.value / selected_model_id
+    OUT = paths.RESULTS / "fits" / ui_task.value / "glm" / selected_model_id
 
-    # Feature names fallback
+    # Feature names from adapter (uniform for both tasks)
     _df_sel = df_all.filter(pl.col("subject").is_in(selected))
     if len(_df_sel) > 0:
-        if is_2afc:
-            from glmhmmt.features import build_sequence_from_df_2afc
-            names = [
-        "bias",       # constant 1.0
-        "stim_vals",  # ILD normalised to [-1, 1] per session
-        "at_choice",  # EWMA of signed choice history
-        "at_error",   # EWMA of error-weighted signed choice
-        "at_correct", # EWMA of correct-weighted signed choice
-        "prev_choice",# previous choice
-        "wsls",       # win-stay-lose-switch
-    ]
-        else:
-            from glmhmmt.features import build_sequence_from_df
-            _df_sel = _df_sel.sort("trial_idx")
-            res = build_sequence_from_df(_df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value)
-            names = res[-2] if len(res) == 5 else res[-1]
+        _df_sel = _df_sel.sort(adapter.sort_col)
+        _, _, _, names = adapter.load_subject(
+            _df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value
+        )
     else:
-        names = {}
+        names = {"X_cols": [], "U_cols": []}
 
     arrays_store = {}
     for _subj in selected:
@@ -289,9 +304,20 @@ def _(
             _d["X_cols"] = (
                 list(_d["X_cols"]) if "X_cols" in _d else names.get("X_cols", [])
             )
+            # ── Backward-compatibility: old fit_glm.py saved W_R at index 0.
+            # New convention stores W_L (negative stim weight) at index 0.
+            # Detect old files by sign of stim weight and negate to W_L.
+            _W = _d.get("emission_weights")
+            if _W is not None:
+                _stim_names = {"stim_vals", "stim_d", "ild_norm"}
+                _stim_idx = next(
+                    (i for i, c in enumerate(_d["X_cols"]) if c in _stim_names), None
+                )
+                if _stim_idx is not None and float(_W[0, 0, _stim_idx]) > 0:
+                    _d["emission_weights"] = -_W  # W_R → W_L (negate)
             arrays_store[_subj] = _d
 
-    mo.md(f"Loaded {len(arrays_store)} subjects. (From: `{selected_model_id}`)")
+    mo.md(f"Loaded {len(arrays_store)} subjects from `{selected_model_id}`")
     return arrays_store, selected
 
 
@@ -320,6 +346,7 @@ def _(arrays_store, mo, paths, plots, selected):
 
 @app.cell
 def _(
+    adapter,
     arrays_store,
     df_all,
     fig_ag,
@@ -330,7 +357,6 @@ def _(
     pl,
     plots,
     selected,
-    ui_task,
     ui_tau,
 ):
     from scripts.alexis_functions import filter_behavior
@@ -338,7 +364,7 @@ def _(
     if not arrays_store:
         mo.stop(True)
 
-    _sort_col = "Trial" if is_2afc else "trial_idx"
+    _sort_col = adapter.sort_col
     _frames = []
 
     for _subj in selected:
@@ -347,16 +373,12 @@ def _(
         _p_pred = arrays_store[_subj]["p_pred"]
         _n_classes = _p_pred.shape[1]
 
-        print(len(_p_pred))
-        if is_2afc:
-            _df_sub = df_all.filter(pl.col("subject") == _subj)
-        else:
-            _df_sub = (
-                df_all.filter(pl.col("subject") == _subj)
-                .sort(_sort_col)
-                # Filter valid sessions length logic might apply
-                .filter(pl.col("session").count().over("session") >= 2)
-            )
+        _df_sub = (
+            df_all.filter(pl.col("subject") == _subj)
+            .sort(_sort_col)
+        )
+        if not is_2afc:
+            _df_sub = _df_sub.filter(pl.col("session").count().over("session") >= 2)
 
         # Ensure length match
         if len(_df_sub) != len(_p_pred):
@@ -381,25 +403,30 @@ def _(
 
     _df_all_pred = pl.concat(_frames)
     _plot_df = plots.prepare_predictions_df(_df_all_pred)
+    # arrays_store kwarg only exists in plots_alexis (2AFC); MCDR version doesn't accept it
+    _perf_kwargs = {"arrays_store": arrays_store} if is_2afc else {}
     _fig_all, _ = plots.plot_categorical_performance_all(
         _plot_df,
         f"GLM (tau={ui_tau.value})",
-        arrays_store=arrays_store,   # enables smooth sigmoid via eval_glm_on_ild_grid
+        **_perf_kwargs,
     )
 
-    if ui_task == "MCDR":
+    if not is_2afc:
         _fig_strat, _ = plots.plot_categorical_strat_by_side(_plot_df, subject="All", model_name="GLM")
     else:
         _fig_strat = None
+
+    _row = [_fig_all] + ([_fig_strat] if _fig_strat is not None else [])
     mo.vstack([
-         mo.md("### Model Performance"),
-         _fig_all
+        mo.md("### Model Performance"),
+        mo.hstack(_row),
+        fig_ag, fig_cls
     ])
-    mo.vstack([
-         mo.md("### Model Performance"),
-          mo.hstack([_fig_all,_fig_strat]),
-         fig_ag, fig_cls
-    ])
+    return
+
+
+@app.cell
+def _():
     return
 
 

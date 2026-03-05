@@ -6,3 +6,6 @@
 */results/fits
 */results/glm_cache
 */results
+
+*__pycache__/
+*indre-notebook

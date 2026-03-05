@@ -618,8 +618,10 @@ def eval_glm_on_ild_grid(
             base_logit   = other_logit - stim_contrib
             for gi, sv in enumerate(ild_norm):
                 logit  = base_logit + sv * w[ild_idx]
-                p_base = 1.0 / (1.0 + np.exp(-logit))
-                p_right[k, gi] = float(np.mean(gL + (1.0 - gL - gR) * p_base))
+                # W[k,0,:] parameterises P(class-0 = LEFT); class-1 (RIGHT) is
+                # the softmax reference (logit=0). So P(right) = sigmoid(-logit).
+                p_left = 1.0 / (1.0 + np.exp(-logit))
+                p_right[k, gi] = float(np.mean(gL + (1.0 - gL - gR) * (1.0 - p_left)))
     else:
         # ── fallback: sweep only stim, fix others at empirical mean ──────────
         if X_data is not None:
@@ -637,8 +639,9 @@ def eval_glm_on_ild_grid(
 
         for k in range(K):
             logit  = X_grid @ W[k, 0, :]
-            p_base = 1.0 / (1.0 + np.exp(-logit))
-            p_right[k] = gL + (1.0 - gL - gR) * p_base
+            # W[k,0,:] is logit for class-0 (LEFT); P(right) = sigmoid(-logit)
+            p_left = 1.0 / (1.0 + np.exp(-logit))
+            p_right[k] = gL + (1.0 - gL - gR) * (1.0 - p_left)
 
     if K == 1:
         return ild_grid, p_right[0]
@@ -1211,6 +1214,7 @@ def plot_session_trajectories(
     df_all,
     K: int,
     subjects: list,
+    session_col: str = "session",
 ) -> plt.Figure:
     """Average state-probability trajectories within a session (mean ± SEM).
 
@@ -1236,12 +1240,12 @@ def plot_session_trajectories(
             import polars as pl
             if hasattr(df_all, "filter"):
                 df_sub = df_all.filter(pl.col("subject") == subj).sort("Trial")
-                sess   = df_sub["session"].to_numpy()
+                sess   = df_sub[session_col].to_numpy()
             else:
                 raise AttributeError
         except (ImportError, AttributeError):
             df_sub = df_all[df_all["subject"] == subj].sort_values("Trial")
-            sess   = df_sub["session"].to_numpy()
+            sess   = df_sub[session_col].to_numpy()
 
         T = min(len(P), len(sess))
         P, sess = P[:T], sess[:T]
@@ -1284,6 +1288,7 @@ def plot_state_occupancy(
     df_all,
     K: int,
     subjects: list,
+    session_col: str = "Session",
 ) -> plt.Figure:
     """Fractional occupancy bar chart + state-switch histogram per session.
 
@@ -1317,12 +1322,12 @@ def plot_state_occupancy(
             import polars as pl
             if hasattr(df_all, "filter"):
                 df_sub = df_all.filter(pl.col("subject") == subj).sort("Trial")
-                sess   = df_sub["session"].to_numpy()
+                sess   = df_sub[session_col].to_numpy()
             else:
                 raise AttributeError
         except (ImportError, AttributeError):
             df_sub = df_all[df_all["subject"] == subj].sort_values("Trial")
-            sess   = df_sub["session"].to_numpy()
+            sess   = df_sub[session_col].to_numpy()
 
         T = min(len(P), len(sess))
         viterbi = np.argmax(P[:T], axis=1)
@@ -1357,6 +1362,7 @@ def plot_session_deepdive(
     K: int,
     subj: str,
     sess: int,
+    session_col: str = "Session",
 ) -> plt.Figure:
     """Session deep-dive: P(Engaged) + cumulative accuracy (twin axis) + action traces.
 
@@ -1381,12 +1387,12 @@ def plot_session_deepdive(
             df_all
             .filter(pl.col("subject") == subj)
             .sort("Trial")
-            .filter(pl.col("session").count().over("session") >= 2)
+            .filter(pl.col(session_col).count().over(session_col) >= 2)
         )
-        _sess_mask = _df_sub_all["session"].to_numpy() == sess
+        _sess_mask = _df_sub_all[session_col].to_numpy() == sess
         _df_sess = (
             df_all
-            .filter((pl.col("subject") == subj) & (pl.col("session") == sess))
+            .filter((pl.col("subject") == subj) & (pl.col(session_col) == sess))
             .sort("Trial")
         )
         _hit   = _df_sess["Hit"].to_numpy().astype(float)
@@ -1397,11 +1403,11 @@ def plot_session_deepdive(
             df_all[df_all["subject"] == subj]
             .sort_values("Trial")
         )
-        _sess_counts = _df_sub_all.groupby("session")["Trial"].transform("count")
+        _sess_counts = _df_sub_all.groupby(session_col)["Trial"].transform("count")
         _df_sub_all = _df_sub_all[_sess_counts >= 2]
-        _sess_mask  = _df_sub_all["session"].to_numpy() == sess
+        _sess_mask  = _df_sub_all[session_col].to_numpy() == sess
         _df_sess = (
-            df_all[(df_all["subject"] == subj) & (df_all["session"] == sess)]
+            df_all[(df_all["subject"] == subj) & (df_all[session_col] == sess)]
             .sort_values("Trial")
         )
         _hit    = _df_sess["Hit"].to_numpy().astype(float)
@@ -1651,26 +1657,26 @@ def plot_categorical_performance_all_by_state(
     X_cols: Optional[Sequence[str]] = None,
     ild_max: float = 70.0,
 ) -> plt.Figure:
-    """Per-state psychometric curves (P(right) vs ILD).
+    """Per-state psychometric grid (K panels, one per state).
 
     2AFC equivalent of plots.plot_categorical_performance_by_state.
 
-    Each state's trials are separated by MAP assignment; data (markers) and
+    Each state gets its own panel showing P(right) vs ILD; data (markers) and
     model prediction (lines) are drawn in the state's colour.
 
     Parameters
     ----------
     df             : Trial-level DataFrame (polars or pandas).
     smoothed_probs : (T, K) posterior state probabilities, ignored when
-                     state_assign is provided.
+                     ``state_assign`` is provided.
     state_labels   : {state_idx: label_str} for single-subject, or
                      {subj: {state_idx: label_str}} for multi-subject.
-    model_name     : string used as figure title.
+    model_name     : string used as figure suptitle.
     state_assign   : optional pre-computed (T,) int array of MAP states.
 
     Returns
     -------
-    fig
+    (fig, None)
     """
     if hasattr(df, "to_pandas"):
         df_pd = df.to_pandas().reset_index(drop=True)
@@ -1702,22 +1708,21 @@ def plot_categorical_performance_all_by_state(
         slbls = {int(k): v for k, v in state_labels.items()}
 
     ilds = sorted(df_pd[ild_col].dropna().unique())
+    panel_w = max(4, 0.4 * len(ilds))
 
-    fig, ax = plt.subplots(figsize=(max(6, 0.5 * len(ilds)), 4))
+    # ── K-panel grid ──────────────────────────────────────────────────────────
+    _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
 
     # Pre-compute per-state smooth sigmoid curves if arrays_store provided
-    _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
     _smooth_by_k: dict[int, Optional[Tuple[np.ndarray, np.ndarray]]] = {}
     if arrays_store is not None:
-        _smooth_single = _mean_glm_curve(arrays_store, _all_subjects, X_cols,
-                                         ild_max=ild_max, state_k=None)
-        # For K=1 (GLM) there is one curve shared by all states
-        # For K>1 compute per-state curves
         _test_W = next(
             (arrays_store[s].get("emission_weights")
              for s in _all_subjects if s in arrays_store), None
         )
         _K_fit = int(np.asarray(_test_W).shape[0]) if _test_W is not None else 1
+        _smooth_single = _mean_glm_curve(arrays_store, _all_subjects, X_cols,
+                                         ild_max=ild_max, state_k=None)
         for k in range(K):
             if _K_fit == 1:
                 _smooth_by_k[k] = _smooth_single
@@ -1730,32 +1735,27 @@ def plot_categorical_performance_all_by_state(
         for k in range(K):
             _smooth_by_k[k] = None
 
-    for k in range(K):
+    fig, axes = plt.subplots(
+        1, K, figsize=(panel_w * K, 4), sharey=True, squeeze=False
+    )
+
+    for k, ax in enumerate(axes[0]):
         lbl   = slbls.get(k, f"State {k}")
         color = _state_color(lbl, k)
         sub   = df_pd[df_pd["_state_k"] == k]
         _psych_state_panel(ax, sub, ild_col, choice_col, pred_col, subj_col,
                            color=color, label=lbl,
                            smooth_curve=_smooth_by_k.get(k))
+        ax.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
+        ax.set_ylim(0, 1)
+        ax.set_yticks([0, 0.5, 1])
+        ax.set_xlabel("ILD (dB)")
+        ax.set_title(lbl)
+        if k == 0:
+            ax.set_ylabel("P(rightward Choice)")
+        else:
+            ax.set_ylabel("")
 
-    ax.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5, label="Chance")
-    ax.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
-    ax.set_ylim(0, 1)
-    ax.set_yticks([0, 0.5, 1])
-    ax.set_xlabel("ILD (dB)")
-    ax.set_ylabel("P(rightward Choice)")
-    ax.set_title(f"Psychometric by state  (K={K})")
-
-    legend_handles = [
-        plt.matplotlib.lines.Line2D(
-            [0], [0], color=_state_color(slbls.get(k, f"State {k}"), k),
-            lw=2, label=slbls.get(k, f"State {k}"),
-        )
-        for k in range(K)
-    ]
-    ax.legend(legend_handles, [h.get_label() for h in legend_handles],
-              frameon=False, fontsize=9,
-              bbox_to_anchor=(1.01, 1), loc="upper left")
     fig.suptitle(model_name, y=1.02)
     sns.despine(fig=fig)
     fig.tight_layout()

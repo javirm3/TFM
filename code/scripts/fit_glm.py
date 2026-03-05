@@ -12,13 +12,7 @@ from scipy.optimize import minimize
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
-
-try:
-    from glmhmmt.features import build_sequence_from_df, build_sequence_from_df_2afc
-except ImportError:
-    # Fallback if running from scripts dir directly without package install
-    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-    from glmhmmt.features import build_sequence_from_df, build_sequence_from_df_2afc
+from tasks import get_adapter
 
 
 def fit_subject(
@@ -33,28 +27,16 @@ def fit_subject(
     """Fit a GLM (K=1) to a single subject."""
     
     # Force binary for 2AFC
-    if task == "2AFC":
-        num_classes = 2
+    adapter = get_adapter(task)
+    num_classes = adapter.num_classes
 
     # 1. Load Data
-    if task == "MCDR":
-        df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-        if "subject" not in df.columns: return None
-        df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
-        if len(df_sub) == 0: return None
-        
-        # GLM-HMM features builder returns (y, X, U, names, AU)
-        res = build_sequence_from_df(df_sub, tau=tau, emission_cols=emission_cols)
-        if len(res) == 5:
-             y, X, _, names, _ = res
-        else:
-             y, X, names = res
-
-    else:  # 2AFC
-        df = pl.read_parquet(paths.DATA_PATH / "alexis_combined.parquet")
-        df_sub = df.filter(pl.col("subject") == subject)
-        if len(df_sub) == 0: return None
-        y, X, names = build_sequence_from_df_2afc(df_sub, emission_cols=emission_cols)
+    df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+    df = adapter.subject_filter(df)
+    df_sub = df.filter(pl.col("subject") == subject).sort(adapter.sort_col)
+    if len(df_sub) == 0:
+        return None
+    y, X, _, names = adapter.load_subject(df_sub, tau=tau, emission_cols=emission_cols)
 
     # 2. Minimize Negative Log Likelihood
     T, M = X.shape
@@ -67,11 +49,13 @@ def fit_subject(
     if fit_lapse:
         # Parameters: [w (M,), gamma_L, gamma_R]
         # gamma_L = P(right | truly left), gamma_R = P(left | truly right)
+        # Convention: w = W_L (weight for P(Left)); last class (R) is reference.
+        # P(right) = sigmoid(-W_L @ x) = 1 / (1 + exp(W_L @ x))
         def neg_log_likelihood(w_flat):
             w      = w_flat[:M]
             gL     = w_flat[M]       # lapse → right when stimulus is left
             gR     = w_flat[M + 1]   # lapse → left  when stimulus is right
-            p_right_base = 1.0 / (1.0 + np.exp(-(X_np @ w)))
+            p_right_base = 1.0 / (1.0 + np.exp(X_np @ w))
             p_right = gL + (1.0 - gL - gR) * p_right_base
             p_right = np.clip(p_right, 1e-10, 1 - 1e-10)
             log_p_R = np.log(p_right)
@@ -82,12 +66,15 @@ def fit_subject(
         bounds   = [(-np.inf, np.inf)] * M + [(0.0, lapse_max), (0.0, lapse_max)]
         x0       = np.zeros(n_params)
     else:
+        # Convention: last class is always the softmax reference (logit=0).
+        # For 3-class: W_pair=[W_L, W_R], logits=[W_L@x, 0, W_R@x]  (C=middle=ref)
+        # For 2-class: W_pair=[W_L],       logits=[W_L@x, 0]          (R=ref)
         def neg_log_likelihood(w_flat):
             W_pair = w_flat.reshape(num_classes - 1, M)
             if num_classes == 3:
                 logits = np.stack([X_np @ W_pair[0], np.zeros(T), X_np @ W_pair[1]], axis=1)
             else:
-                logits = np.stack([np.zeros(T), X_np @ W_pair[0]], axis=1)
+                logits = np.stack([X_np @ W_pair[0], np.zeros(T)], axis=1)
             log_p = log_softmax(logits, axis=1)
             return -np.sum(log_p[np.arange(T), y_np])
 
@@ -119,19 +106,20 @@ def fit_subject(
         lapse_rates = np.zeros(2)
         w_flat_w    = w_flat
 
-    # Reconstruct W_full (C, M)
+    # Reconstruct W_full (C, M); last class is reference (weight=0).
     W_pair = w_flat_w.reshape(num_classes - 1, M)
     if num_classes == 3:
-        W_full = np.stack([W_pair[0], np.zeros(M), W_pair[1]], axis=0)  # [L, C=0, R]
+        W_full = np.stack([W_pair[0], np.zeros(M), W_pair[1]], axis=0)  # [L, C=0=ref, R]
     else:
-        W_full = np.stack([np.zeros(M), W_pair[0]], axis=0)  # [L=0, R]
+        W_full = np.stack([W_pair[0], np.zeros(M)], axis=0)  # [L, R=0=ref]
 
     # Predict (with lapses if fitted)
     if num_classes == 3:
         logits = np.stack([X_np @ W_pair[0], np.zeros(T), X_np @ W_pair[1]], axis=1)
         p_pred = softmax(logits, axis=1)
     else:
-        p_right_base = 1.0 / (1.0 + np.exp(-(X_np @ W_pair[0])))
+        # W_pair[0] = W_L; P(right) = sigmoid(-W_L @ x)
+        p_right_base = 1.0 / (1.0 + np.exp(X_np @ W_pair[0]))
         if fit_lapse:
             gL, gR = lapse_rates
             p_right = gL + (1.0 - gL - gR) * p_right_base
@@ -170,9 +158,9 @@ def save_results(result: dict, out_dir: Path, tau: float):
     W_full = result["W"]
     C, M = W_full.shape
     if C == 3:
-        W_save = W_full[[0, 2]]  # (2, M) — L and R, skip C=ref
+        W_save = W_full[[0, 2]]  # (2, M) — W_L and W_R, skip C=ref
     else:
-        W_save = W_full[[1]]     # (1, M) — R is active, L=ref(idx 0) is zeros
+        W_save = W_full[[0]]     # (1, M) — W_L (logit for P(Left)); R=ref(idx 1)=zeros
     
     W_save = W_save[None, ...] # (1, C-1, M)
 
@@ -212,9 +200,10 @@ def generate_model_id(task, tau, emission_cols, lapse: bool = False):
     config = {
         "task": task,
         "tau": float(tau),
-        "emission_cols": cols,
-        "lapse": lapse,
+        "emission_cols": cols
     }
+    if task == "2AFC":
+        config["lapse"] = lapse
     config_str = json.dumps(config, sort_keys=True)
     return hashlib.md5(config_str.encode()).hexdigest()[:8]
 
@@ -230,7 +219,7 @@ def main(
     lapse_max: float = 0.2,
 ):
     # Compute base output directory
-    base_out_dir = paths.RESULTS / "fits" / task 
+    base_out_dir = paths.RESULTS / "fits" / task / "glm"
 
     # Generate Hash
     model_hash = generate_model_id(task, tau, emission_cols, lapse=lapse)
@@ -266,16 +255,12 @@ def main(
         
     print(f"Fitting GLM | Task={task} Tau={tau} Hash={model_hash} Alias={model_alias} N={len(subjects) if subjects else 'All'}")
 
-    # Force binary for 2AFC
-    if task == "2AFC":
-        num_classes = 2
+    adapter = get_adapter(task)
+    num_classes = adapter.num_classes
 
     if subjects is None:
-        if task == "MCDR":
-            df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-            df = df.filter(pl.col("subject") != "A84")
-        else:
-            df = pl.read_parquet(paths.DATA_PATH / "alexis_combined.parquet")
+        df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+        df = adapter.subject_filter(df)
         subjects = df["subject"].unique().sort().to_list()
 
     print(f"Fitting GLM | Task={task} Tau={tau} N={len(subjects)}")

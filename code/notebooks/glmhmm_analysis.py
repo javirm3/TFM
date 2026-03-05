@@ -1,12 +1,11 @@
 import marimo
 
-__generated_with = "0.20.2"
+__generated_with = "0.20.4"
 app = marimo.App(width="full")
 
 
 @app.cell
 def _():
-
     import marimo as mo
     import sys, os
     from pathlib import Path
@@ -18,8 +17,8 @@ def _():
     import matplotlib.pyplot as plt
     import seaborn as sns
     import pandas as pd
-    from glmhmmt.features import build_sequence_from_df
     from scripts.fit_glmhmm import main as fit_main
+    from tasks import get_adapter
 
     sns.set_style("white")
 
@@ -29,79 +28,100 @@ def _():
         label="Task:",
     )
     ui_task
-    return (
-        build_sequence_from_df,
-        fit_main,
-        mo,
-        np,
-        paths,
-        pl,
-        plt,
-        sns,
-        ui_task,
+    return fit_main, get_adapter, mo, np, paths, pl, plt, sns, ui_task
+
+
+@app.cell
+def _(get_adapter, paths, pl, ui_task):
+    adapter = get_adapter(ui_task.value)
+    df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+    df_all = adapter.subject_filter(df_all)
+    plots = adapter.get_plots()
+    return adapter, df_all, plots
+
+
+@app.cell
+def _(mo, paths, ui_task):
+    import json as _json
+    _fits_path = paths.RESULTS / "fits" / ui_task.value / "glmhmm"
+    _existing_opts = []
+    if _fits_path.exists():
+        _existing_opts = sorted([
+            d.name for d in _fits_path.iterdir()
+            if d.is_dir() and (d / "config.json").exists()
+        ])
+    ui_existing = mo.ui.dropdown(
+        options=_existing_opts,
+        value=None,
+        label="Load existing model (overrides params below)",
+    )
+    ui_existing
+    return (ui_existing,)
+
+
+@app.cell
+def _(paths, ui_existing, ui_task):
+    import json as _json
+    loaded_cfg: dict = {}
+    if ui_existing.value:
+        _cfg_path = (
+            paths.RESULTS / "fits" / ui_task.value / "glmhmm" / ui_existing.value / "config.json"
+        )
+        if _cfg_path.exists():
+            loaded_cfg = _json.loads(_cfg_path.read_text())
+    # loaded_cfg
+    return (loaded_cfg,)
+
+
+@app.cell
+def _(adapter, df_all, loaded_cfg: dict, mo, ui_existing):
+    # ── controls ───────────────────────────────────────────────────────────────
+    is_2afc = adapter.num_classes == 2
+    emission_cols_opts = (
+        adapter.default_emission_cols() + adapter.sf_cols(df_all)
+        if is_2afc
+        else adapter.default_emission_cols()
     )
 
+    # Seed from loaded config if a model was selected
+    _K_val = loaded_cfg.get("K_list", [2])[0] if loaded_cfg.get("K_list") else 2
+    _tau_val = loaded_cfg.get("tau", 50)
+    _ecols_saved = loaded_cfg.get("emission_cols", [])
+    _ecols_valid = [c for c in _ecols_saved if c in emission_cols_opts]
+    _ecols_val = _ecols_valid if _ecols_valid else emission_cols_opts
+    _model_id_val = loaded_cfg.get("model_id", "glmhmm_2")
 
-@app.cell
-def _(paths, pl, ui_task):
-    df_all = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-    df_all = df_all.filter(pl.col("subject") != "A84")
-    if ui_task.value == "2AFC":
-        df_all = pl.read_parquet(paths.DATA_PATH / "alexis_combined.parquet")
-        df_all = df_all.filter(pl.col("experiment").is_in(['2AFC_2', '2AFC_3', '2AFC_4', '2AFC_6']))
-        import glmhmmt.plots_alexis as plots
-    else:
-        import glmhmmt.plots as plots
-    df_all
-    return df_all, plots
-
-
-@app.cell
-def _(df_all, mo):
-    from glmhmmt.features import _ALL_EMISSION_COLS, _ALL_TRANSITION_COLS, _ALL_2AFC_EMISSION_COLS, _SF_COL_PREFIX
-    # ── controls ──────────────────────────────────────────────────────────────
-
-    is_2afc = "experiment" in df_all.columns
-    if is_2afc:
-        _sf_cols = [c for c in df_all.columns if c.startswith(_SF_COL_PREFIX)]
-        emission_cols = [c for c in _ALL_2AFC_EMISSION_COLS if c != "stim_strength"] + _sf_cols
-    else:
-        emission_cols = _ALL_EMISSION_COLS
-
-    ui_K = mo.ui.slider(start=2, stop=6, value=2, label="K")
+    ui_K = mo.ui.slider(start=2, stop=6, value=_K_val, label="K")
     ui_subjects = mo.ui.multiselect(
         value=df_all["subject"].unique(),
-        options=df_all["subject"].unique(),  # replace with dynamic list
+        options=df_all["subject"].unique().sort(),
         label="Subjects",
     )
     ui_tau = mo.ui.slider(
         start=1,
         stop=200,
-        value=50,
+        value=_tau_val,
         step=1,
         label="τ action trace half-life",
     )
     ui_emission_cols = mo.ui.multiselect(
-        options=emission_cols,
-        value=emission_cols,
+        options=emission_cols_opts,
+        value=_ecols_val,
         label="Emission regressors (X)",
     )
 
-
     ui_model_id = mo.ui.text(
-        value="glmhmm_2",
+        value=_model_id_val,
         label="Model ID (used as output folder name)",
-        full_width=True,
     )
-
-
 
     fit_button = mo.ui.run_button(label="Run fit")
     mo.vstack(
         [
             mo.md("### Configuration"),
+            mo.hstack([ui_existing, ui_model_id]),
             mo.hstack([ui_K, ui_tau, ui_subjects, ui_emission_cols]),
-            mo.hstack([fit_button]), ui_model_id
+            mo.hstack([fit_button]), 
         ],
         align="center",
     )
@@ -120,7 +140,6 @@ def _(df_all, mo):
 def _(
     fit_button,
     fit_main,
-    is_2afc,
     mo,
     paths,
     ui_K,
@@ -130,10 +149,11 @@ def _(
     ui_task,
     ui_tau,
 ):
+
     mo.stop(
         not fit_button.value, mo.md("Configure parameters and press **Run fit**.")
     )
-    _OUT =  paths.RESULTS / "fits" / ui_task.value / ui_model_id.value
+    _OUT =  paths.RESULTS / "fits" / ui_task.value / "glmhmm" / ui_model_id.value
     with mo.status.spinner(
         title=f"Fitting GLM-HMM K={ui_K.value} τ={ui_tau.value} for {ui_subjects.value}..."
     ):
@@ -143,8 +163,7 @@ def _(
                 out_dir=_OUT,
                 tau=ui_tau.value,
                 emission_cols=ui_emission_cols.value,
-                num_classes=2 if is_2afc else 3,
-                task = ui_task.value,
+                task=ui_task.value,
             )
     mo.md("✅ Fit complete — plots below update automatically.")
     return
@@ -152,9 +171,8 @@ def _(
 
 @app.cell
 def _(
-    build_sequence_from_df,
+    adapter,
     df_all,
-    is_2afc,
     np,
     paths,
     pl,
@@ -168,81 +186,32 @@ def _(
     K = ui_K.value
 
     selected = ui_subjects.value
-    OUT =  paths.RESULTS / "fits"/ ui_task.value / ui_model_id.value
-    # load feature names from data
-    _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value))
-    if is_2afc:
-        from glmhmmt.features import build_sequence_from_df_2afc
-        _, _, names = build_sequence_from_df_2afc(_df_sel, emission_cols=ui_emission_cols.value)
-    else:
-        _df_sel = _df_sel.sort("trial_idx")
-        _, _, _, names, _ = build_sequence_from_df(_df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value)
+    OUT = paths.RESULTS / "fits" / ui_task.value / "glmhmm" / ui_model_id.value
+    # load feature names via adapter
+    _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(adapter.sort_col)
+    _, _, _, names = adapter.load_subject(_df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value)
 
     arrays_store = {}
     for _subj in ui_subjects.value:
         _f = OUT / f"{_subj}_K{K}_glmhmm_arrays.npz"
         if _f.exists():
             _d = dict(np.load(_f, allow_pickle=True))
-            # decode column names saved as string arrays; fall back to build output
+            # decode column names saved as string arrays; fall back to adapter output
             _d["X_cols"] = (
                 list(_d["X_cols"]) if "X_cols" in _d else names["X_cols"]
             )
             arrays_store[_subj] = _d
 
-    arrays_store
-    return K, arrays_store, names, selected
+    # arrays_store
+    return K, arrays_store, names
 
 
 @app.cell
-def _(K, arrays_store, names, np, ui_subjects):
-    # ── State labelling: Engaged / Disengaged per subject ────────────────────
-    # S_coh score = mean(W[k, class_L, fi_SL], W[k, class_R, fi_SR])
-    # The state with highest S_coh is "Engaged"; the rest are "Disengaged".
-    # SC is excluded (no lateralised direction → not informative for engagement).
+def _(K, adapter, arrays_store, names, ui_subjects):
+    # ── State labelling — task-specific criteria via adapter ─────────────────
     _selected = [s for s in ui_subjects.value if s in arrays_store]
-
-
-    def _scoh_score(W, feat_names):
-        """Return S_coh engagement score per state (shape: K,)."""
-        _name2fi = {n: i for i, n in enumerate(feat_names)}
-        scores = np.zeros(W.shape[0])
-        n_terms = 0
-        if "SL" in _name2fi:
-            scores += W[:, 0, _name2fi["SL"]]
-            n_terms += 1
-        if "SR" in _name2fi:
-            scores += W[:, 1, _name2fi["SR"]]
-            n_terms += 1
-        return scores / max(1, n_terms)
-
-
-    _feat_names = names.get("X_cols", [])  # fallback; per-subject override below
-    state_labels = {}  # subj -> {state_idx: label_str}
-    state_order = {}  # subj -> [state_idx, ...] sorted by S_coh desc
-
-    for _subj in _selected:
-        _W = arrays_store[_subj].get("emission_weights")
-        if _W is None:
-            state_labels[_subj] = {k: f"State {k + 1}" for k in range(K)}
-            state_order[_subj] = list(range(K))
-            continue
-        # prefer column names saved alongside this subject's fit
-        _feat_names_subj = arrays_store[_subj].get("X_cols", _feat_names)
-        _scores = _scoh_score(_W, _feat_names_subj)
-        _ranking = list(np.argsort(_scores)[::-1])
-        _labels = {}
-        _dis_idx = 1
-        for _rank, _k in enumerate(_ranking):
-            if _rank == 0:
-                _labels[int(_k)] = "Engaged"
-            else:
-                _labels[int(_k)] = (
-                    "Disengaged" if K == 2 else f"Disengaged {_dis_idx}"
-                )
-                _dis_idx += 1
-        state_labels[_subj] = _labels
-        state_order[_subj] = [int(k) for k in _ranking]
-    return (state_labels,)
+    state_labels, state_order = adapter.label_states(arrays_store, names, K, _selected)
+    return state_labels, state_order
 
 
 @app.cell
@@ -375,6 +344,7 @@ def _(
 @app.cell
 def _(
     K,
+    adapter,
     arrays_store,
     df_all,
     is_2afc,
@@ -388,32 +358,40 @@ def _(
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
+    _sort_col = adapter.sort_col
+    _ses_col = adapter.session_col
 
-    _sort_col = "trial" if is_2afc else "trial_idx"
     _frames = []
     for _subj in _selected:
-        _p_pred = arrays_store[_subj]["p_pred"]  # (T, 2) for 2AFC, (T, 3) for 3AFC
+        _p_pred = arrays_store[_subj]["p_pred"]
         _n_classes = _p_pred.shape[1]
         _df_sub = (
             df_all.filter(pl.col("subject") == _subj)
             .sort(_sort_col)
-            .filter(pl.col("session").count().over("session") >= 2)
+            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
         )
         _cols = [pl.Series("pred_choice", np.argmax(_p_pred, axis=1).astype(int))]
         if _n_classes == 2:
             _cols += [pl.Series("pL", _p_pred[:, 0]), pl.Series("pR", _p_pred[:, 1])]
         else:
-            _cols += [pl.Series("pL", _p_pred[:, 0]), pl.Series("pC", _p_pred[:, 1]), pl.Series("pR", _p_pred[:, 2])]
-        _df_sub = _df_sub.with_columns(_cols)
-        _frames.append(_df_sub)
+            _cols += [
+                pl.Series("pL", _p_pred[:, 0]),
+                pl.Series("pC", _p_pred[:, 1]),
+                pl.Series("pR", _p_pred[:, 2]),
+            ]
+        if len(_df_sub) == len(_p_pred):
+            _frames.append(_df_sub.with_columns(_cols))
+        else:
+            print(f"\u26a0\ufe0f  {_subj}: length mismatch ({len(_df_sub)} vs {len(_p_pred)}), skipping")
 
+    mo.stop(not _frames, mo.md("No subjects with matching data lengths."))
     _df_all_pred = pl.concat(_frames)
     _plot_df = plots.prepare_predictions_df(_df_all_pred)
-    _fig_all, _ = plots.plot_categorical_performance_all(_plot_df, f"glmhmm K={K}")
+    _perf_kwargs = {"arrays_store": arrays_store} if is_2afc else {}
+    _fig_all, _ = plots.plot_categorical_performance_all(_plot_df, f"glmhmm K={K}", **_perf_kwargs)
 
-    # ── per-state overlay — pool all subjects with normalised state ranks ─────
-    # Normalise: 0 = Engaged, 1 = Disengaged, … per-subject regardless of raw idx
-    _lrank_map = { "Engaged": 0, "Disengaged": 1, **{f"Disengaged {i}": i for i in range(1, K)},}
+    # ── per-state pool with normalised rank indices ───────────────────────────
+    _lrank_map = {"Engaged": 0, "Disengaged": 1, **{f"Disengaged {i}": i for i in range(1, K)}}
     _pool_dfs = []
     _pool_assigns = []
     for _subj in _selected:
@@ -423,66 +401,72 @@ def _(
         if _nc_s == 2:
             _pred_cols_s += [pl.Series("pL", _p_pred_s[:, 0]), pl.Series("pR", _p_pred_s[:, 1])]
         else:
-            _pred_cols_s += [pl.Series("pL", _p_pred_s[:, 0]), pl.Series("pC", _p_pred_s[:, 1]), pl.Series("pR", _p_pred_s[:, 2])]
+            _pred_cols_s += [
+                pl.Series("pL", _p_pred_s[:, 0]),
+                pl.Series("pC", _p_pred_s[:, 1]),
+                pl.Series("pR", _p_pred_s[:, 2]),
+            ]
         _df_s = (
             df_all.filter(pl.col("subject") == _subj)
             .sort(_sort_col)
-            .filter(pl.col("session").count().over("session") >= 2)
+            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
             .with_columns(_pred_cols_s)
         )
+        if len(_df_s) != _p_pred_s.shape[0]:
+            continue
         _plot_df_s = plots.prepare_predictions_df(_df_s)
         _gamma_s = arrays_store[_subj]["smoothed_probs"]
-        # Both must have the same length — if not, session filtering diverged
-        # between the fit script and this notebook.
         _T_s = _gamma_s.shape[0]
+        _map_k = np.argmax(_gamma_s, axis=1).astype(int)
 
-        # ── per-state emission prediction: softmax(W_k × x) for MAP state k ───────
-        # Using the marginal p_pred (blended over all states) makes every
-        # state's model line look the same.  Instead look up the emission of
-        # the MAP-assigned state directly from the saved weights.
-        _W = np.asarray(
-            arrays_store[_subj]["emission_weights"]
-        )  # (K, C-1, n_feat)
-        _X_s = np.asarray(arrays_store[_subj]["X"])  # (T, n_feat)
-        _logits = np.einsum("kci,ti->tkc", _W, _X_s)  # (T, K, C-1)
-        _nc_logits = _logits.shape[2] + 1  # actual number of classes
-        if _nc_logits == 2:
-            # binary: logits shape (T, K, 1) → append reference class 0
-            _logits_full = np.concatenate(
-                [_logits, np.zeros((_T_s, K, 1))], axis=2
-            )  # (T, K, 2) → [L, ref=R]
+        # ── per-state emission: replace marginal p_pred with state-specific P ──
+        _W = np.asarray(arrays_store[_subj]["emission_weights"])  # (K, C-1, M)
+        _X_s = np.asarray(arrays_store[_subj]["X"])               # (T, M)
+        if is_2afc:
+            # Binary: W[k,0,:] = logit for P(LEFT); P(right|k,t) = sigmoid(-logit)
+            _logit_left = np.einsum("km,tm->tk", _W[:, 0, :], _X_s)  # (T, K)
+            _p_right_per_state = 1.0 / (1.0 + np.exp(_logit_left))    # (T, K) P(right|state)
+            _p_state_pR = _p_right_per_state[np.arange(_T_s), _map_k]  # (T,)
+            _p_state_pL = 1.0 - _p_state_pR
+            _plot_df_s = _plot_df_s.with_columns([
+                pl.Series("pR", _p_state_pR.astype(np.float64)),
+                pl.Series("pL", _p_state_pL.astype(np.float64)),
+                pl.Series("p_pred", _p_state_pR.astype(np.float64)),
+            ])
         else:
-            # 3-class: insert reference class C in middle
-            _logits_full = np.concatenate(
-                [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]],
-                axis=2,
-            )  # (T, K, 3) → [L, 0, R]
-        _lse = _logits_full.max(axis=2, keepdims=True)
-        _exp = np.exp(_logits_full - _lse)
-        _p_state = _exp / _exp.sum(axis=2, keepdims=True)  # (T, K, C)
-        _map_k = np.argmax(_gamma_s, axis=1).astype(int)  # (T,)
-        _stim = _plot_df_s["stimulus"].to_numpy().astype(int)  # (T,)
-        _p_state_correct = _p_state[np.arange(_T_s), _map_k, _stim]  # (T,)
-        # build per-state df with state-k emission replacing the marginal
-        _plot_df_state_s = _plot_df_s.with_columns(
-            pl.Series("p_model_correct", _p_state_correct.astype(np.float64))
-        )
-        _pool_dfs.append(_plot_df_state_s)
+            _logits = np.einsum("kci,ti->tkc", _W, _X_s)
+            _nc_logits = _logits.shape[2] + 1
+            if _nc_logits == 2:
+                _logits_full = np.concatenate([_logits, np.zeros((_T_s, K, 1))], axis=2)
+            else:
+                _logits_full = np.concatenate(
+                    [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]],
+                    axis=2,
+                )
+            _lse = _logits_full.max(axis=2, keepdims=True)
+            _exp = np.exp(_logits_full - _lse)
+            _p_state = _exp / _exp.sum(axis=2, keepdims=True)
+            _stim = _plot_df_s["stimulus"].to_numpy().astype(int)
+            _p_state_correct = _p_state[np.arange(_T_s), _map_k, _stim]
+            _plot_df_s = _plot_df_s.with_columns(
+                pl.Series("p_model_correct", _p_state_correct.astype(np.float64))
+            )
+
+        _pool_dfs.append(_plot_df_s)
         _slbls = state_labels[_subj]
-        _raw = _map_k  # reuse already-computed MAP assignment
-        _norm = np.array([_lrank_map.get(_slbls.get(int(k), ""), k) for k in _raw])
+        _norm = np.array([_lrank_map.get(_slbls.get(int(k), ""), k) for k in _map_k])
         _pool_assigns.append(_norm)
 
     _df_state_pool = pl.concat(_pool_dfs)
     _assign_pool = np.concatenate(_pool_assigns)
-    _state_lbl_global = {
-        0: "Engaged",
-        1: "Disengaged",
-        **{i: f"Disengaged {i}" for i in range(2, K)},
-    }
-    _fig_state, _ = plots.plot_categorical_performance_by_state(df=_df_state_pool,smoothed_probs=None,state_assign=_assign_pool,
-                                                                state_labels=_state_lbl_global,model_name=f"glmhmm K={K} — per state",)
-
+    _state_lbl_global = {0: "Engaged", 1: "Disengaged", **{i: f"Disengaged {i}" for i in range(2, K)}}
+    _fig_state, _ = plots.plot_categorical_performance_by_state(
+        df=_df_state_pool,
+        smoothed_probs=None,
+        state_assign=_assign_pool,
+        state_labels=_state_lbl_global,
+        model_name=f"glmhmm K={K} \u2014 per state",
+    )
     mo.vstack(
         [
             mo.md("### Categorical plots for accuracy"),
@@ -552,10 +536,19 @@ def _(df_all, mo):
 
 
 @app.cell
-def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
+def _(
+    K,
+    adapter,
+    arrays_store,
+    df_all,
+    mo,
+    plots,
+    state_labels,
+    ui_subjects_traj,
+):
     selected_traj = [s for s in ui_subjects_traj.value if s in arrays_store]
     mo.stop(not selected_traj, mo.md("Select subjects above to view session trajectories."))
-    _fig_traj = plots.plot_session_trajectories( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, K=K, subjects=selected_traj,)
+    _fig_traj = plots.plot_session_trajectories( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, K=K, subjects=selected_traj, session_col=adapter.session_col,)
     mo.vstack([
         mo.md(f"### c. Average state-probability trajectories within a session  (K={K})"),
         mo.md("> Mean ± 1 s.e.m. across sessions for the selected subjects."),
@@ -565,10 +558,19 @@ def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
 
 
 @app.cell
-def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
+def _(
+    K,
+    adapter,
+    arrays_store,
+    df_all,
+    mo,
+    plots,
+    state_labels,
+    ui_subjects_traj,
+):
     selected_occ = [s for s in ui_subjects_traj.value if s in arrays_store]
     mo.stop(not selected_occ, mo.md("Select subjects above."))
-    _fig_occ = plots.plot_state_occupancy(arrays_store=arrays_store,state_labels=state_labels,df_all=df_all,K=K,subjects=selected_occ,)
+    _fig_occ = plots.plot_state_occupancy(arrays_store=arrays_store,state_labels=state_labels,df_all=df_all,K=K,subjects=selected_occ, session_col=adapter.session_col,)
     mo.vstack([
         mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
         mo.md(
@@ -595,11 +597,12 @@ def _(arrays_store, mo, ui_subjects):
 
 
 @app.cell
-def _(arrays_store, df_all, mo, pl, ui_session_subj):
+def _(adapter, arrays_store, df_all, mo, pl, ui_session_subj):
+    _ses_col = adapter.session_col
     _sess_opts = (
         sorted(
             df_all.filter(pl.col("subject") == ui_session_subj.value)
-            .filter(pl.col("session").count().over("session") >= 2)["session"]
+            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)[_ses_col]
             .unique()
             .to_list()
         )
@@ -623,11 +626,11 @@ def _(arrays_store, df_all, mo, pl, ui_session_subj):
 @app.cell
 def _(
     K,
+    adapter,
     arrays_store,
     df_all,
     mo,
     plots,
-    selected,
     state_labels,
     ui_session_id,
     ui_session_subj,
@@ -639,8 +642,8 @@ def _(
     )
 
     _sess = ui_session_id.value
-    _sort_col_dd = "trial" if "2AFC" in str(df_all["experiment"][0]) else "trial_idx"
-    _fig = plots.plot_session_deepdive( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, names=arrays_store[selected[0]], K=K, subj=_subj, sess=_sess,)
+    _sort_col_dd = adapter.sort_col
+    _fig = plots.plot_session_deepdive( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, names=arrays_store[_subj], K=K, subj=_subj, sess=_sess, session_col=adapter.session_col,)
     mo.vstack([
         mo.md(f"### Session statistics  (K={K})"),
         mo.hstack([ui_session_subj, ui_session_id]),
@@ -776,6 +779,186 @@ def _(K, df_all, mo, np, paths, pl, plt, sns, ui_subjects):
         ],
         align="center",
     )
+    return
+
+
+@app.cell
+def _(mo, ui_task):
+
+    # ── SSM GLM-HMM safety check (2AFC only) ──────────────────────────────────
+    mo.stop(
+        ui_task.value != "2AFC",
+        mo.md("ℹ️ **SSM safety check is only available for the 2AFC task.** Switch task to 2AFC above."),
+    )
+    ssm_run_btn = mo.ui.run_button(label="▶ Run SSM safety check")
+    mo.vstack([
+        mo.md("### SSM GLM-HMM safety check (2AFC)"),
+        mo.md(
+            "Fits a K-state GLM-HMM using the **SSM library** (`input_driven_obs`, `standard` "
+            "transitions) with the exact same covariates as the custom model.  \n"
+            "SSM uses a different EM implementation (no custom stickiness prior, "
+            "standard Baum-Welch) which often yields smoother posteriors — useful as a sanity check."
+        ),
+        ssm_run_btn,
+    ])
+    return (ssm_run_btn,)
+
+
+@app.cell
+def _(
+    K,
+    adapter,
+    arrays_store,
+    df_all,
+    mo,
+    names,
+    np,
+    pl,
+    plt,
+    sns,
+    ssm_run_btn,
+    state_labels,
+    state_order,
+    ui_subjects,
+    ui_trial_range,
+):
+
+    # ── SSM fit + posterior plot ───────────────────────────────────────────────
+    mo.stop(not ssm_run_btn.value, mo.md("Press **▶ Run SSM safety check** above to fit."))
+
+    import ssm as _ssm_lib
+    from scripts.fit_glmhmm import _valid_trial_mask as _vtm
+
+    _STIM_NAMES_SSM = {"stim_vals", "stim_d", "ild_norm", "ILD", "ild",
+                       "stimulus", "net_ild", "stim_strength"}
+
+    _ssm_subjects = [s for s in ui_subjects.value if s in arrays_store]
+    mo.stop(not _ssm_subjects, mo.md("No fitted arrays found — run the custom fit first."))
+
+    _ssm_results = {}
+
+    with mo.status.spinner(title="Fitting SSM GLM-HMM…"):
+        for _subj in _ssm_subjects:
+            _X   = arrays_store[_subj]["X"]   # (T, n_feat) — already session-filtered
+            _y   = arrays_store[_subj]["y"]   # (T,)
+
+            # Reconstruct session ids with same mask as fit_subject()
+            _df_s    = df_all.filter(pl.col("subject") == _subj).sort(adapter.sort_col)
+            _sess_raw = _df_s[adapter.session_col].to_numpy()
+            _mask_s  = _vtm(_sess_raw)
+            _sess_ids = _sess_raw[_mask_s]
+
+            # Split into per-session lists — SSM expects list of arrays
+            _uniq_sess = list(dict.fromkeys(_sess_ids.tolist()))
+            _choices_list, _inputs_list = [], []
+            for _sid in _uniq_sess:
+                _idx = np.where(_sess_ids == _sid)[0]
+                _choices_list.append(_y[_idx].reshape(-1, 1).astype(int))
+                _inputs_list.append(_X[_idx].astype(float))
+
+            # Initialise and fit
+            _obs_dim   = 1
+            _n_cats    = 2
+            _n_feat    = _X.shape[1]
+            _glmhmm_s  = _ssm_lib.HMM(
+                K, _obs_dim, _n_feat,
+                observations="input_driven_obs",
+                observation_kwargs=dict(C=_n_cats),
+                transitions="standard",
+            )
+            _glmhmm_s.fit(
+                _choices_list, inputs=_inputs_list,
+                method="em", num_iters=200, tolerance=1e-4,
+            )
+
+            # Extract quantities
+            _W_ssm    = -_glmhmm_s.observations.params          # (K, C-1, n_feat); flip sign
+            _trans_ssm = _glmhmm_s.transitions.transition_matrix  # (K, K)
+            _gamma_ssm = np.vstack([
+                _glmhmm_s.expected_states(data=d, input=inp)[0]
+                for d, inp in zip(_choices_list, _inputs_list)
+            ])  # (T, K)
+
+            # Identify "Engaged" state: highest |stim weight| (W[:, 0, stim_idx])
+            _feat_names_s = list(arrays_store[_subj].get("X_cols", names.get("X_cols", [])))
+            _stim_idx_s   = next(
+                (i for i, n in enumerate(_feat_names_s) if n in _STIM_NAMES_SSM), None
+            )
+            if _stim_idx_s is not None and _W_ssm.ndim == 3:
+                _scores_s = np.abs(_W_ssm[:, 0, _stim_idx_s])
+            else:
+                _scores_s = np.zeros(K)
+            _engaged_ssm = int(np.argmin(_scores_s))
+
+            _ssm_results[_subj] = {
+                "gamma": _gamma_ssm,
+                "W":     _W_ssm,
+                "trans": _trans_ssm,
+                "y":     _y,
+                "engaged_k": _engaged_ssm,
+            }
+
+    # ── Plot: SSM posterior vs custom posterior (Engaged state) ──────────────
+    _n_s   = len(_ssm_subjects)
+    _t0_s, _t1_s = ui_trial_range.value
+    _fig_ssm, _axes_ssm = plt.subplots(
+        _n_s, 1, figsize=(14, 3 * _n_s), squeeze=False
+    )
+
+    for _i, _subj in enumerate(_ssm_subjects):
+        _ax = _axes_ssm[_i, 0]
+
+        # SSM engaged posterior (already identified above)
+        _g_ssm = _ssm_results[_subj]["gamma"][_t0_s:_t1_s + 1]   # (window, K)
+        _ek    = _ssm_results[_subj]["engaged_k"]
+        _p_ssm_eng = _g_ssm[:, _ek]
+
+        # Custom model's Engaged state for this subject
+        _slbl  = state_labels.get(_subj, {})
+        _ek_custom = next(
+            (k for k, lbl in _slbl.items() if lbl == "Engaged"),
+            state_order.get(_subj, [0])[0],
+        )
+        _g_custom = arrays_store[_subj]["smoothed_probs"][_t0_s:_t1_s + 1]  # (window, K)
+        _p_custom_eng = _g_custom[:, _ek_custom]
+
+        _x_w = np.arange(_t0_s, _t0_s + len(_p_ssm_eng))
+
+        _ax.plot(_x_w, _p_custom_eng, color="steelblue",  lw=1.2, alpha=0.85, label="Custom (stickiness)")
+        _ax.plot(_x_w, _p_ssm_eng,    color="darkorange", lw=1.2, alpha=0.85, linestyle="--", label="SSM (standard)")
+
+        # Choice rug
+        _y_w = arrays_store[_subj]["y"][_t0_s:_t1_s + 1].astype(int)
+        for _resp, _col, _lbl in [(0, "royalblue", "L"), (1, "gold", "R")]:
+            _m = _y_w == _resp
+            _ax.scatter(
+                _x_w[_m], np.ones(_m.sum()) * 1.03,
+                c=_col, s=4, marker="|",
+                transform=_ax.get_xaxis_transform(), clip_on=False,
+            )
+
+        _ax.set_xlim(_t0_s, _t0_s + len(_p_ssm_eng) - 1)
+        _ax.set_ylim(0, 1)
+        _ax.set_ylabel("P(Engaged)")
+        _ax.set_title(f"Subject {_subj}  — SSM state {_ek} vs Custom state {_ek_custom}")
+        _ax.legend(fontsize=8, frameon=False, loc="upper right")
+
+    _axes_ssm[-1, 0].set_xlabel("Trial")
+    _fig_ssm.tight_layout()
+    sns.despine(fig=_fig_ssm)
+
+    mo.vstack([
+        mo.md(f"### SSM GLM-HMM sanity check — P(Engaged)  (K={K})"),
+        mo.md(
+            "**Blue** = custom model posterior (with transition stickiness prior).  \n"
+            "**Dashed orange** = SSM posterior (standard Baum-Welch, no stickiness).  \n"
+            "SSM typically yields smoother posteriors because it lacks the stickiness "
+            "prior that keeps the custom model in its current state, and because SSM's "
+            "EM runs unconstrained for longer. Large discrepancies may indicate the "
+            "stickiness prior is over-regularising state transitions."
+        ),
+        _fig_ssm,
+    ], align="center")
     return
 
 

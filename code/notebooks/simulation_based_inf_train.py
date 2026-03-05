@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.19.10"
+__generated_with = "0.20.4"
 app = marimo.App(
     width="medium",
     layout_file="layouts/simulation_based_inf_train.slides.json",
@@ -53,9 +53,9 @@ def _():
     df["stimd_c"] = df["stimd_n"].map(stim_map)
     df["ttype_c"] = df["ttype_n"].map(ttype_map)
     TEMPLATE_THETA_FULL = np.array(
-        [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0], dtype=float
+        [0.0, 0.0, 0.0, 1.0, 0.0, 0.3, 0.0, -1.0, 0.0, 0.0], dtype=float
     )
-    FREE_TO_FULL = np.array([0, 2, 4, 5, 6], dtype=int)
+    FREE_TO_FULL = np.array([0, 2, 4, 6], dtype=int)
 
     DT = np.float32(0.1 / 40.0)
     TH1 = np.float32(0.0)
@@ -94,7 +94,7 @@ def _(np):
     def validate_and_encode(
         df, stim_col="stimd_c", delay_col="ttype_c", side_col="x_c", resp_col="r_c"
     ):
-        stim_map = {"VG": 0, "SS": 1, "SM": 2, "SL": 3, "SIL": 4}
+        stim_map = {"SIL": 0, "SS": 1, "SM": 2, "SL": 3, "VG": 4}
         side_map = {"L": 0, "C": 1, "R": 2, "SIL": 3}
         resp_map = {"L": 0, "C": 1, "R": 2}
         delay_map = {"DS": 0, "DM": 1, "DL": 2}
@@ -160,7 +160,6 @@ def _(Gamma, MultipleIndependent, Normal, df, mo, torch, validate_and_encode):
             sPrior,
             sPrior,
             stimulus_amplitude_prior,
-            stimulus_tail_duration_prior,
             urgency_amplitude_prior,
         ],
         validate_args=False,
@@ -177,10 +176,10 @@ def _(cfg, plt, prior, sns, torch):
     with torch.no_grad():
         samp = prior.sample((50_000,)).reshape(50_000, -1).cpu().numpy()
 
-    names = ["sL", "sR", "S_amp", "dS", "U_amp"]
+    names = ["sL", "sR", "S_amp", "U_amp"]
     cols = [
         cfg["colors"]["parameters"][k]
-        for k in ["sL", "sR", "S_amplitude", "S_d", "U_int_amplitude"]
+        for k in ["sL", "sR", "S_amplitude", "U_int_amplitude"]
     ]
 
     fig, axes = plt.subplots(2, 3, figsize=(12, 6))

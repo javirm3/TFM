@@ -5,7 +5,7 @@ from numba import njit, prange
 def onset_offset_from_codes(stim, delay, t1, t2, t3, t4):
     # stim: 0 VG,1 SS,2 SM,3 SL,4 SIL ; delay: 0 DS,1 DM,2 DL
     if stim == 0:
-        return 0.0, t4
+        return 0.0, 0.0
     elif stim == 1:  # SS
         if delay == 0:
             return t2, t3
@@ -21,7 +21,7 @@ def onset_offset_from_codes(stim, delay, t1, t2, t3, t4):
     elif stim == 3:  # SL
         return 0.0, t3
     else:            # SIL
-        return 0.0, 0.0
+        return 0.0, t4
 
 
 @njit

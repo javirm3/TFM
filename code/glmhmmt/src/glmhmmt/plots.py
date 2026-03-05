@@ -732,7 +732,7 @@ def plot_emission_weights(
     names        : dict with key "X_cols"
     K            : number of states
     subjects     : subject IDs to include
-    save_path    : optional Path – agonist figure is saved there if provided
+    save_path    : optional Path - agonist figure is saved there if provided
 
     Returns
     -------
@@ -743,21 +743,21 @@ def plot_emission_weights(
     _ag_records  = []
     _feat_names  = names.get("X_cols", [])
 
-    for _subj in subjects:
-        if _subj not in arrays_store:
+    for subject in subjects:
+        if subject not in arrays_store:
             continue
-        _W      = arrays_store[_subj]["emission_weights"]   # (K, 2, n_feat)
+        _W      = arrays_store[subject]["emission_weights"]   # (K, 2, n_feat)
         _n      = _W.shape[2]
-        _fnames = (arrays_store[_subj].get("X_cols") or names.get("X_cols", []))[:_n]
+        _fnames = (arrays_store[subject].get("X_cols") or names.get("X_cols", []))[:_n]
         _f2i    = {f: i for i, f in enumerate(_fnames)}
         _feat_names = _fnames   # keep last subject's list for per-class axis labels
 
         for _k in range(_W.shape[0]):
-            _slbl = state_labels.get(_subj, {}).get(_k, f"State {_k}")
+            _slbl = state_labels.get(subject, {}).get(_k, f"State {_k}")
             for _c in range(_W.shape[1]):
                 for _fi, _fn in enumerate(_fnames):
                     _records.append({
-                        "subject":     _subj,
+                        "subject":     subject,
                         "state":       _slbl,
                         "class":       _c,
                         "class_label": _CLS_LABELS[_c] if _c < len(_CLS_LABELS) else f"Class {_c}",
@@ -789,7 +789,7 @@ def plot_emission_weights(
                         _vals.append((_p[0] + _p[2]) / 2 - _BASE) # avg lateral
                 if _vals:
                     _ag_records.append({
-                        "subject": _subj,
+                        "subject": subject,
                         "state":   _slbl,
                         "feature": _grp_label,
                         "weight":  float(np.mean(_vals)),

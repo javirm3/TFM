@@ -1,4 +1,6 @@
 # filepath: /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/scripts/fit_glmhmm.py
+import hashlib
+import json
 import numpy as np
 import polars as pl
 import jax.numpy as jnp
@@ -8,8 +10,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
 from glmhmmt.model import SoftmaxGLMHMM
-from glmhmmt.features import build_sequence_from_df, build_sequence_from_df_2afc
+from tasks import get_adapter
 
+
+def generate_model_id(task: str, K: int, tau: float, emission_cols: list | None = None) -> str:
+    """Stable 8-char MD5 hash over (task, K, tau, sorted emission_cols)."""
+    cols = sorted(emission_cols) if emission_cols else []
+    config = {"task": task, "K": int(K), "tau": float(tau), "emission_cols": cols}
+    return hashlib.md5(json.dumps(config, sort_keys=True).encode()).hexdigest()[:8]
 
 
 def _valid_trial_mask(session_ids: np.ndarray, min_length: int = 2) -> np.ndarray:
@@ -29,19 +37,15 @@ def fit_subject(
     emission_cols: list[str] | None = None,
     stickiness: float = 10.0,
     tau: float = 50.0,
-    num_classes: int = 3,
     task: str = "MCDR",
 ) -> dict:
-    if task == "MCDR":
-        df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-        df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
-        y, X, _, names, _ = build_sequence_from_df(df_sub, tau=tau, emission_cols=emission_cols)
-        session_ids = df_sub["session"].to_numpy()
-    else:  # 2AFC task
-        df = pl.read_parquet(paths.DATA_PATH / "alexis_combined.parquet")
-        df_sub = df.filter(pl.col("subject") == subject)
-        y, X, names = build_sequence_from_df_2afc(df_sub, emission_cols=emission_cols)
-        session_ids = df_sub["session"].to_numpy()
+    adapter = get_adapter(task)
+    df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+    df = adapter.subject_filter(df)
+    df_sub = df.filter(pl.col("subject") == subject).sort(adapter.sort_col)
+    y, X, _, names = adapter.load_subject(df_sub, tau=tau, emission_cols=emission_cols)
+    session_ids = df_sub[adapter.session_col].to_numpy()
+    num_classes = adapter.num_classes
 
     # Drop trials from sessions too short for EM (must match _split_by_session)
     mask = _valid_trial_mask(session_ids)
@@ -50,7 +54,7 @@ def fit_subject(
 
     model = SoftmaxGLMHMM(
         num_states=K,
-        num_classes=num_classes,
+        num_classes=num_classes,  # from adapter
         emission_input_dim=X.shape[1],
         transition_input_dim=0,
         m_step_num_iters=m_step_num_iters,
@@ -115,16 +119,25 @@ def save_results(result: dict, out_dir: Path) -> None:
     }).write_parquet(str(prefix) + "_metrics.parquet")
 
     # arrays as npz
+    # For input-driven transitions there is no single transition_matrix field;
+    # save the input-marginal (bias-only) softmax as a summary (K, K) matrix.
+    import jax.nn as jnn
+    _tp = result["fitted_params"].transitions
+    if hasattr(_tp, "transition_matrix"):
+        _A = np.asarray(_tp.transition_matrix)
+    else:
+        _A = np.asarray(jnn.softmax(_tp.bias, axis=-1))  # (K, K)
+
     np.savez(
         str(prefix) + "_arrays.npz",
         lps=result["lps"],
         p_pred=p_pred,
         smoothed_probs=result["smoothed_probs"],
         emission_weights=np.asarray(result["fitted_params"].emissions.weights),
-        transition_matrix=np.asarray(
-            result["fitted_params"].transitions.transition_matrix),
+        transition_matrix=_A,
         y=result["y"],
         X=result["X"],
+        X_cols=np.array(result["names"].get("X_cols", []), dtype=object),
     )
 
 
@@ -137,23 +150,33 @@ def main(
     out_dir: Path | None = None,
     emission_cols: list[str] | None = None,
     tau: float = 50.0,
-    num_classes: int = 3,
     task: str = "MCDR",
 ):
+    import json
+    adapter = get_adapter(task)
     if out_dir is None:
-        out_dir = paths.RESULTS_PATH / "glmhmm"
+        out_dir = paths.RESULTS / "fits" / task / "glmhmm"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "config.json", "w") as _f:
+        json.dump({
+            "task": task,
+            "tau": tau,
+            "emission_cols": emission_cols or adapter.default_emission_cols(),
+            "K_list": K_list,
+            "model_id": out_dir.name,
+        }, _f, indent=4)
     if subjects is None:
-        src = "df_filtered.parquet" if task == "MCDR" else "alexis_combined.parquet"
-        df = pl.read_parquet(paths.DATA_PATH / src)
+        df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+        df = adapter.subject_filter(df)
         subjects = df["subject"].unique().sort().to_list()
 
     for subj in subjects:
         for K in K_list:
-            print(f"Fitting glmhmm | subject={subj} K={K} tau={tau} num_classes={num_classes} ...")
+            print(f"Fitting glmhmm | subject={subj} K={K} tau={tau} task={task} ...")
             result = fit_subject(subj, K, num_iters=num_iters,
                                  n_restarts=n_restarts, base_seed=base_seed,
                                  tau=tau, emission_cols=emission_cols,
-                                 num_classes=num_classes, task=task)
+                                 task=task)
             print("Fitted, waiting to save")
             save_results(result, out_dir)
             print(f"  ✓ saved to {out_dir}")
@@ -173,9 +196,7 @@ if __name__ == "__main__":
                         help="Output directory. Defaults to RESULTS_PATH/glmhmm.")
     parser.add_argument("--tau", type=float, default=50.0,
                         help="Half-life for exponential action traces.")
-    parser.add_argument("--num_classes", type=int, default=3,
-                        help="Number of choice classes: 2 for 2AFC, 3 for 3AFC.")
-    parser.add_argument("--task", type=str, default="MCDR", choices=["MCDR", "2AFC"],
+    parser.add_argument("--task", type=str, default="MCDR",
                         help="Task to fit: 'MCDR' or '2AFC'. Affects data loading and features.")
     args = parser.parse_args()
     main(
@@ -186,6 +207,5 @@ if __name__ == "__main__":
         base_seed=args.seed,
         out_dir=Path(args.out_dir) if args.out_dir else None,
         tau=args.tau,
-        num_classes=args.num_classes,
-        task = args.task,
+        task=args.task,
     )

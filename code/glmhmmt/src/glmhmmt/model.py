@@ -338,12 +338,14 @@ class ParamsInputDrivenTransitions(NamedTuple):
 
 class InputDrivenSoftmaxTransitions(HMMTransitions):
     def __init__(self, num_states: int, emission_input_dim: int, transition_input_dim: int,
-                 weight_scale=0.01, m_step_optimizer=optax.adam(1e-2), m_step_num_iters=50):
+                 weight_scale=0.01, stickiness: float = 10.0,
+                 m_step_optimizer=optax.adam(1e-2), m_step_num_iters=50):
         super().__init__(m_step_optimizer=m_step_optimizer, m_step_num_iters=m_step_num_iters)
         self.num_states = num_states
         self.emission_input_dim = emission_input_dim
         self.transition_input_dim = transition_input_dim
         self.weight_scale = weight_scale
+        self.stickiness = stickiness
 
     def initialize(self, key: Optional[Array] = None, method: str = "prior", bias=None, weights=None):
         if key is None:
@@ -351,8 +353,12 @@ class InputDrivenSoftmaxTransitions(HMMTransitions):
         key1, key2 = jr.split(key, 2)
         K, D = self.num_states, self.transition_input_dim
 
-        b = jnp.zeros((K, K), dtype=jnp.float32) if bias is None else jnp.asarray(
-            bias, jnp.float32)
+        if bias is None:
+            b = jnp.zeros((K, K), dtype=jnp.float32)
+            # Apply stickiness as an initial diagonal offset (learnable from here)
+            b = b + self.stickiness * jnp.eye(K, dtype=jnp.float32)
+        else:
+            b = jnp.asarray(bias, jnp.float32)
         W = self.weight_scale * \
             jr.normal(key2, (K, K, D), dtype=jnp.float32) if weights is None else jnp.asarray(
                 weights, jnp.float32)
@@ -538,7 +544,10 @@ class SoftmaxGLMHMM(HMM):
 
         if transition_input_dim > 0:
             transition_component = InputDrivenSoftmaxTransitions(
-                num_states=num_states, emission_input_dim=emission_input_dim, transition_input_dim=transition_input_dim, weight_scale=weight_scale, m_step_optimizer=m_step_optimizer, m_step_num_iters=m_step_num_iters
+                num_states=num_states, emission_input_dim=emission_input_dim,
+                transition_input_dim=transition_input_dim, weight_scale=weight_scale,
+                stickiness=transition_matrix_stickiness,
+                m_step_optimizer=m_step_optimizer, m_step_num_iters=m_step_num_iters
             )
         else:
             transition_component = StandardHMMTransitions(

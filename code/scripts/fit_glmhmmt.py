@@ -1,6 +1,5 @@
-from glmhmmt.features import build_sequence_from_df, build_sequence_from_df_2afc
-from glmhmmt.model import SoftmaxGLMHMM
-import paths
+import hashlib
+import json
 import numpy as np
 import polars as pl
 import jax.numpy as jnp
@@ -8,6 +7,16 @@ import jax.random as jr
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import paths
+from glmhmmt.model import SoftmaxGLMHMM
+from tasks import get_adapter
+
+
+def generate_model_id(task: str, K: int, tau: float, emission_cols: list | None = None) -> str:
+    """Stable 8-char MD5 hash over (task, K, tau, sorted emission_cols)."""
+    cols = sorted(emission_cols) if emission_cols else []
+    config = {"task": task, "K": int(K), "tau": float(tau), "emission_cols": cols}
+    return hashlib.md5(json.dumps(config, sort_keys=True).encode()).hexdigest()[:8]
 
 
 def _valid_trial_mask(session_ids: np.ndarray, min_length: int = 2) -> np.ndarray:
@@ -28,23 +37,17 @@ def fit_subject(
     emission_cols: list[str] | None = None,
     transition_cols: list[str] | None = None,
     tau: float = 50.0,
-    num_classes: int = 3,
+    task: str = "MCDR",
 ) -> dict:
-    if num_classes == 2:
-        df = pl.read_parquet(paths.DATA_PATH / "df_alexis.parquet")
-        df_sub = df.filter(pl.col("Subject") == subject)
-        y, X, names, session_ids = build_sequence_from_df_2afc(df_sub, emission_cols=emission_cols)
-        U = jnp.zeros((len(y), 0), dtype=jnp.float32)   # no transition features for 2AFC
-    else:
-        df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
-        df_sub = df.filter(pl.col("subject") == subject).sort("trial_idx")
-        y, X, U, names, _ = build_sequence_from_df(
-            df_sub,
-            tau=tau,
-            emission_cols=emission_cols,
-            transition_cols=transition_cols,
-        )
-        session_ids = df_sub["session"].to_numpy()
+    adapter = get_adapter(task)
+    df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+    df = adapter.subject_filter(df)
+    df_sub = df.filter(pl.col("subject") == subject).sort(adapter.sort_col)
+    y, X, U, names = adapter.load_subject(
+        df_sub, tau=tau, emission_cols=emission_cols, transition_cols=transition_cols
+    )
+    num_classes = adapter.num_classes
+    session_ids = df_sub[adapter.session_col].to_numpy()
 
     # Drop trials from sessions too short for EM (must match _split_by_session)
     mask = _valid_trial_mask(session_ids)
@@ -150,19 +153,30 @@ def main(
     emission_cols: list[str] | None = None,
     transition_cols: list[str] | None = None,
     tau: float = 50.0,
-    num_classes: int = 3,
+    task: str = "MCDR",
 ):
+    import json
+    adapter = get_adapter(task)
     if out_dir is None:
-        out_dir = paths.RESULTS_PATH / "glmhmmt"
+        out_dir = paths.RESULTS / "fits" / task / "glmhmmt"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "config.json", "w") as _f:
+        json.dump({
+            "task": task,
+            "tau": tau,
+            "emission_cols": emission_cols or adapter.default_emission_cols(),
+            "transition_cols": transition_cols or adapter.default_transition_cols(),
+            "K_list": K_list,
+            "model_id": out_dir.name,
+        }, _f, indent=4)
     if subjects is None:
-        src = "df_alexis.parquet" if num_classes == 2 else "df_filtered.parquet"
-        subj_col = "Subject" if num_classes == 2 else "subject"
-        df = pl.read_parquet(paths.DATA_PATH / src)
-        subjects = df[subj_col].unique().sort().to_list()
+        df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+        df = adapter.subject_filter(df)
+        subjects = df["subject"].unique().sort().to_list()
 
     for subj in subjects:
         for K in K_list:
-            print(f"Fitting glmhmm-t | subject={subj} K={K} ...")
+            print(f"Fitting glmhmm-t | subject={subj} K={K} task={task} ...")
             result = fit_subject(
                 subj, K,
                 num_iters=num_iters,
@@ -171,7 +185,7 @@ def main(
                 emission_cols=emission_cols,
                 transition_cols=transition_cols,
                 tau=tau,
-                num_classes=num_classes,
+                task=task,
             )
             save_results(result, out_dir)
             print(f"  ✓ saved to {out_dir}")
@@ -188,8 +202,8 @@ if __name__ == "__main__":
     parser.add_argument("--out_dir", type=str, default=None)
     parser.add_argument("--tau", type=float, default=50.0,
                         help="Half-life for exponential action traces.")
-    parser.add_argument("--num_classes", type=int, default=3,
-                        help="Number of choice classes: 2 for 2AFC, 3 for 3AFC.")
+    parser.add_argument("--task", type=str, default="MCDR",
+                        help="Task to fit: 'MCDR' or '2AFC'.")
     args = parser.parse_args()
     main(
         subjects=args.subjects,
@@ -199,5 +213,5 @@ if __name__ == "__main__":
         base_seed=args.seed,
         out_dir=Path(args.out_dir) if args.out_dir else None,
         tau=args.tau,
-        num_classes=args.num_classes,
+        task=args.task,
     )
