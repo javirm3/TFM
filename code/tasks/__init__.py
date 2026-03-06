@@ -67,6 +67,22 @@ class TaskAdapter(ABC):
     def get_plots(self) -> types.ModuleType:
         """Return the task-specific plots module."""
 
+    # ── column mapping  ──────────────────────────────────────────────────────
+
+    @property
+    @abstractmethod
+    def behavioral_cols(self) -> Dict[str, str]:
+        """Mapping from canonical column names to actual column names.
+
+        Required canonical keys and their semantics:
+            ``"trial_idx"``   — global, monotonically increasing trial index
+            ``"trial"``       — within-session trial number (may equal trial_idx)
+            ``"session"``     — session identifier
+            ``"stimulus"``    — integer correct-class index (0/1/2 for L/C/R)
+            ``"response"``    — integer chosen class
+            ``"performance"`` — 0/1 trial outcome
+        """
+
     # ── state labelling ──────────────────────────────────────────────────────
 
     @abstractmethod

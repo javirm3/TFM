@@ -19,6 +19,8 @@ def _():
     import pandas as pd
     from scripts.fit_glmhmm import main as fit_main
     from tasks import get_adapter
+    from glmhmmt.views import build_views
+    from glmhmmt.postprocess import build_trial_df, build_emission_weights_df
 
     sns.set_style("white")
 
@@ -26,9 +28,23 @@ def _():
         options=["2AFC", "MCDR"],
         value="MCDR",
         label="Task:",
+
     )
     ui_task
-    return fit_main, get_adapter, mo, np, paths, pl, plt, sns, ui_task
+    return (
+        build_emission_weights_df,
+        build_trial_df,
+        build_views,
+        fit_main,
+        get_adapter,
+        mo,
+        np,
+        paths,
+        pl,
+        plt,
+        sns,
+        ui_task,
+    )
 
 
 @app.cell
@@ -207,11 +223,59 @@ def _(
 
 
 @app.cell
-def _(K, adapter, arrays_store, names, ui_subjects):
-    # ── State labelling — task-specific criteria via adapter ─────────────────
+def _(K, adapter, arrays_store, build_views, mo, ui_subjects):
+    # ── Build SubjectFitViews + derive state_labels / state_order for backward compat ──
     _selected = [s for s in ui_subjects.value if s in arrays_store]
-    state_labels, state_order = adapter.label_states(arrays_store, names, K, _selected)
-    return state_labels, state_order
+    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+
+    views = build_views(arrays_store, adapter, K, _selected)
+    state_labels = {s: v.state_name_by_idx for s, v in views.items()}
+    state_order  = {s: v.state_idx_order   for s, v in views.items()}
+    return state_labels, state_order, views
+
+
+@app.cell
+def _(
+    adapter,
+    build_emission_weights_df,
+    build_trial_df,
+    df_all,
+    mo,
+    pl,
+    views,
+):
+    # ── Build canonical trial-level DataFrame ────────────────────────────────────────────────────────
+    # One row per trial per subject.  Columns include:
+    #   p_state_k         → HMM posterior (direct copy of smoothed_probs[:, k])
+    #   state_idx/rank/label → MAP state assignment
+    #   pL / pC / pR      → marginal class probabilities from p_pred
+    #   p_model_correct   → MAP-state emission P(correct class)
+    #   p_model_correct_marginal → marginal P(correct class)
+    #   correct_bool      → bool(performance)
+    # All task-specific behavioral columns (stimd_n, ttype_n, …) are preserved.
+    _sort_col = adapter.sort_col
+    _ses_col  = adapter.session_col
+    _bcols    = adapter.behavioral_cols
+
+    _trial_frames = []
+    for _subj, _view in views.items():
+        _df_sub = (
+            df_all
+            .filter(pl.col("subject") == _subj)
+            .sort(_sort_col)
+            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
+        )
+        if _df_sub.height != _view.T:
+            print(f"⚠️  {_subj}: row mismatch ({_df_sub.height} vs {_view.T}), skipping")
+            continue
+        _trial_frames.append(build_trial_df(_view, _df_sub, _bcols))
+
+    mo.stop(not _trial_frames, mo.md("No subjects with matching data lengths."))
+    trial_df = pl.concat(_trial_frames)
+
+    # Emit emission-weights long DF for downstream use
+    weights_df = build_emission_weights_df(views)
+    return
 
 
 @app.cell
@@ -352,8 +416,8 @@ def _(
     np,
     pl,
     plots,
-    state_labels,
     ui_subjects,
+    views,
 ):
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
@@ -453,8 +517,8 @@ def _(
             )
 
         _pool_dfs.append(_plot_df_s)
-        _slbls = state_labels[_subj]
-        _norm = np.array([_lrank_map.get(_slbls.get(int(k), ""), k) for k in _map_k])
+        rank_by_idx = views[_subj].state_rank_by_idx
+        _norm = np.array([rank_by_idx[int(k)] for k in _map_k], dtype=int)
         _pool_assigns.append(_norm)
 
     _df_state_pool = pl.concat(_pool_dfs)
@@ -497,6 +561,7 @@ def _(mo):
 def _(
     K,
     THRESH_ui,
+    adapter,
     arrays_store,
     df_all,
     mo,
@@ -504,20 +569,29 @@ def _(
     state_labels,
     ui_subjects,
 ):
-    # ── Per-state accuracy — Ashwood et al. 2022 method ──────────────────────
+    # ── Per-state accuracy — Ashwood et al. 2022 method ────────────────────────────────────────────────
     # All     : mean(performance) on nonzero-stim trials — the full pool
-    # State k : mean(performance) on the SUBSET where posterior[:,k] >= 0.9
+    # State k : mean(performance) on the SUBSET where posterior[:,k] >= thresh
     #           AND stimd_n != 0
     # "All" is the weighted average of the state bars (plus ambiguous trials).
     # Colors assigned by rank: Engaged=palette[0], Disengaged=palette[1], …
 
     _selected_acc = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected_acc, mo.md("No fitted subjects available."))
-    _fig_acc, _tbl = plots.plot_state_accuracy(arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, K=K, subjects=_selected_acc, thresh=THRESH_ui.amount)
+    _fig_acc, _tbl = plots.plot_state_accuracy(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        df_all=df_all,
+        K=K,
+        subjects=_selected_acc,
+        thresh=THRESH_ui.amount,
+        session_col=adapter.session_col,
+        sort_col=adapter.sort_col,
+    )
     mo.vstack([
         mo.md("### Accuracy by state"),
-        mo.md(f"> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ {THRESH_ui}"),
         _fig_acc,
+        mo.md(f"> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ {THRESH_ui}"),
         mo.md("**Trial counts & mean accuracy per label:**"),
         mo.plain_text(_tbl.to_string()),
     ])
@@ -548,11 +622,19 @@ def _(
 ):
     selected_traj = [s for s in ui_subjects_traj.value if s in arrays_store]
     mo.stop(not selected_traj, mo.md("Select subjects above to view session trajectories."))
-    _fig_traj = plots.plot_session_trajectories( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, K=K, subjects=selected_traj, session_col=adapter.session_col,)
+    _fig_traj = plots.plot_session_trajectories(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        df_all=df_all,
+        K=K,
+        subjects=selected_traj,
+        session_col=adapter.session_col,
+        sort_col=adapter.sort_col,
+    )
     mo.vstack([
         mo.md(f"### c. Average state-probability trajectories within a session  (K={K})"),
-        mo.md("> Mean ± 1 s.e.m. across sessions for the selected subjects."),
         _fig_traj,
+        mo.md("> Mean ± 1 s.e.m. across sessions for the selected subjects."),
     ], align="center")
     return
 
@@ -570,14 +652,22 @@ def _(
 ):
     selected_occ = [s for s in ui_subjects_traj.value if s in arrays_store]
     mo.stop(not selected_occ, mo.md("Select subjects above."))
-    _fig_occ = plots.plot_state_occupancy(arrays_store=arrays_store,state_labels=state_labels,df_all=df_all,K=K,subjects=selected_occ, session_col=adapter.session_col,)
+    _fig_occ = plots.plot_state_occupancy(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        df_all=df_all,
+        K=K,
+        subjects=selected_occ,
+        session_col=adapter.session_col,
+        sort_col=adapter.sort_col,
+    )
     mo.vstack([
         mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
+        _fig_occ,
         mo.md(
             "> **Left**: fraction of all trials assigned to each state (argmax of posterior).  \n"
             "> **Right**: histogram of inferred state changes per session."
         ),
-        _fig_occ,
     ], align="center")
     return
 
@@ -642,8 +732,17 @@ def _(
     )
 
     _sess = ui_session_id.value
-    _sort_col_dd = adapter.sort_col
-    _fig = plots.plot_session_deepdive( arrays_store=arrays_store, state_labels=state_labels, df_all=df_all, names=arrays_store[_subj], K=K, subj=_subj, sess=_sess, session_col=adapter.session_col,)
+    _fig = plots.plot_session_deepdive(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        df_all=df_all,
+        names=arrays_store[_subj],
+        K=K,
+        subj=_subj,
+        sess=_sess,
+        session_col=adapter.session_col,
+        sort_col=adapter.sort_col,
+    )
     mo.vstack([
         mo.md(f"### Session statistics  (K={K})"),
         mo.hstack([ui_session_subj, ui_session_id]),

@@ -53,6 +53,20 @@ class MCDRAdapter(TaskAdapter):
     def default_transition_cols(self) -> List[str]:
         return list(_ALL_TRANSITION_COLS)
 
+    # ── column mapping ───────────────────────────────────────────────────────
+
+    @property
+    def behavioral_cols(self) -> dict:
+        """MCDR column mapping (canonical → actual)."""
+        return {
+            "trial_idx":   "trial_idx",
+            "trial":       "trial",
+            "session":     "session",
+            "stimulus":    "stimulus",
+            "response":    "response",
+            "performance": "performance",
+        }
+
     # ── plots ────────────────────────────────────────────────────────────────
 
     def get_plots(self) -> types.ModuleType:

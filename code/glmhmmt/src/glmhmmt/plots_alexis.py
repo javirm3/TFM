@@ -691,7 +691,19 @@ def _mean_glm_curve(
                 print(f"[_mean_glm_curve] {subj}: X_data cols {X_data.shape[1]} ≠ W cols {_M_w}, dropping X_data")
                 X_data = None
 
-        print(f"[_mean_glm_curve] {subj}: cols={list(cols)}  X_data={'yes' if X_data is not None else 'NO'}")
+        # When computing the curve for a specific state, restrict partial-
+        # dependence to trials assigned to that state so that history
+        # covariates are marginalised over its empirical distribution only.
+        if X_data is not None and state_k is not None:
+            _gamma = arrays_store[subj].get("smoothed_probs")
+            if _gamma is not None:
+                _map_k = np.argmax(np.asarray(_gamma), axis=1)
+                _mask  = _map_k == state_k
+                if _mask.sum() > 0:
+                    X_data = X_data[_mask]
+                # if the state has no trials, fall through with full X_data
+
+        print(f"[_mean_glm_curve] {subj}: cols={list(cols)}  X_data={'yes ('+str(np.asarray(X_data).shape)+')' if X_data is not None else 'NO'}  state_k={state_k}")
 
         try:
             _lr = arrays_store[subj].get("lapse_rates")
@@ -788,7 +800,11 @@ def _psych_panel(
     # model line: smooth sigmoid over dense ILD grid (if available) else aggregated p_pred
     if smooth_curve is not None:
         ild_g, p_g = smooth_curve
-        ax.plot(ild_g, p_g, "-", color="black", lw=2, label="Model", zorder=6)
+        # Clip to the observed ILD range so the curve doesn't extend beyond
+        # the data and compress the visible sigmoid into a near-flat line.
+        _x0, _x1 = float(xpos[0]), float(xpos[-1])
+        _clip = (ild_g >= _x0) & (ild_g <= _x1)
+        ax.plot(ild_g[_clip], p_g[_clip], "-", color="black", lw=2, label="Model", zorder=6)
     else:
         ax.plot(xpos, mm, "-", color="black", lw=2, label="Model", zorder=6)
 
@@ -801,6 +817,7 @@ def _psych_panel(
     ax.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
     ax.set_xticks(xpos, labels=_sparse_ild_labels(ilds))
     ax.tick_params(axis="x", which="major", length=4, width=0.8)
+    ax.set_xlim(xpos[0], xpos[-1])
     ax.set_ylim(0, 1)
     ax.set_yticks([0, 0.5, 1])
     ax.set_title(title)
@@ -861,8 +878,12 @@ def _psych_state_panel(
     # smooth sigmoid model line (if available) else aggregated p_pred
     if smooth_curve is not None:
         ild_g, p_g = smooth_curve
-        (model_h,) = ax.plot(ild_g, p_g, "-", color=color, lw=2.2, zorder=6,
-                             label="_nolegend_")
+        # Clip the dense grid to the observed ILD range so the sigmoid
+        # doesn't extend far beyond the data and compress the visible area.
+        _x0, _x1 = float(xpos[0]), float(xpos[-1])
+        _clip = (ild_g >= _x0) & (ild_g <= _x1)
+        (model_h,) = ax.plot(ild_g[_clip], p_g[_clip], "-", color=color, lw=2.2,
+                             zorder=6, label="_nolegend_")
     else:
         (model_h,) = ax.plot(xpos, mm, "-", color=color, lw=2.2, zorder=6,
                              label="_nolegend_")
@@ -870,6 +891,7 @@ def _psych_state_panel(
     ax.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
     ax.set_xticks(xpos, labels=_sparse_ild_labels(ilds))
     ax.tick_params(axis="x", which="major", length=4, width=0.8)
+    ax.set_xlim(xpos[0], xpos[-1])
     return data_h, model_h
 
 
@@ -1112,6 +1134,9 @@ def plot_state_accuracy(
     K: int,
     subjects: list,
     thresh: float = 0.5,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
+    **kwargs,
 ) -> Tuple[plt.Figure, pd.DataFrame]:
     """Per-state accuracy bar chart.
 
@@ -1214,7 +1239,9 @@ def plot_session_trajectories(
     df_all,
     K: int,
     subjects: list,
-    session_col: str = "session",
+    session_col: str = "Session",
+    sort_col: str = "Trial",
+    **kwargs,
 ) -> plt.Figure:
     """Average state-probability trajectories within a session (mean ± SEM).
 
@@ -1239,22 +1266,22 @@ def plot_session_trajectories(
         try:
             import polars as pl
             if hasattr(df_all, "filter"):
-                df_sub = df_all.filter(pl.col("subject") == subj).sort("Trial")
-                sess   = df_sub[session_col].to_numpy()
+                df_sub = df_all.filter(pl.col("subject") == subj).sort(sort_col)
+                _sess_arr = df_sub[session_col].to_numpy()
             else:
                 raise AttributeError
         except (ImportError, AttributeError):
-            df_sub = df_all[df_all["subject"] == subj].sort_values("Trial")
-            sess   = df_sub[session_col].to_numpy()
+            df_sub = df_all[df_all["subject"] == subj].sort_values(sort_col)
+            _sess_arr = df_sub[session_col].to_numpy()
 
-        T = min(len(P), len(sess))
-        P, sess = P[:T], sess[:T]
+        T = min(len(P), len(_sess_arr))
+        P, _sess_arr = P[:T], _sess_arr[:T]
 
-        sess_ids = np.unique(sess)
-        sess_len = int(np.median([np.sum(sess == s) for s in sess_ids]))
+        sess_ids = np.unique(_sess_arr)
+        sess_len = int(np.median([np.sum(_sess_arr == s) for s in sess_ids]))
         traj = np.full((len(sess_ids), sess_len, K), np.nan)
         for si, s in enumerate(sess_ids):
-            idx = np.where(sess == s)[0]
+            idx = np.where(_sess_arr == s)[0]
             n   = min(len(idx), sess_len)
             traj[si, :n, :] = P[idx[:n], :]
 
@@ -1289,6 +1316,8 @@ def plot_state_occupancy(
     K: int,
     subjects: list,
     session_col: str = "Session",
+    sort_col: str = "Trial",
+    **kwargs,
 ) -> plt.Figure:
     """Fractional occupancy bar chart + state-switch histogram per session.
 
@@ -1321,21 +1350,21 @@ def plot_state_occupancy(
         try:
             import polars as pl
             if hasattr(df_all, "filter"):
-                df_sub = df_all.filter(pl.col("subject") == subj).sort("Trial")
-                sess   = df_sub[session_col].to_numpy()
+                df_sub = df_all.filter(pl.col("subject") == subj).sort(sort_col)
+                _sess_arr = df_sub[session_col].to_numpy()
             else:
                 raise AttributeError
         except (ImportError, AttributeError):
-            df_sub = df_all[df_all["subject"] == subj].sort_values("Trial")
-            sess   = df_sub[session_col].to_numpy()
+            df_sub = df_all[df_all["subject"] == subj].sort_values(sort_col)
+            _sess_arr = df_sub[session_col].to_numpy()
 
-        T = min(len(P), len(sess))
+        T = min(len(P), len(_sess_arr))
         viterbi = np.argmax(P[:T], axis=1)
-        sess    = sess[:T]
+        _sess_arr = _sess_arr[:T]
 
         changes_per_sess = []
-        for s in np.unique(sess):
-            v = viterbi[sess == s]
+        for s in np.unique(_sess_arr):
+            v = viterbi[_sess_arr == s]
             changes_per_sess.append(int(np.sum(np.diff(v) != 0)))
 
         max_chg = max(changes_per_sess) if changes_per_sess else 1
@@ -1361,8 +1390,10 @@ def plot_session_deepdive(
     names: dict,
     K: int,
     subj: str,
-    sess: int,
+    sess,
     session_col: str = "Session",
+    sort_col: str = "Trial",
+    **kwargs,
 ) -> plt.Figure:
     """Session deep-dive: P(Engaged) + cumulative accuracy (twin axis) + action traces.
 
@@ -1381,19 +1412,25 @@ def plot_session_deepdive(
     except ImportError:
         _has_pl = False
 
+    # Coerce sess to match the column dtype (dropdown widgets return strings)
+    try:
+        sess = int(sess)
+    except (TypeError, ValueError):
+        pass
+
     # ── filter df to subject, then to session ─────────────────────────────────
     if _has_pl and hasattr(df_all, "filter"):
         _df_sub_all = (
             df_all
             .filter(pl.col("subject") == subj)
-            .sort("Trial")
+            .sort(sort_col)
             .filter(pl.col(session_col).count().over(session_col) >= 2)
         )
         _sess_mask = _df_sub_all[session_col].to_numpy() == sess
         _df_sess = (
             df_all
             .filter((pl.col("subject") == subj) & (pl.col(session_col) == sess))
-            .sort("Trial")
+            .sort(sort_col)
         )
         _hit   = _df_sess["Hit"].to_numpy().astype(float)
         _ild   = _df_sess["ILD"].to_numpy().astype(float)
@@ -1401,14 +1438,14 @@ def plot_session_deepdive(
     else:
         _df_sub_all = (
             df_all[df_all["subject"] == subj]
-            .sort_values("Trial")
+            .sort_values(sort_col)
         )
-        _sess_counts = _df_sub_all.groupby(session_col)["Trial"].transform("count")
+        _sess_counts = _df_sub_all.groupby(session_col)[sort_col].transform("count")
         _df_sub_all = _df_sub_all[_sess_counts >= 2]
         _sess_mask  = _df_sub_all[session_col].to_numpy() == sess
         _df_sess = (
             df_all[(df_all["subject"] == subj) & (df_all[session_col] == sess)]
-            .sort_values("Trial")
+            .sort_values(sort_col)
         )
         _hit    = _df_sess["Hit"].to_numpy().astype(float)
         _ild    = _df_sess["ILD"].to_numpy().astype(float)

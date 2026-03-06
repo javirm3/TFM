@@ -68,6 +68,20 @@ class TwoAFCAdapter(TaskAdapter):
         """Return any stimulus-frame (sf_*) columns present in *df*."""
         return [c for c in df.columns if c.startswith(_SF_COL_PREFIX)]
 
+    # ── column mapping ───────────────────────────────────────────────────────
+
+    @property
+    def behavioral_cols(self) -> dict:
+        """2AFC column mapping (canonical → actual)."""
+        return {
+            "trial_idx":   "Trial",
+            "trial":       "Trial",
+            "session":     "Session",
+            "stimulus":    "stimulus",
+            "response":    "response",
+            "performance": "performance",
+        }
+
     # ── plots ────────────────────────────────────────────────────────────────
 
     def get_plots(self) -> types.ModuleType:

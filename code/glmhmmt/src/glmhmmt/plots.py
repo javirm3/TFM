@@ -191,7 +191,7 @@ def _plot_state_panel(ax, df_state, group_col, order, color, label):
     cats   = [c for c in order if c in rows]
     if not cats:
         return None, None
-    xpos   = np.arange(len(cats))
+    xpos = np.array([order.index(c) for c in cats])
     md     = np.array([rows[c]["md"] for c in cats])
     sd     = np.array([rows[c]["sd"] for c in cats])
     mm     = np.array([rows[c]["mm"] for c in cats])
@@ -677,6 +677,9 @@ _AG_GROUPS = [
 ]
 
 
+# NOTE: _LABEL_RANK and _STATE_HEX are also defined in views.py (the canonical
+# source of truth).  These local definitions are kept for backward compatibility
+# with existing call sites inside this module.  Both definitions must stay in sync.
 _LABEL_RANK = {
     "Engaged": 0,
     "Disengaged": 1,
@@ -928,9 +931,21 @@ def plot_state_accuracy(
     K: int,
     subjects: list,
     thresh: float = 0.5,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    stimd_col: str = "stimd_n",
+    perf_col: str = "performance",
 ):
     """
     Per-state accuracy bar chart (Ashwood et al. 2022 method).
+
+    Parameters
+    ----------
+    session_col : column name for session identifier (default ``"session"``)
+    sort_col    : column name for global trial ordering (default ``"trial_idx"``)
+    stimd_col   : column whose nonzero values indicate informative trials
+                  (default ``"stimd_n"`` for MCDR)
+    perf_col    : column containing 0/1 trial outcome (default ``"performance"``)
 
     Returns
     -------
@@ -955,15 +970,18 @@ def plot_state_accuracy(
         _df_sub = (
             df_all
             .filter(pl.col("subject") == _subj)
-            .sort("trial_idx")
-            .filter(pl.col("session").count().over("session") >= 2)
-            .select(["stimd_n", "performance"])
+            .sort(sort_col)
+            .with_row_index("_abs_row")
+            .filter(pl.col(session_col).count().over(session_col) >= 2)
+            .select(["_abs_row", stimd_col, perf_col])
         )
-        _stim  = _df_sub["stimd_n"].to_numpy()
-        _perf  = _df_sub["performance"].to_numpy()
-        _T     = min(len(_stim), _gamma.shape[0])
-        _stim  = _stim[:_T];  _perf = _perf[:_T];  _gamma = _gamma[:_T]
-        _nz    = _stim != 0
+        _abs_idx = _df_sub["_abs_row"].to_numpy()
+        _valid_r = _abs_idx < _gamma.shape[0]
+        _abs_idx = _abs_idx[_valid_r]
+        _stim    = _df_sub[stimd_col].to_numpy()[_valid_r]
+        _perf    = _df_sub[perf_col].to_numpy()[_valid_r]
+        _gamma_t = _gamma[_abs_idx]
+        _nz      = _stim != 0
         if _nz.sum() == 0:
             continue
         _acc_records.append({
@@ -972,7 +990,7 @@ def plot_state_accuracy(
         })
         for _k in range(K):
             _lbl_k  = state_labels[_subj][_k]
-            _mask_k = _nz & (_gamma[:, _k] >= thresh)
+            _mask_k = _nz & (_gamma_t[:, _k] >= thresh)
             _n_k    = int(_mask_k.sum())
             _acc_records.append({
                 "subject": _subj, "label": _lbl_k,
@@ -1030,9 +1048,20 @@ def plot_session_trajectories(
     df_all,
     K: int,
     subjects: list,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
 ):
     """
     Average state-probability trajectories within a session (mean ± s.e.m. across sessions).
+
+    ``smoothed_probs`` is indexed via absolute row position assigned with
+    ``with_row_index`` *before* the session-length filter, so the alignment
+    is correct even when short sessions are dropped.
+
+    Parameters
+    ----------
+    session_col : column name for session identifier (default ``"session"``)
+    sort_col    : column name for global trial ordering (default ``"trial_idx"``)
 
     Returns
     -------
@@ -1045,17 +1074,31 @@ def plot_session_trajectories(
     for _i, _subj in enumerate(subjects):
         _ax    = axes[_i, 0]
         _probs = arrays_store[_subj]["smoothed_probs"]
+
+        # Absolute row index assigned BEFORE dropping short sessions so that
+        # _abs_idx[i] maps directly to smoothed_probs[_abs_idx[i]].
         _df_sub = (
             df_all
             .filter(pl.col("subject") == _subj)
-            .sort("trial_idx")
-            .filter(pl.col("session").count().over("session") >= 2)
-            .select(["session", "trial"])
+            .sort(sort_col)
+            .with_row_index("_abs_row")
+            .filter(pl.col(session_col).count().over(session_col) >= 2)
+            .select(["_abs_row", session_col, sort_col])
         )
-        _T        = min(_probs.shape[0], _df_sub.height)
-        _probs_t  = _probs[:_T]
-        _sessions = _df_sub["session"].to_numpy()[:_T]
-        _trials   = _df_sub["trial"].to_numpy()[:_T]
+        if _df_sub.is_empty():
+            continue
+
+        _abs_idx  = _df_sub["_abs_row"].to_numpy()
+        _sessions = _df_sub[session_col].to_numpy()
+        _trials   = _df_sub[sort_col].to_numpy()
+
+        # safety: clamp to available smoothed_probs rows
+        _valid    = _abs_idx < _probs.shape[0]
+        _abs_idx  = _abs_idx[_valid]
+        _sessions = _sessions[_valid]
+        _trials   = _trials[_valid]
+
+        _probs_t = _probs[_abs_idx]   # (T_filtered, K) — correctly row-aligned
 
         _sess_ids = np.unique(_sessions)
         _max_len  = max(int((_sessions == _s).sum()) for _s in _sess_ids)
@@ -1073,15 +1116,15 @@ def plot_session_trajectories(
 
         _slbl = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
         for _k in range(K):
-            _rank  = _LABEL_RANK.get(_slbl.get(_k, ""), _k)
-            _col   = _palette[_rank % len(_palette)]
-            _valid = ~np.isnan(_mean[:, _k])
-            _ax.plot(_x[_valid], _mean[_valid, _k], color=_col, lw=2,
+            _rank    = _LABEL_RANK.get(_slbl.get(_k, ""), _k)
+            _col     = _palette[_rank % len(_palette)]
+            _valid_x = ~np.isnan(_mean[:, _k])
+            _ax.plot(_x[_valid_x], _mean[_valid_x, _k], color=_col, lw=2,
                      label=_slbl.get(_k, f"State {_k}"))
             _ax.fill_between(
-                _x[_valid],
-                (_mean[:, _k] - _sem[:, _k])[_valid],
-                (_mean[:, _k] + _sem[:, _k])[_valid],
+                _x[_valid_x],
+                (_mean[:, _k] - _sem[:, _k])[_valid_x],
+                (_mean[:, _k] + _sem[:, _k])[_valid_x],
                 color=_col, alpha=0.25,
             )
         _ax.set_ylim(0, 1)
@@ -1103,9 +1146,16 @@ def plot_state_occupancy(
     df_all,
     K: int,
     subjects: list,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
 ):
     """
     Fractional occupancy bar chart + state-change histogram per session.
+
+    Parameters
+    ----------
+    session_col : column name for session identifier (default ``"session"``)
+    sort_col    : column name for global trial ordering (default ``"trial_idx"``)
 
     Returns
     -------
@@ -1132,13 +1182,16 @@ def plot_state_occupancy(
         _df_sub  = (
             df_all
             .filter(pl.col("subject") == _subj)
-            .sort("trial_idx")
-            .filter(pl.col("session").count().over("session") >= 2)
-            .select(["session", "trial"])
+            .sort(sort_col)
+            .with_row_index("_abs_row")
+            .filter(pl.col(session_col).count().over(session_col) >= 2)
+            .select(["_abs_row", session_col])
         )
-        _T            = min(_probs.shape[0], _df_sub.height)
-        _probs_t      = _probs[:_T]
-        _sessions     = _df_sub["session"].to_numpy()[:_T]
+        _abs_idx      = _df_sub["_abs_row"].to_numpy()
+        _valid_rows   = _abs_idx < _probs.shape[0]
+        _abs_idx      = _abs_idx[_valid_rows]
+        _sessions     = _df_sub[session_col].to_numpy()[_valid_rows]
+        _probs_t      = _probs[_abs_idx]
         _state_assign = np.argmax(_probs_t, axis=1)
 
         _slbl           = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
@@ -1160,7 +1213,7 @@ def plot_state_occupancy(
         _ax_bar.set_ylabel("Fractional occupancy")
         _ax_bar.set_title(f"Subject {_subj} — state occupancy")
 
-        _sess_ids  = np.unique(_sessions)
+        _sess_ids  = np.unique(_sessions)  # type: ignore[union-attr]
         _n_changes = [
             int(np.sum(np.diff(_state_assign[_sessions == _s]) != 0))
             for _s in _sess_ids
@@ -1187,6 +1240,11 @@ def plot_session_deepdive(
     K: int,
     subj: str,
     sess: int,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    stimd_col: str = "stimd_n",
+    perf_col: str = "performance",
+    resp_col: str = "response",
 ):
     """
     Session deep-dive: P(Engaged) + cumulative accuracy (twin axis) + action traces.
@@ -1194,42 +1252,61 @@ def plot_session_deepdive(
     Action traces are auto-detected: prefers A_plus / A_minus from U (glmhmmt),
     then falls back to A_L / A_C / A_R from X (glmhmm).
 
+    Parameters
+    ----------
+    session_col : column name for session identifier (default ``"session"``)
+    sort_col    : column name for global trial ordering (default ``"trial_idx"``)
+    stimd_col   : column whose nonzero values indicate informative trials
+    perf_col    : column containing 0/1 trial outcome
+    resp_col    : column containing integer response
+
     Returns
     -------
     fig
     """
+    _probs_all = arrays_store[subj]["smoothed_probs"]
+
+    # Use absolute row index (before session filter) to align with smoothed_probs.
     _df_all_sub = (
         df_all
         .filter(pl.col("subject") == subj)
-        .sort("trial_idx")
-        .filter(pl.col("session").count().over("session") >= 2)
+        .sort(sort_col)
+        .with_row_index("_abs_row")
+        .filter(pl.col(session_col).count().over(session_col) >= 2)
     )
-    _sess_mask = _df_all_sub["session"].to_numpy() == sess
+    # Coerce sess to match the column dtype (dropdown widgets return strings)
+    try:
+        sess = int(sess)
+    except (TypeError, ValueError):
+        pass
+    _sess_df   = _df_all_sub.filter(pl.col(session_col) == sess)
+    _abs_idx_s = _sess_df["_abs_row"].to_numpy()
+    _valid     = _abs_idx_s < _probs_all.shape[0]
+    _abs_idx_s = _abs_idx_s[_valid]
+    _probs     = _probs_all[_abs_idx_s]
+
     _df_sub = (
         df_all
-        .filter((pl.col("subject") == subj) & (pl.col("session") == sess))
-        .sort("trial_idx")
+        .filter((pl.col("subject") == subj) & (pl.col(session_col) == sess))
+        .sort(sort_col)
     )
-
-    _probs_all = arrays_store[subj]["smoothed_probs"]
-    _probs     = _probs_all[_sess_mask]
-    _y         = _df_sub["performance"].to_numpy()
-    _stim      = _df_sub["stimd_n"].to_numpy()
-    _response  = _df_sub["response"].to_numpy().astype(int)
+    _y         = _df_sub[perf_col].to_numpy()
+    _stim      = _df_sub[stimd_col].to_numpy()
+    _response  = _df_sub[resp_col].to_numpy().astype(int)
     _T         = _probs.shape[0]
     _x         = np.arange(_T)
 
     # ── auto-detect action traces ─────────────────────────────────────────────
     _X_cols_s = arrays_store[subj].get("X_cols") or names.get("X_cols", [])
     _X_idx    = {f: i for i, f in enumerate(_X_cols_s)}
-    _X_sess   = arrays_store[subj]["X"][_sess_mask]
+    _X_sess   = arrays_store[subj]["X"][_abs_idx_s]
 
     _trace_sources = {}
     _U_raw = arrays_store[subj].get("U")
     if _U_raw is not None:
         _U_cols_s = arrays_store[subj].get("U_cols") or names.get("U_cols", [])
         _U_idx    = {f: i for i, f in enumerate(_U_cols_s)}
-        _U_sess   = _U_raw[_sess_mask]
+        _U_sess   = _U_raw[_abs_idx_s]
         for _tc in ["A_plus", "A_minus"]:
             if _tc in _U_idx:
                 _trace_sources[_tc] = (_U_sess, _U_idx[_tc])
