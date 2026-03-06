@@ -5,8 +5,7 @@ import icon from 'astro-icon';
 
 // https://astro.build/config
 export default defineConfig({
-	site: 'https://javirm.com',
-	base: '/glmhmmt',
+	site: 'https://tfm.javirm.com',
 	integrations: [
 		icon(),
 		starlight({

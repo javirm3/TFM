@@ -416,11 +416,11 @@ import { Icon } from 'astro-icon/components';
 
   <!-- NAV -->
   <nav>
-    <a class="nav-brand" href={import.meta.env.BASE_URL}>glmhmm<span>t</span></a>
+    <a class="nav-brand" href="/">glmhmm<span>t</span></a>
     <ul class="nav-links">
-      <li><a href={`${import.meta.env.BASE_URL}docs/intro`}>Docs</a></li>
-      <li><a href={`${import.meta.env.BASE_URL}docs/guide/quickstart`}>Quickstart</a></li>
-      <li><a href={`${import.meta.env.BASE_URL}docs/api/model`}>API</a></li>
+      <li><a href="/docs/intro">Docs</a></li>
+      <li><a href="/docs/guide/quickstart">Quickstart</a></li>
+      <li><a href="/docs/api/model">API</a></li>
       <li><a href="https://github.com/javirm3/TFM" target="_blank" rel="noopener">GitHub ↗</a></li>
     </ul>
   </nav>
@@ -444,8 +444,8 @@ import { Icon } from 'astro-icon/components';
       </p>
 
       <div class="hero-cta">
-        <a href={`${import.meta.env.BASE_URL}docs/intro`} class="btn btn-primary">Get started →</a>
-        <a href={`${import.meta.env.BASE_URL}docs/api/model`} class="btn btn-ghost">API reference</a>
+        <a href="/docs/intro" class="btn btn-primary">Get started →</a>
+        <a href="/docs/api/model" class="btn btn-ghost">API reference</a>
       </div>
     </div>
 
@@ -539,7 +539,7 @@ import { Icon } from 'astro-icon/components';
       <span>Coming soon to PyPI for a direct <code>pip install glmhmmt</code> experience.</span>
     </div>
     <div>
-      <a href={`${import.meta.env.BASE_URL}docs/guide/quickstart`} class="btn btn-primary">View quickstart guide →</a>
+      <a href="/docs/guide/quickstart" class="btn btn-primary">View quickstart guide →</a>
     </div>
   </section>
 
