@@ -1,0 +1,19 @@
+{
+  "name": "users-javierrodriguezmartinez-documents-mamme-tfm-frontend",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.37.6",
+    "@iconify-json/lucide": "^1.2.96",
+    "astro": "^5.6.1",
+    "astro-icon": "^1.1.5",
+    "sharp": "^0.34.2"
+  }
+}

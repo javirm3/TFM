@@ -72,10 +72,12 @@ def action_trace_plus_minus(
 
     return A_plus[:, None], A_minus[:, None]
 
-_ALL_EMISSION_COLS: list[str] = [
+_ALL_EMISSION_COLS: list[str] = [ 
+    "bias",
     "biasL", "biasC", "biasR", "onsetL", "onsetC", "onsetR", "delay",
     "SL", "SC", "SR",
     "SLxdelay", "SCxdelay", "SRxdelay",
+    "D", "DL", "DC", "DR",
     "A_L", "A_C", "A_R",
     "speed1", "speed2", "speed3",
 ]
@@ -145,6 +147,7 @@ def build_sequence_from_df(
         ((pl.col("x_c") == "L") * pl.col("delay_d")).cast(pl.Float32).alias("DL"),
         ((pl.col("x_c") == "C") * pl.col("delay_d")).cast(pl.Float32).alias("DC"),
         ((pl.col("x_c") == "R") * pl.col("delay_d")).cast(pl.Float32).alias("DR"),
+        ((pl.col("ttype_n"))).cast(pl.Float32).alias("D"),
         
         ((pl.col("x_c") == "L") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SLxdelay"),
         ((pl.col("x_c") == "C") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SCxdelay"),

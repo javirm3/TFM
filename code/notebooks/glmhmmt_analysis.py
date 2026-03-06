@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.20.2"
+__generated_with = "0.20.4"
 app = marimo.App(width="full")
 
 
@@ -25,7 +25,7 @@ def _():
         label="Task:",
     )
     ui_task
-    return get_adapter, mo, np, paths, pd, pl, plt, sns, ui_task
+    return get_adapter, mo, np, paths, pl, plt, sns, ui_task
 
 
 @app.cell
@@ -71,8 +71,8 @@ def _(paths, ui_existing, ui_task):
 
 
 @app.cell
-def _(adapter, df_all, loaded_cfg, mo, ui_existing, ui_task):
-    from scripts.fit_glmhmmt import generate_model_id as _gen_id
+def _(adapter, df_all, loaded_cfg: dict, mo):
+
     # ── controls ──────────────────────────────────────────────────────────────
     is_2afc = adapter.num_classes == 2
     _ecols_opts = (
@@ -104,8 +104,6 @@ def _(adapter, df_all, loaded_cfg, mo, ui_existing, ui_task):
         label="Custom alias (optional)",
         placeholder="e.g. my_best_fit",
     )
-    current_hash = _gen_id(ui_task.value, ui_K.value, ui_tau.value, ui_emission_cols.value)
-
     ui_emission_cols = mo.ui.multiselect(
         options=_ecols_opts,
         value=_ecols_val,
@@ -123,6 +121,33 @@ def _(adapter, df_all, loaded_cfg, mo, ui_existing, ui_task):
         label="τ action trace half-life",
     )
 
+    return (
+        ui_K,
+        ui_alias,
+        ui_emission_cols,
+        ui_subjects,
+        ui_tau,
+        ui_transition_cols,
+    )
+
+
+@app.cell
+def _(
+    mo,
+    ui_K,
+    ui_alias,
+    ui_emission_cols,
+    ui_existing,
+    ui_subjects,
+    ui_task,
+    ui_tau,
+    ui_transition_cols,
+):
+    from scripts.fit_glmhmmt import generate_model_id as _gen_id
+
+    current_hash = _gen_id(ui_task.value, ui_K.value, ui_tau.value, ui_emission_cols.value)
+
+
     fit_button = mo.ui.run_button(label="Run fit")
 
     mo.vstack([
@@ -133,16 +158,7 @@ def _(adapter, df_all, loaded_cfg, mo, ui_existing, ui_task):
         mo.hstack([ui_tau, ui_emission_cols, ui_transition_cols]),
         mo.hstack([fit_button]),
     ], align="start")
-    return (
-        current_hash,
-        fit_button,
-        ui_K,
-        ui_alias,
-        ui_emission_cols,
-        ui_subjects,
-        ui_tau,
-        ui_transition_cols,
-    )
+    return current_hash, fit_button
 
 
 @app.cell
@@ -181,7 +197,20 @@ def _(
 
 
 @app.cell
-def _(adapter, current_hash, df_all, np, paths, pl, ui_K, ui_alias, ui_emission_cols, ui_existing, ui_subjects, ui_task, ui_tau):
+def _(
+    adapter,
+    current_hash,
+    df_all,
+    np,
+    paths,
+    pl,
+    ui_K,
+    ui_alias,
+    ui_existing,
+    ui_subjects,
+    ui_task,
+    ui_tau,
+):
 
     K = ui_K.value
 
@@ -201,7 +230,7 @@ def _(adapter, current_hash, df_all, np, paths, pl, ui_K, ui_alias, ui_emission_
             _d["U_cols"] = list(_d["U_cols"]) if "U_cols" in _d else names["U_cols"]
             arrays_store[_subj] = _d
 
-    arrays_store
+    # arrays_store
     return K, arrays_store, names
 
 
@@ -327,7 +356,18 @@ def _(K, arrays_store, mo, plots, state_labels, ui_subjects, ui_trial_range):
 
 
 @app.cell
-def _(K, adapter, arrays_store, df_all, mo, np, pl, plots, state_labels, ui_subjects):
+def _(
+    K,
+    adapter,
+    arrays_store,
+    df_all,
+    mo,
+    np,
+    pl,
+    plots,
+    state_labels,
+    ui_subjects,
+):
     # ── predictions & categorical performance ────────────────────────────────
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
@@ -391,7 +431,8 @@ def _(K, adapter, arrays_store, df_all, mo, np, pl, plots, state_labels, ui_subj
         _X_s = np.asarray(arrays_store[_subj]["X"])               # (T, n_feat)
         _logits = np.einsum("kci,ti->tkc", _W, _X_s)              # (T, K, C-1)  → [L, R]
         _logits_full = np.concatenate(
-            [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]], axis=2  # (T, K, C) → [L, 0, R]
+                    [_logits, np.zeros((_T_s, K, 1))],
+                    axis=2,
         )
         _lse = _logits_full.max(axis=2, keepdims=True)
         _exp = np.exp(_logits_full - _lse)
@@ -448,8 +489,6 @@ def _(K, arrays_store, mo, names, plots, ui_subjects):
     return
 
 
-
-
 @app.cell
 def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects):
     # ── Per-state accuracy ────────────────────────────────────────────────────
@@ -490,7 +529,16 @@ def _(df_all, mo):
 
 
 @app.cell
-def _(K, adapter, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
+def _(
+    K,
+    adapter,
+    arrays_store,
+    df_all,
+    mo,
+    plots,
+    state_labels,
+    ui_subjects_traj,
+):
     # ── c. Average state-probability trajectories within a session ────────────
     _selected_traj = [s for s in ui_subjects_traj.value if s in arrays_store]
     mo.stop(not _selected_traj, mo.md("Select subjects above to view session trajectories."))
@@ -511,7 +559,16 @@ def _(K, adapter, arrays_store, df_all, mo, plots, state_labels, ui_subjects_tra
 
 
 @app.cell
-def _(K, adapter, arrays_store, df_all, mo, plots, state_labels, ui_subjects_traj):
+def _(
+    K,
+    adapter,
+    arrays_store,
+    df_all,
+    mo,
+    plots,
+    state_labels,
+    ui_subjects_traj,
+):
     # ── d. Fractional occupancy & state-change histogram ─────────────────────
     _selected_occ = [s for s in ui_subjects_traj.value if s in arrays_store]
     mo.stop(not _selected_occ, mo.md("Select subjects above."))
@@ -532,6 +589,7 @@ def _(K, adapter, arrays_store, df_all, mo, plots, state_labels, ui_subjects_tra
         _fig_occ,
     ], align="center")
     return
+
 
 @app.cell
 def _(arrays_store, mo, ui_subjects):
@@ -573,7 +631,18 @@ def _(adapter, arrays_store, df_all, mo, pl, ui_session_subj):
 
 
 @app.cell
-def _(K, adapter, arrays_store, df_all, mo, names, plots, state_labels, ui_session_id, ui_session_subj):
+def _(
+    K,
+    adapter,
+    arrays_store,
+    df_all,
+    mo,
+    names,
+    plots,
+    state_labels,
+    ui_session_id,
+    ui_session_subj,
+):
     # ── Session deep-dive plot ─────────────────────────────────────────────────
     _subj = ui_session_subj.value
     mo.stop(

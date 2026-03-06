@@ -1,0 +1,35 @@
+/* =====================================================
+   glmhmmt docs — custom Starlight overrides
+   ===================================================== */
+
+/* Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --sl-font: 'Inter', system-ui, sans-serif;
+  --sl-font-mono: 'JetBrains Mono', monospace;
+
+  /* Override Starlight accent to match our blue palette */
+  --sl-color-accent-low: #0d2345;
+  --sl-color-accent: #1e6abf;
+  --sl-color-accent-high: #4a9eff;
+}
+
+/* Starlight dark mode uses [data-theme="dark"] */
+:root[data-theme="dark"] {
+  --sl-color-bg: #09121e;
+  --sl-color-bg-nav: #0a1628;
+  --sl-color-bg-sidebar: #0b1930;
+}
+
+/* Code blocks */
+.astro-code, pre {
+  font-family: var(--sl-font-mono) !important;
+  font-size: 0.85rem !important;
+}
+
+/* Nav site title */
+.site-title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}

@@ -38,7 +38,7 @@ def _():
 def _(mo):
     ui_task = mo.ui.dropdown(
         options=["2AFC", "MCDR"],
-        value="2AFC",
+        value="MCDR",
         label="Task:",
     )
     ui_task
@@ -90,7 +90,7 @@ def _(paths, ui_existing, ui_task):
     return (loaded_cfg,)
 
 
-@app.cell(disabled=True)
+@app.cell
 def _(df_all, pl, plt, sns):
     import pandas as pd
 
@@ -360,12 +360,16 @@ def _(
     ui_tau,
 ):
     from scripts.alexis_functions import filter_behavior
+    from scipy.special import log_softmax, softmax
     # Psychometrics
     if not arrays_store:
         mo.stop(True)
 
     _sort_col = adapter.sort_col
     _frames = []
+
+
+
 
     for _subj in selected:
         if _subj not in arrays_store: continue
@@ -422,11 +426,132 @@ def _(
         mo.hstack(_row),
         fig_ag, fig_cls
     ])
-    return
+    return (softmax,)
 
 
 @app.cell
-def _():
+def _(mo):
+    reset_button = mo.ui.run_button(label="Reset to A92 values")
+    reset_button
+    return (reset_button,)
+
+
+@app.cell
+def _(arrays_store, mo, reset_button):
+    _ = reset_button.value  # re-run this cell (resetting sliders) when button is clicked
+    _params = arrays_store["A95"]
+    _X_cols = _params["X_cols"]
+    _W = _params["emission_weights"][0]  # shape (2, M): W_L at [0], W_R at [1]
+
+    tweak_sliders_L = mo.ui.dictionary({
+        col: mo.ui.slider(
+            start=-10, stop=10, step=0.05,
+            value=round(float(_W[0, i]), 2),
+            label=col,
+        )
+        for i, col in enumerate(_X_cols)
+    })
+    tweak_sliders_R = mo.ui.dictionary({
+        col: mo.ui.slider(
+            start=-10, stop=10, step=0.05,
+            value=round(float(_W[1, i]), 2),
+            label=col,
+        )
+        for i, col in enumerate(_X_cols)
+    })
+
+    mo.vstack([
+        mo.md("### Tweak weights for A92"),
+        mo.md("**W_L (Left)**"),
+        mo.hstack(list(tweak_sliders_L.elements.values()), wrap=True),
+        mo.md("**W_R (Right)**"),
+        mo.hstack(list(tweak_sliders_R.elements.values()), wrap=True),
+    ])
+    return tweak_sliders_L, tweak_sliders_R
+
+
+@app.cell
+def _(
+    adapter,
+    arrays_store,
+    df_all,
+    is_2afc,
+    mo,
+    np,
+    pl,
+    plots,
+    plt,
+    softmax,
+    tweak_sliders_L,
+    tweak_sliders_R,
+    ui_tau,
+):
+    _sort_col = adapter.sort_col
+    _frames = []
+
+    _params_a92 = arrays_store["A95"]
+    _X_cols = _params_a92["X_cols"]
+
+    # Build weight vectors directly from slider values
+    _W_L = np.array([tweak_sliders_L.value[col] for col in _X_cols])
+    _W_R = np.array([tweak_sliders_R.value[col] for col in _X_cols])
+
+    _df_sub = (
+        df_all.filter(pl.col("subject") == "A95")
+        .sort(_sort_col)
+    )
+    y, X, _, _ = adapter.load_subject(_df_sub, tau=ui_tau.value, emission_cols=_X_cols)
+    T, M = X.shape
+    X_np = np.asarray(X, dtype=float)
+    logits = np.stack([X_np @ _W_L, np.zeros(T), X_np @ _W_R], axis=1)
+    p_pred = softmax(logits, axis=1)
+
+    _df_sub = (
+        df_all.filter(pl.col("subject") == "A95")
+        .sort(_sort_col)
+    )
+    if not is_2afc:
+        _df_sub = _df_sub.filter(pl.col("session").count().over("session") >= 2)
+
+    _cols = [pl.Series("pred_choice", np.argmax(p_pred, axis=1).astype(int))]
+    _cols += [pl.Series("pL", p_pred[:, 0]), pl.Series("pC", p_pred[:, 1]), pl.Series("pR", p_pred[:, 2])]
+
+    _df_sub = _df_sub.with_columns(_cols)
+    _frames.append(_df_sub)
+
+    _df_all_pred = pl.concat(_frames)
+    _plot_df = plots.prepare_predictions_df(_df_all_pred)
+    _perf_kwargs = {"arrays_store": arrays_store} if is_2afc else {}
+    _fig_all, _ = plots.plot_categorical_performance_all(
+        _plot_df,
+        f"GLM tweaked (tau={ui_tau.value})",
+        **_perf_kwargs,
+    )
+    _fig_all_cat, _ = plots.plot_categorical_strat_by_side(
+        _plot_df,
+        f"GLM tweaked (tau={ui_tau.value})",
+        **_perf_kwargs, model_name = ""
+    )
+
+    # --- Coefficient bar chart ---
+    _fig_coef, _ax = plt.subplots(figsize=(max(6, len(_X_cols) * 0.55), 3))
+    _x = np.arange(len(_X_cols))
+    _width = 0.35
+    _ax.bar(_x - _width / 2, _W_L, _width, label="W_L", color="steelblue")
+    _ax.bar(_x + _width / 2, _W_R, _width, label="W_R", color="tomato")
+    _ax.axhline(0, color="k", linewidth=0.8, linestyle="--")
+    _ax.set_xticks(_x)
+    _ax.set_xticklabels(_X_cols, rotation=45, ha="right", fontsize=8)
+    _ax.set_ylabel("Weight")
+    _ax.set_title("Current weights")
+    _ax.legend(frameon=False)
+    import seaborn as _sns; _sns.despine(ax=_ax)
+    plt.tight_layout()
+
+    mo.vstack([
+        mo.hstack([_fig_all, _fig_all_cat]),
+        _fig_coef,
+    ])
     return
 
 

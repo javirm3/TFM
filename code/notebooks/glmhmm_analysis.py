@@ -90,7 +90,7 @@ def _(paths, ui_existing, ui_task):
 
 
 @app.cell
-def _(adapter, df_all, loaded_cfg: dict, mo, ui_existing):
+def _(adapter, df_all, loaded_cfg: dict, mo):
     # ── controls ───────────────────────────────────────────────────────────────
     is_2afc = adapter.num_classes == 2
     emission_cols_opts = (
@@ -126,41 +126,56 @@ def _(adapter, df_all, loaded_cfg: dict, mo, ui_existing):
         label="Emission regressors (X)",
     )
 
-    ui_model_id = mo.ui.text(
-        value=_model_id_val,
-        label="Model ID (used as output folder name)",
+    ui_alias = mo.ui.text(
+        value="",
+        label="Custom alias (optional)",
+        placeholder="e.g. my_best_fit",
     )
+
+
+    return is_2afc, ui_K, ui_alias, ui_emission_cols, ui_subjects, ui_tau
+
+
+@app.cell
+def _(
+    mo,
+    ui_K,
+    ui_alias,
+    ui_emission_cols,
+    ui_existing,
+    ui_subjects,
+    ui_task,
+    ui_tau,
+):
+    from scripts.fit_glmhmmt import generate_model_id as _gen_id
+    current_hash = _gen_id(ui_task.value, ui_K.value, ui_tau.value, ui_emission_cols.value)
 
     fit_button = mo.ui.run_button(label="Run fit")
     mo.vstack(
         [
             mo.md("### Configuration"),
-            mo.hstack([ui_existing, ui_model_id]),
+            mo.hstack([ui_existing, ui_alias]),
             mo.hstack([ui_K, ui_tau, ui_subjects, ui_emission_cols]),
+            mo.md(f"**Current params hash:** `{current_hash}`"),
             mo.hstack([fit_button]), 
         ],
         align="center",
     )
-    return (
-        fit_button,
-        is_2afc,
-        ui_K,
-        ui_emission_cols,
-        ui_model_id,
-        ui_subjects,
-        ui_tau,
-    )
+
+    return current_hash, fit_button
 
 
 @app.cell
 def _(
+    current_hash,
     fit_button,
     fit_main,
     mo,
     paths,
     ui_K,
+    ui_alias,
     ui_emission_cols,
-    ui_model_id,
+    ui_existing,
     ui_subjects,
     ui_task,
     ui_tau,
@@ -169,7 +184,8 @@ def _(
     mo.stop(
         not fit_button.value, mo.md("Configure parameters and press **Run fit**.")
     )
-    _OUT =  paths.RESULTS / "fits" / ui_task.value / "glmhmm" / ui_model_id.value
+    _selected_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
+    _OUT = paths.RESULTS / "fits" / ui_task.value / "glmhmm" / _selected_id
     with mo.status.spinner(
         title=f"Fitting GLM-HMM K={ui_K.value} τ={ui_tau.value} for {ui_subjects.value}..."
     ):
@@ -180,6 +196,7 @@ def _(
                 tau=ui_tau.value,
                 emission_cols=ui_emission_cols.value,
                 task=ui_task.value,
+                n_restarts=1,
             )
     mo.md("✅ Fit complete — plots below update automatically.")
     return
@@ -188,13 +205,15 @@ def _(
 @app.cell
 def _(
     adapter,
+    current_hash,
     df_all,
     np,
     paths,
     pl,
     ui_K,
+    ui_alias,
     ui_emission_cols,
-    ui_model_id,
+    ui_existing,
     ui_subjects,
     ui_task,
     ui_tau,
@@ -202,7 +221,8 @@ def _(
     K = ui_K.value
 
     selected = ui_subjects.value
-    OUT = paths.RESULTS / "fits" / ui_task.value / "glmhmm" / ui_model_id.value
+    selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
+    OUT = paths.RESULTS / "fits" / ui_task.value / "glmhmm" / selected_model_id
     # load feature names via adapter
     _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(adapter.sort_col)
     _, _, _, names = adapter.load_subject(_df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value)
@@ -504,7 +524,7 @@ def _(
                 _logits_full = np.concatenate([_logits, np.zeros((_T_s, K, 1))], axis=2)
             else:
                 _logits_full = np.concatenate(
-                    [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]],
+                    [_logits, np.zeros((_T_s, K, 1))],
                     axis=2,
                 )
             _lse = _logits_full.max(axis=2, keepdims=True)
@@ -1058,6 +1078,116 @@ def _(
         ),
         _fig_ssm,
     ], align="center")
+    return
+
+
+@app.cell
+def _(K, arrays_store, df_all, mo, np, pl, plots, state_labels, ui_subjects):
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+
+    _frames = []
+    for _subj in _selected:
+        _p_pred = arrays_store[_subj]["p_pred"]  # (T, 3): pL, pC, pR
+        _p_pred_aux = _p_pred.copy()
+        _df_sub = (
+            df_all.filter(pl.col("subject") == _subj)
+            .sort("Trial")
+            .filter(pl.col("session").count().over("session") >= 2)
+            .with_columns(
+                [
+                    pl.Series("pL", _p_pred[:, 0]),
+                    pl.Series("pC", _p_pred[:, 1]),
+                    pl.Series("pR", _p_pred[:, 2]),
+                    pl.Series(
+                        "pred_choice", np.argmax(_p_pred, axis=1).astype(int)
+                    ),
+                ]
+            )
+        )
+        _frames.append(_df_sub)
+
+    _df_all_pred = pl.concat(_frames)
+    _plot_df = plots.prepare_predictions_df(_df_all_pred)
+    _fig_all, _ = plots.plot_categorical_performance_all(_plot_df, f"glmhmm K={K}")
+
+    # ── per-state overlay — pool all subjects with normalised state ranks ─────
+    # Normalise: 0 = Engaged, 1 = Disengaged, … per-subject regardless of raw idx
+    _lrank_map = { "Engaged": 0, "Disengaged": 1, **{f"Disengaged {i}": i for i in range(1, K)},}
+    _pool_dfs = []
+    _pool_assigns = []
+    for _subj in _selected:
+        _p_pred_s = arrays_store[_subj]["p_pred"]
+        _df_s = (
+            df_all.filter(pl.col("subject") == _subj)
+            .sort("Trial")
+            .filter(pl.col("Session").count().over("Session") >= 2)
+            .with_columns(
+                [
+                    pl.Series("pL", _p_pred_s[:, 0]),
+                    pl.Series("pC", _p_pred_s[:, 1]),
+                    pl.Series("pR", _p_pred_s[:, 2]),
+                    pl.Series(
+                        "pred_choice", np.argmax(_p_pred_s, axis=1).astype(int)
+                    ),
+                ]
+            )
+        )
+        _plot_df_s = plots.prepare_predictions_df(_df_s)
+        _gamma_s = arrays_store[_subj]["smoothed_probs"]
+        # Both must have the same length — if not, session filtering diverged
+        # between the fit script and this notebook.
+        _T_s = _gamma_s.shape[0]
+
+        # ── per-state emission prediction: softmax(W_k × x) for MAP state k ───────
+        # Using the marginal p_pred (blended over all states) makes every
+        # state's model line look the same.  Instead look up the emission of
+        # the MAP-assigned state directly from the saved weights.
+        _W = np.asarray(
+            arrays_store[_subj]["emission_weights"]
+        )  # (K, C-1, n_feat)
+        _X_s = np.asarray(arrays_store[_subj]["X"])  # (T, n_feat)
+        _logits = np.einsum("kci,ti->tkc", _W, _X_s)  # (T, K, C-1)  → [L, R]
+        _logits_full = np.concatenate(
+            [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]],
+            axis=2,  # (T, K, C) → [L, 0, R]
+        )
+        _lse = _logits_full.max(axis=2, keepdims=True)
+        _exp = np.exp(_logits_full - _lse)
+        _p_state = _exp / _exp.sum(axis=2, keepdims=True)  # (T, K, C)
+        _map_k = np.argmax(_gamma_s, axis=1).astype(int)  # (T,)
+        _stim = _plot_df_s["stimulus"].to_numpy().astype(int)  # (T,)
+        _p_state_correct = _p_state[np.arange(_T_s), _map_k, _stim]  # (T,)
+        # build per-state df with state-k emission replacing the marginal
+        _plot_df_state_s = _plot_df_s.with_columns(
+            pl.Series("p_model_correct", _p_state_correct.astype(np.float64))
+        )
+        _pool_dfs.append(_plot_df_state_s)
+        _slbls = state_labels[_subj]
+        _raw = _map_k  # reuse already-computed MAP assignment
+        _norm = np.array([_lrank_map.get(_slbls.get(int(k), ""), k) for k in _raw])
+        _pool_assigns.append(_norm)
+
+    _df_state_pool = pl.concat(_pool_dfs)
+    _assign_pool = np.concatenate(_pool_assigns)
+    _state_lbl_global = {
+        0: "Engaged",
+        1: "Disengaged",
+        **{i: f"Disengaged {i}" for i in range(2, K)},
+    }
+    _fig_state, _ = plots.plot_categorical_performance_by_state(df=_df_state_pool,smoothed_probs=None,state_assign=_assign_pool,
+                                                                state_labels=_state_lbl_global,model_name=f"glmhmm K={K} — per state",)
+
+    mo.vstack(
+        [
+            mo.md("### Categorical plots for accuracy"),
+            _fig_all,
+            mo.md("### Per-state categorical performance"),
+            _fig_state,
+        ],
+        align="center",
+    )
+
     return
 
 
