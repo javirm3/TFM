@@ -616,8 +616,14 @@ import { Icon } from 'astro-icon/components';
       let bgGradient = null;
 
       function resize() {
-        W = canvas.width  = canvas.offsetWidth;
-        H = canvas.height = canvas.offsetHeight;
+        W = window.innerWidth;
+        H = window.innerHeight;
+        // iOS Safari safeguard: if W is 0, fall back to screen width
+        if (W === 0) W = screen.width;
+        if (H === 0) H = screen.height;
+        
+        canvas.width  = W;
+        canvas.height = H;
         bgGradient = ctx.createLinearGradient(0, 0, 0, H);
         bgGradient.addColorStop(0,   '#09121e');
         bgGradient.addColorStop(0.5, '#0b1728');
@@ -632,6 +638,11 @@ import { Icon } from 'astro-icon/components';
       function drawFrame(timestamp) {
         if (startTime === null) startTime = timestamp;
         const elapsed = (timestamp - startTime) * 0.001;
+
+        // Catch silent layout shifts on mobile Safari
+        if (W !== window.innerWidth && window.innerWidth > 0) {
+          resize();
+        }
 
         // Force background fill
         ctx.fillStyle = bgGradient;
