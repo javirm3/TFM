@@ -70,6 +70,20 @@ import { Icon } from 'astro-icon/components';
 
     .nav-links a:hover { color: #4a9eff; }
 
+    @media (max-width: 640px) {
+      nav {
+        padding: 0.75rem 1rem;
+        height: auto;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .nav-links {
+        gap: 1.25rem;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+    }
+
     /* ── HERO / CANVAS ── */
     #hero {
       position: relative;
@@ -625,10 +639,9 @@ import { Icon } from 'astro-icon/components';
 
         const centerY = H * 0.48;
         
-        // ── 2. Reduce path resolution ──
-        // Mathematical curves like sines look perfectly smooth with just 1 segment every ~15 pixels.
-        // This slashes the lineTo calls from ~15,000 per frame to just ~3,000 on a 4K monitor.
-        const steps = Math.max(1, Math.ceil(W / 15));
+        // ── 2. Dynamic path resolution ──
+        // We use a high baseline of steps (80) or W/4 to ensure curves look perfectly smooth even on narrow vertical displays (mobile phones)
+        const steps = Math.max(80, Math.ceil(W / 4));
         const stepWidth = W / steps;
 
         for (let i = 0; i < WAVE_COUNT; i++) {
