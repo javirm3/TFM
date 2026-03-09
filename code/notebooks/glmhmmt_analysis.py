@@ -17,6 +17,7 @@ def _():
     import seaborn as sns
     import pandas as pd
     from tasks import get_adapter
+    from widgets import ModelManagerWidget
     sns.set_style("white")
 
     ui_task = mo.ui.dropdown(
@@ -25,7 +26,7 @@ def _():
         label="Task:",
     )
     ui_task
-    return get_adapter, mo, np, paths, pl, plt, sns, ui_task
+    return ModelManagerWidget, get_adapter, mo, np, paths, pl, plt, sns, ui_task
 
 
 @app.cell
@@ -38,158 +39,77 @@ def _(get_adapter, paths, pl, ui_task):
 
 
 @app.cell
-def _(mo, paths, ui_task):
+def _(paths, ui_task):
     import json as _json
     _fits_path = paths.RESULTS / "fits" / ui_task.value / "glmhmmt"
     _existing_opts = []
-    if _fits_path.exists():
-        _existing_opts = sorted([
-            d.name for d in _fits_path.iterdir()
-            if d.is_dir() and (d / "config.json").exists()
-        ])
-    ui_existing = mo.ui.dropdown(
-        options=_existing_opts,
-        value=None,
-        label="Load existing model (overrides params below)",
-    )
-    ui_existing
-    return (ui_existing,)
+    return
 
 
 @app.cell
-def _(paths, ui_existing, ui_task):
+def _(paths, ui_task):
     import json as _json
-    loaded_cfg: dict = {}
-    if ui_existing.value:
-        _cfg_path = (
-            paths.RESULTS / "fits" / ui_task.value / "glmhmmt" / ui_existing.value / "config.json"
-        )
-        if _cfg_path.exists():
-            loaded_cfg = _json.loads(_cfg_path.read_text())
-    loaded_cfg
-    return (loaded_cfg,)
+    return
 
 
 @app.cell
-def _(adapter, df_all, loaded_cfg: dict, mo):
-
+def _(ModelManagerWidget, adapter, df_all, mo, ui_task):
     # ── controls ──────────────────────────────────────────────────────────────
     is_2afc = adapter.num_classes == 2
-    _ecols_opts = (
-        adapter.default_emission_cols() + adapter.sf_cols(df_all)
-        if is_2afc else adapter.default_emission_cols()
-    )
-    _tcols_opts = adapter.default_transition_cols()
+    _subjects = df_all["subject"].unique().to_list()
 
-    # Seed from loaded config if a model was selected
-    _K_val     = loaded_cfg.get("K_list", [2])[0] if loaded_cfg.get("K_list") else 2
-    _tau_val   = loaded_cfg.get("tau", 50)
-    _ecols_saved = loaded_cfg.get("emission_cols", [])
-    _ecols_valid = [c for c in _ecols_saved if c in _ecols_opts]
-    _ecols_val = _ecols_valid if _ecols_valid else _ecols_opts
-    _tcols_saved = loaded_cfg.get("transition_cols", [])
-    _tcols_valid = [c for c in _tcols_saved if c in _tcols_opts]
-    _tcols_val = _tcols_valid if _tcols_valid else _tcols_opts
-    _model_id_val = loaded_cfg.get("model_id", "glmhmmt_2")
-
-    ui_K = mo.ui.slider(start=2, stop=6, value=_K_val, label="K")
-    ui_subjects = mo.ui.multiselect(
-        value=df_all["subject"].unique(),
-        options=df_all["subject"].unique(),
-        label="Subjects",
+    mm_widget = ModelManagerWidget(
+        model_type="glmhmmt",
+        task=ui_task.value,
+        is_2afc=is_2afc,
+        subjects=_subjects,
+        K=2,
+        tau=50,
+        lapse=False,
+        lapse_max=0.2,
     )
 
-    ui_alias = mo.ui.text(
-        value=_model_id_val if _model_id_val != "glmhmmt_2" else "",
-        label="Custom alias (optional)",
-        placeholder="e.g. my_best_fit",
-    )
-    ui_emission_cols = mo.ui.multiselect(
-        options=_ecols_opts,
-        value=_ecols_val,
-        label="Emission regressors (X)",
-    )
+    ui_model_manager = mo.ui.anywidget(mm_widget)
+    ui_model_manager
 
-    ui_transition_cols = mo.ui.multiselect(
-        options=_tcols_opts,
-        value=_tcols_val,
-        label="Transition regressors (U)",
-    )
-
-    ui_tau = mo.ui.slider(
-        start=1, stop=200, value=_tau_val, step=1,
-        label="τ action trace half-life",
-    )
-
-    return (
-        ui_K,
-        ui_alias,
-        ui_emission_cols,
-        ui_subjects,
-        ui_tau,
-        ui_transition_cols,
-    )
+    return is_2afc, ui_model_manager
 
 
 @app.cell
-def _(
-    mo,
-    ui_K,
-    ui_alias,
-    ui_emission_cols,
-    ui_existing,
-    ui_subjects,
-    ui_task,
-    ui_tau,
-    ui_transition_cols,
-):
+def _(mo, ui_model_manager, ui_task):
     from scripts.fit_glmhmmt import generate_model_id as _gen_id
+    
+    _val = ui_model_manager.value
+    current_hash = _gen_id(ui_task.value, _val["K"], _val["tau"], _val["emission_cols"])
 
-    current_hash = _gen_id(ui_task.value, ui_K.value, ui_tau.value, ui_emission_cols.value)
-
-
-    fit_button = mo.ui.run_button(label="Run fit")
-
-    mo.vstack([
-        mo.md("### Model Configuration"),
-        ui_existing,
-        mo.hstack([ui_alias, mo.md(f"**Hash:** `{current_hash}`")]),
-        mo.hstack([ui_K, ui_subjects]),
-        mo.hstack([ui_tau, ui_emission_cols, ui_transition_cols]),
-        mo.hstack([fit_button]),
-    ], align="start")
-    return current_hash, fit_button
+    return current_hash,
 
 
 @app.cell
 def _(
     current_hash,
-    fit_button,
     mo,
     paths,
-    ui_K,
-    ui_alias,
-    ui_emission_cols,
-    ui_existing,
-    ui_subjects,
+    ui_model_manager,
     ui_task,
-    ui_tau,
-    ui_transition_cols,
 ):
     from scripts.fit_glmhmmt import main as fit_main
 
-    mo.stop(not fit_button.value, mo.md("Configure parameters and press **Run fit**."))
+    _val = ui_model_manager.value
+    _clicks = _val["run_fit_clicks"]
+    
+    mo.stop(_clicks == 0, mo.md("Configure parameters and press **RUN FIT 🚀**."))
 
-    _selected_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
+    _selected_id = _val["existing_model"] or (_val["alias"] if _val["alias"] else current_hash)
     _OUT = paths.RESULTS / "fits" / ui_task.value / "glmhmmt" / _selected_id
-    with mo.status.spinner(title=f"Fitting {_selected_id} K={ui_K.value} τ={ui_tau.value} for {ui_subjects.value}..."):
+    with mo.status.spinner(title=f"Fitting {_selected_id} K={_val['K']} τ={_val['tau']} for {_val['subjects']}..."):
         fit_main(
-            subjects=ui_subjects.value,
-            K_list=[ui_K.value],
+            subjects=_val["subjects"],
+            K_list=[_val["K"]],
             out_dir=_OUT,
-            emission_cols=ui_emission_cols.value or None,
-            transition_cols=ui_transition_cols.value or None,
-            tau=ui_tau.value,
+            emission_cols=_val["emission_cols"] or None,
+            transition_cols=_val["transition_cols"] or None,
+            tau=_val["tau"],
             task=ui_task.value,
         )
     mo.md("✅ Fit complete — plots below update automatically.")
@@ -204,24 +124,21 @@ def _(
     np,
     paths,
     pl,
-    ui_K,
-    ui_alias,
-    ui_existing,
-    ui_subjects,
+    ui_model_manager,
     ui_task,
-    ui_tau,
 ):
+    _val = ui_model_manager.value
+    K = _val["K"]
+    _selected_subjects = _val["subjects"]
 
-    K = ui_K.value
-
-    selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
+    selected_model_id = _val["existing_model"] or (_val["alias"] if _val["alias"] else current_hash)
     OUT = paths.RESULTS / "fits" / ui_task.value / "glmhmmt" / selected_model_id
     # load feature names from data (use first available subject for a representative build)
-    _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(adapter.sort_col)
-    _, _, _, names = adapter.load_subject(_df_sel, tau=ui_tau.value)
+    _df_sel = df_all.filter(pl.col("subject").is_in(_selected_subjects)).sort(adapter.sort_col)
+    _, _, _, names = adapter.load_subject(_df_sel, tau=_val["tau"])
 
     arrays_store = {}
-    for _subj in ui_subjects.value:
+    for _subj in _selected_subjects:
         _f = OUT / f"{_subj}_K{K}_glmhmmt_arrays.npz"
         if _f.exists():
             _d = dict(np.load(_f, allow_pickle=True))
@@ -235,9 +152,10 @@ def _(
 
 
 @app.cell
-def _(K, adapter, arrays_store, names, ui_subjects):
+def _(K, adapter, arrays_store, names, ui_model_manager):
     # ── State labelling — task-specific criteria via adapter ────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _val = ui_model_manager.value
+    _selected = [s for s in _val["subjects"] if s in arrays_store]
     state_labels, state_order = adapter.label_states(arrays_store, names, K, _selected)
 
     #state_labels, state_order
@@ -245,7 +163,7 @@ def _(K, adapter, arrays_store, names, ui_subjects):
 
 
 @app.cell
-def _(K, arrays_store, mo, names, paths, plots, state_labels, ui_subjects):
+def _(K, arrays_store, mo, names, paths, plots, state_labels, ui_model_manager):
     # ── emission weights ───────────────────────────────────────────────────────
     #
     # Agonist collapse: for symmetric L/R feature pairs, take
@@ -256,7 +174,8 @@ def _(K, arrays_store, mo, names, paths, plots, state_labels, ui_subjects):
     # Groups: (label, [(feat_name, class_idx), ...])
     # class_idx int = direct weight; "neg_mean"/"mean" = derived from both rows
     # Coherent = cue and choice on same side; Incoherent = opposite side
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _val = ui_model_manager.value
+    _selected = [s for s in _val["subjects"] if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
     _fig_ag, _fig_cls = plots.plot_emission_weights(
         arrays_store=arrays_store,
@@ -271,9 +190,10 @@ def _(K, arrays_store, mo, names, paths, plots, state_labels, ui_subjects):
 
 
 @app.cell
-def _(K, arrays_store, mo, np, plt, sns, state_labels, ui_subjects):
+def _(K, arrays_store, mo, np, plt, sns, state_labels, ui_model_manager):
     # ── transition matrix heatmap — marimo grid (3 per row) ──────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _val = ui_model_manager.value
+    _selected = [s for s in _val["subjects"] if s in arrays_store]
     _COLS = 3
     _figs_t = []
     for _subj in _selected:
@@ -315,9 +235,10 @@ def _(K, arrays_store, mo, np, plt, sns, state_labels, ui_subjects):
 
 
 @app.cell
-def _(arrays_store, mo, ui_subjects):
+def _(arrays_store, mo, ui_model_manager):
     # ── trial-window slider (shared across all posterior plots) ──────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _val = ui_model_manager.value
+    _selected = [s for s in _val["subjects"] if s in arrays_store]
     _T_max = (
         max(arrays_store[s]["smoothed_probs"].shape[0] for s in _selected)
         if _selected else 200
@@ -334,9 +255,10 @@ def _(arrays_store, mo, ui_subjects):
 
 
 @app.cell
-def _(K, arrays_store, mo, plots, state_labels, ui_subjects, ui_trial_range):
+def _(K, arrays_store, mo, plots, state_labels, ui_model_manager, ui_trial_range):
     # ── posterior state probabilities ─────────────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _val = ui_model_manager.value
+    _selected = [s for s in _val["subjects"] if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
     _t0, _t1 = ui_trial_range.value
     _fig_p = plots.plot_posterior_probs(
@@ -366,10 +288,11 @@ def _(
     pl,
     plots,
     state_labels,
-    ui_subjects,
+    ui_model_manager,
 ):
     # ── predictions & categorical performance ────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _val = ui_model_manager.value
+    _selected = [s for s in _val["subjects"] if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
     _frames = []
@@ -472,9 +395,10 @@ def _(
 
 
 @app.cell
-def _(K, arrays_store, mo, names, plots, ui_subjects):
+def _(K, arrays_store, mo, names, plots, ui_model_manager):
     # ── Input-dependent transition weights ────────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _val = ui_model_manager.value
+    _selected = [s for s in _val["subjects"] if s in arrays_store]
     mo.stop(
         not _selected or "transition_weights" not in arrays_store.get(_selected[0], {}),
         mo.md("No transition weights found — run the glmhmm-t fit first."),
@@ -490,9 +414,10 @@ def _(K, arrays_store, mo, names, plots, ui_subjects):
 
 
 @app.cell
-def _(K, arrays_store, df_all, mo, plots, state_labels, ui_subjects):
+def _(K, arrays_store, df_all, mo, plots, state_labels, ui_model_manager):
     # ── Per-state accuracy ────────────────────────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _val = ui_model_manager.value
+    _selected = [s for s in _val["subjects"] if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted subjects available."))
     _fig_acc, _tbl = plots.plot_state_accuracy(
         arrays_store=arrays_store,
@@ -592,9 +517,10 @@ def _(
 
 
 @app.cell
-def _(arrays_store, mo, ui_subjects):
+def _(arrays_store, mo, ui_model_manager):
     # ── Session deep-dive controls ─────────────────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _val = ui_model_manager.value
+    _selected = [s for s in _val["subjects"] if s in arrays_store]
     _subj_opts = _selected if _selected else ["(no fitted subjects)"]
 
     ui_session_subj = mo.ui.dropdown(
@@ -669,7 +595,7 @@ def _(
 
 
 @app.cell
-def _(K, current_hash, mo, paths, plots, ui_alias, ui_subjects):
+def _(K, current_hash, mo, paths, plots, ui_model_manager):
     # ── τ sweep analysis ────────────────────────────────────────────────────────
     _sweep_path = paths.RESULTS / "fits" / "tau_sweep" / f"glmhmmt_K{K}" / "tau_sweep_summary.parquet"
     mo.stop(
@@ -680,14 +606,16 @@ def _(K, current_hash, mo, paths, plots, ui_alias, ui_subjects):
             f"uv run python scripts/fit_tau_sweep.py --model glmhmmt --K {K}\n```"
         ),
     )
-    _subjects = list(ui_subjects.value)
+    _val = ui_model_manager.value
+    _subjects = list(_val["subjects"])
     _fig_sweep, _best = plots.plot_tau_sweep(
         sweep_path=_sweep_path,
         subjects=_subjects,
         K=K,
     )
+    _alias = _val["alias"] or current_hash
     mo.vstack([
-        mo.md(f"### τ sweep results — {ui_alias.value or current_hash} K={K}"),
+        mo.md(f"### τ sweep results — {_alias} K={K}"),
         _fig_sweep,
         mo.md("**Best τ per subject (min BIC):**"),
         mo.plain_text(_best.to_pandas().to_string(index=False)),

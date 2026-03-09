@@ -1,7 +1,7 @@
 import marimo
 
 __generated_with = "0.20.4"
-app = marimo.App(width="medium")
+app = marimo.App(width="full")
 
 
 @app.cell
@@ -19,9 +19,12 @@ def _():
     import paths
     from scripts.fit_glm import main as fit_main, generate_model_id
     from tasks import get_adapter
+    from widgets import ModelManagerWidget, CoefTweakerWidget
 
     sns.set_style("white")
     return (
+        CoefTweakerWidget,
+        ModelManagerWidget,
         fit_main,
         generate_model_id,
         get_adapter,
@@ -55,39 +58,32 @@ def _(get_adapter, paths, pl, ui_task):
 
 
 @app.cell
-def _(mo, paths, ui_task):
+def _(paths, ui_task):
     import json as _json
-    fits_path = paths.RESULTS / "fits" / ui_task.value / "glm"
+    _fits_path = paths.RESULTS / "fits" / ui_task.value / "glm"
     _existing_opts = []
-    if fits_path.exists():
+    if _fits_path.exists():
         _existing_opts = sorted([
-            d.name for d in fits_path.iterdir()
+            d.name for d in _fits_path.iterdir()
             if d.is_dir() and (d / "config.json").exists()
         ])
-    ui_existing = mo.ui.dropdown(
-        options=_existing_opts,
-        value=None,
-        label="Load existing model (overrides params below)",
-    )
-    ui_alias = mo.ui.text(
-        value="",
-        label="Custom alias (optional)",
-        placeholder="e.g. my_best_fit",
-    )
-    return ui_alias, ui_existing
+    return
 
 
 @app.cell
-def _(paths, ui_existing, ui_task):
+def _(paths, ui_task):
     import json as _json
-    loaded_cfg: dict = {}
-    if ui_existing.value:
-        _cfg_path = (
-            paths.RESULTS / "fits" / ui_task.value/ "glm" / ui_existing.value / "config.json"
-        )
-        if _cfg_path.exists():
-            loaded_cfg = _json.loads(_cfg_path.read_text())
-    return (loaded_cfg,)
+    def load_cfg_for_model(model_name):
+        loaded_cfg = {}
+        if model_name:
+            _cfg_path = (
+                paths.RESULTS / "fits" / ui_task.value / "glm" / model_name / "config.json"
+            )
+            if _cfg_path.exists():
+                loaded_cfg = _json.loads(_cfg_path.read_text())
+        return loaded_cfg
+
+    return
 
 
 @app.cell
@@ -141,7 +137,7 @@ def _(df_all, pl, plt, sns):
 
 
 @app.cell
-def _(adapter, df_all, loaded_cfg: dict, mo, ui_task):
+def _(ModelManagerWidget, adapter, df_all, mo, ui_task):
     is_2afc = adapter.num_classes == 2
     task_name = ui_task.value
 
@@ -151,74 +147,46 @@ def _(adapter, df_all, loaded_cfg: dict, mo, ui_task):
         else adapter.default_emission_cols()
     )
 
-    # Seed initial widget values from loaded config (if a model was selected)
-    _tau_val   = loaded_cfg.get("tau", 5)
-    _lapse_val = loaded_cfg.get("lapse", False)
-    _lapse_max_val = loaded_cfg.get("lapse_max", 0.2)
-    _ecols_saved = loaded_cfg.get("emission_cols", [])
-    _ecols_valid = [c for c in _ecols_saved if c in emission_cols_opts]
-    _ecols_val = _ecols_valid if _ecols_valid else emission_cols_opts[:10]
+    _subjects = df_all["subject"].unique().to_list()
 
-    ui_subjects = mo.ui.multiselect(
-        value=df_all["subject"].unique().to_list(),
-        options=df_all["subject"].unique().to_list(),
-        label="Subjects",
+    # Preload config if there's an existing model selected
+    # But since the widget handles the state, we just pass initial values
+    _existing_opts = []
+    mm_widget = ModelManagerWidget(
+        model_type="glm",
+        is_2afc=is_2afc,
+        subjects_list=_subjects,
+        existing_models=_existing_opts,
+        subjects=_subjects,
+        k_options=[1], # GLM is K=1
+        K=1,
+        tau=5,
+        lapse=False,
+        lapse_max=0.2,
+        emission_cols_options=emission_cols_opts,
+        emission_cols=emission_cols_opts[:10],
+        transition_cols_options=[],
+        transition_cols=[]
     )
 
-    ui_tau = mo.ui.slider(
-        start=1, stop=100, value=_tau_val, step=1, label="τ (History)"
-    )
+    # We use mo.ui.anywidget to wrap it so it integrates with Marimo
+    ui_model_manager = mo.ui.anywidget(mm_widget)
 
-    ui_lapse = mo.ui.checkbox(value=_lapse_val, label="Fit lapse rates γ_L, γ_R")
-
-    ui_lapse_max = mo.ui.slider(
-        start=0.01, stop=0.5, value=_lapse_max_val, step=0.01, label="Max lapse"
-    )
-
-    ui_emission_cols = mo.ui.multiselect(
-        options=emission_cols_opts,
-        value=_ecols_val,
-        label="Regressors (X)",
-    )
-    return (
-        is_2afc,
-        task_name,
-        ui_emission_cols,
-        ui_lapse,
-        ui_lapse_max,
-        ui_subjects,
-        ui_tau,
-    )
+    # We display it
+    ui_model_manager
+    return is_2afc, task_name, ui_model_manager
 
 
 @app.cell
-def _(
-    generate_model_id,
-    is_2afc,
-    mo,
-    task_name,
-    ui_alias,
-    ui_emission_cols,
-    ui_existing,
-    ui_lapse,
-    ui_lapse_max,
-    ui_subjects,
-    ui_tau,
-):
-    current_hash = generate_model_id(task_name, ui_tau.value, ui_emission_cols.value, lapse=ui_lapse.value)
-
-    fit_button = mo.ui.run_button(label="Run GLM Fit")
-
-    mo.vstack([
-        mo.md("### GLM Configuration"),
-        mo.hstack([ui_existing, ui_alias]),
-        mo.hstack([ui_subjects, ui_tau]),
-        (mo.hstack([ui_lapse, ui_lapse_max]) if is_2afc else mo.md("")),
-        ui_emission_cols,
-        mo.md(f"**Current params hash:** `{current_hash}`"),
-        fit_button,
-    ])
-    return current_hash, fit_button
+def _(generate_model_id, task_name, ui_model_manager):
+    _val = ui_model_manager.value
+    current_hash = generate_model_id(
+        task_name, 
+        _val["tau"], 
+        _val["emission_cols"], 
+        lapse=_val["lapse"]
+    )
+    return (current_hash,)
 
 
 @app.cell
@@ -227,30 +195,22 @@ def _():
 
 
 @app.cell
-def _(
-    fit_button,
-    fit_main,
-    mo,
-    ui_alias,
-    ui_emission_cols,
-    ui_lapse,
-    ui_lapse_max,
-    ui_subjects,
-    ui_task,
-    ui_tau,
-):
-    mo.stop(not fit_button.value, mo.md("Configure parameters and press **Run GLM Fit**."))
+def _(fit_main, mo, ui_model_manager, ui_task):
+    _val = ui_model_manager.value
+    _clicks = _val["run_fit_clicks"]
 
-    with mo.status.spinner(title=f"Fitting GLM for {len(ui_subjects.value)} subjects..."):
+    mo.stop(_clicks == 0, mo.md("Configure parameters and press **RUN FIT 🚀**."))
+
+    with mo.status.spinner(title=f"Fitting GLM for {len(_val['subjects'])} subjects..."):
         fit_main(
-            subjects=ui_subjects.value,
+            subjects=_val["subjects"],
             out_dir=None,
-            tau=ui_tau.value,
-            emission_cols=ui_emission_cols.value,
+            tau=_val["tau"],
+            emission_cols=_val["emission_cols"],
             task=ui_task.value,
-            model_alias=ui_alias.value if ui_alias.value else None,
-            lapse=ui_lapse.value,
-            lapse_max=ui_lapse_max.value,
+            model_alias=_val["alias"] if _val["alias"] else None,
+            lapse=_val["lapse"],
+            lapse_max=_val["lapse_max"],
         )
 
     mo.md("✅ Fit complete. Plots updating...")
@@ -266,19 +226,16 @@ def _(
     np,
     paths,
     pl,
-    ui_alias,
-    ui_emission_cols,
-    ui_existing,
-    ui_subjects,
+    ui_model_manager,
     ui_task,
-    ui_tau,
 ):
-    selected = ui_subjects.value
+    _val = ui_model_manager.value
+    selected = _val["subjects"]
 
-    if ui_existing.value:
-        selected_model_id = ui_existing.value
-    elif ui_alias.value:
-        selected_model_id = ui_alias.value
+    if _val["existing_model"]:
+        selected_model_id = _val["existing_model"]
+    elif _val["alias"]:
+        selected_model_id = _val["alias"]
     else:
         selected_model_id = current_hash 
 
@@ -289,7 +246,7 @@ def _(
     if len(_df_sel) > 0:
         _df_sel = _df_sel.sort(adapter.sort_col)
         _, _, _, names = adapter.load_subject(
-            _df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value
+            _df_sel, tau=_val["tau"], emission_cols=_val["emission_cols"]
         )
     else:
         names = {"X_cols": [], "U_cols": []}
@@ -357,13 +314,15 @@ def _(
     pl,
     plots,
     selected,
-    ui_tau,
+    ui_model_manager,
 ):
     from scripts.alexis_functions import filter_behavior
     from scipy.special import log_softmax, softmax
     # Psychometrics
     if not arrays_store:
         mo.stop(True)
+
+    _val_tau = ui_model_manager.value["tau"]
 
     _sort_col = adapter.sort_col
     _frames = []
@@ -411,7 +370,7 @@ def _(
     _perf_kwargs = {"arrays_store": arrays_store} if is_2afc else {}
     _fig_all, _ = plots.plot_categorical_performance_all(
         _plot_df,
-        f"GLM (tau={ui_tau.value})",
+        f"GLM (tau={_val_tau})",
         **_perf_kwargs,
     )
 
@@ -437,37 +396,22 @@ def _(mo):
 
 
 @app.cell
-def _(arrays_store, mo, reset_button):
+def _(CoefTweakerWidget, arrays_store, mo, np, reset_button):
     _ = reset_button.value  # re-run this cell (resetting sliders) when button is clicked
     _params = arrays_store["A95"]
     _X_cols = _params["X_cols"]
     _W = _params["emission_weights"][0]  # shape (2, M): W_L at [0], W_R at [1]
 
-    tweak_sliders_L = mo.ui.dictionary({
-        col: mo.ui.slider(
-            start=-10, stop=10, step=0.05,
-            value=round(float(_W[0, i]), 2),
-            label=col,
+    ui_coef_tweaker = mo.ui.anywidget(
+        CoefTweakerWidget(
+            features=list(_X_cols),
+            w_L=list(np.round(np.array(_W[0, :], dtype=float), 2)),
+            w_R=list(np.round(np.array(_W[1, :], dtype=float), 2)),
         )
-        for i, col in enumerate(_X_cols)
-    })
-    tweak_sliders_R = mo.ui.dictionary({
-        col: mo.ui.slider(
-            start=-10, stop=10, step=0.05,
-            value=round(float(_W[1, i]), 2),
-            label=col,
-        )
-        for i, col in enumerate(_X_cols)
-    })
+    )
 
-    mo.vstack([
-        mo.md("### Tweak weights for A92"),
-        mo.md("**W_L (Left)**"),
-        mo.hstack(list(tweak_sliders_L.elements.values()), wrap=True),
-        mo.md("**W_R (Right)**"),
-        mo.hstack(list(tweak_sliders_R.elements.values()), wrap=True),
-    ])
-    return tweak_sliders_L, tweak_sliders_R
+    ui_coef_tweaker
+    return (ui_coef_tweaker,)
 
 
 @app.cell
@@ -480,27 +424,26 @@ def _(
     np,
     pl,
     plots,
-    plt,
     softmax,
-    tweak_sliders_L,
-    tweak_sliders_R,
-    ui_tau,
+    ui_coef_tweaker,
+    ui_model_manager,
 ):
     _sort_col = adapter.sort_col
     _frames = []
 
     _params_a92 = arrays_store["A95"]
     _X_cols = _params_a92["X_cols"]
+    _val_tau = ui_model_manager.value["tau"]
 
-    # Build weight vectors directly from slider values
-    _W_L = np.array([tweak_sliders_L.value[col] for col in _X_cols])
-    _W_R = np.array([tweak_sliders_R.value[col] for col in _X_cols])
+    # Build weight vectors directly from widget values
+    _W_L = np.array(ui_coef_tweaker.value["w_L"])
+    _W_R = np.array(ui_coef_tweaker.value["w_R"])
 
     _df_sub = (
         df_all.filter(pl.col("subject") == "A95")
         .sort(_sort_col)
     )
-    y, X, _, _ = adapter.load_subject(_df_sub, tau=ui_tau.value, emission_cols=_X_cols)
+    y, X, _, _ = adapter.load_subject(_df_sub, tau=_val_tau, emission_cols=_X_cols)
     T, M = X.shape
     X_np = np.asarray(X, dtype=float)
     logits = np.stack([X_np @ _W_L, np.zeros(T), X_np @ _W_R], axis=1)
@@ -524,33 +467,17 @@ def _(
     _perf_kwargs = {"arrays_store": arrays_store} if is_2afc else {}
     _fig_all, _ = plots.plot_categorical_performance_all(
         _plot_df,
-        f"GLM tweaked (tau={ui_tau.value})",
+        f"GLM tweaked (tau={_val_tau})",
         **_perf_kwargs,
     )
     _fig_all_cat, _ = plots.plot_categorical_strat_by_side(
         _plot_df,
-        f"GLM tweaked (tau={ui_tau.value})",
+        f"GLM tweaked (tau={_val_tau})",
         **_perf_kwargs, model_name = ""
     )
 
-    # --- Coefficient bar chart ---
-    _fig_coef, _ax = plt.subplots(figsize=(max(6, len(_X_cols) * 0.55), 3))
-    _x = np.arange(len(_X_cols))
-    _width = 0.35
-    _ax.bar(_x - _width / 2, _W_L, _width, label="W_L", color="steelblue")
-    _ax.bar(_x + _width / 2, _W_R, _width, label="W_R", color="tomato")
-    _ax.axhline(0, color="k", linewidth=0.8, linestyle="--")
-    _ax.set_xticks(_x)
-    _ax.set_xticklabels(_X_cols, rotation=45, ha="right", fontsize=8)
-    _ax.set_ylabel("Weight")
-    _ax.set_title("Current weights")
-    _ax.legend(frameon=False)
-    import seaborn as _sns; _sns.despine(ax=_ax)
-    plt.tight_layout()
-
     mo.vstack([
         mo.hstack([_fig_all, _fig_all_cat]),
-        _fig_coef,
     ])
     return
 
