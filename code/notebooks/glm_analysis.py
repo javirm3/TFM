@@ -345,6 +345,12 @@ def _(arrays_store, mo, paths, plots, selected):
 
 
 @app.cell
+def _(arrays_store):
+    arrays_store
+    return
+
+
+@app.cell
 def _(
     adapter,
     arrays_store,
@@ -381,9 +387,8 @@ def _(
             df_all.filter(pl.col("subject") == _subj)
             .sort(_sort_col)
         )
-        if not is_2afc:
-            _df_sub = _df_sub.filter(pl.col("session").count().over("session") >= 2)
-
+    
+        
         # Ensure length match
         if len(_df_sub) != len(_p_pred):
             # This happens if fit logic filtered differently (e.g. min session length)

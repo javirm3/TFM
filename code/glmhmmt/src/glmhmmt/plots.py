@@ -671,6 +671,15 @@ _AG_GROUPS = [
     # stimulus × delay — SCxdelay merged in
     ("$Sxd_{coh}$",  [("SLxdelay", 0), ("SRxdelay", 1), ("SCxdelay", "neg_mean")]),
     ("$Sxd_{incoh}$", [("SLxdelay", 1), ("SRxdelay", 0), ("SCxdelay", "mean")]),
+    # stim interval × side — stim1…4 collapsed like SL/SC/SR
+    ("$S1_{coh}$",   [("stim1L", 0), ("stim1R", 1), ("stim1C", "neg_mean")]),
+    ("$S1_{incoh}$", [("stim1L", 1), ("stim1R", 0), ("stim1C", "mean")]),
+    ("$S2_{coh}$",   [("stim2L", 0), ("stim2R", 1), ("stim2C", "neg_mean")]),
+    ("$S2_{incoh}$", [("stim2L", 1), ("stim2R", 0), ("stim2C", "mean")]),
+    ("$S3_{coh}$",   [("stim3L", 0), ("stim3R", 1), ("stim3C", "neg_mean")]),
+    ("$S3_{incoh}$", [("stim3L", 1), ("stim3R", 0), ("stim3C", "mean")]),
+    ("$S4_{coh}$",   [("stim4L", 0), ("stim4R", 1), ("stim4C", "neg_mean")]),
+    ("$S4_{incoh}$", [("stim4L", 1), ("stim4R", 0), ("stim4C", "mean")]),
     # action history (perseveration vs alternation)
     ("$A_{coh}$",  [("A_L", 0), ("A_R", 1)]),
     ("$A_{incoh}$", [("A_L", 1), ("A_R", 0)]),

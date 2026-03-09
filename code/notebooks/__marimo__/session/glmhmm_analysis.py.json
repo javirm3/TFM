@@ -12,7 +12,7 @@
         {
           "type": "data",
           "data": {
-            "text/html": "<marimo-ui-element object-id='Hbol-0' random-id='a2638b1b-d099-aac1-53e6-adc6bf651625'><marimo-dropdown data-initial-value='[&quot;MCDR&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Task:&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;2AFC&quot;,&quot;MCDR&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
+            "text/html": "<marimo-ui-element object-id='Hbol-0' random-id='635d7f21-f86f-926d-5368-f49c4f978982'><marimo-dropdown data-initial-value='[&quot;MCDR&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Task:&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;2AFC&quot;,&quot;MCDR&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
           }
         }
       ],
@@ -38,7 +38,7 @@
         {
           "type": "data",
           "data": {
-            "text/html": "<marimo-ui-element object-id='vblA-0' random-id='188875d0-6c3b-ca11-d6bc-ee2ae848b60c'><marimo-dropdown data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Load existing model (overrides params below)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;7d374cb1&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;,&quot;glmhmm_2&quot;]' data-allow-select-none='true' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
+            "text/html": "<marimo-ui-element object-id='vblA-0' random-id='6d2612e6-09db-e683-1230-1a2cbe2632dc'><marimo-dropdown data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Load existing model (overrides params below)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;7d374cb1&quot;,&quot;One-hot&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;,&quot;glmhmm_2&quot;]' data-allow-select-none='true' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
           }
         }
       ],
@@ -59,7 +59,7 @@
     },
     {
       "id": "lEQa",
-      "code_hash": "6dee7f7212c84fd902e688621a6c4ef7",
+      "code_hash": "7a51a575e8119a747118f4e029a14b11",
       "outputs": [
         {
           "type": "data",
@@ -71,20 +71,20 @@
       "console": []
     },
     {
-      "id": "PPUg",
-      "code_hash": "c5f456784a48c5fc192e218ddd6a9810",
+      "id": "PKri",
+      "code_hash": "88d36f4a9282ab908e9390f9d760ce35",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: center;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"configuration\">Configuration</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='vblA-0' random-id='188875d0-6c3b-ca11-d6bc-ee2ae848b60c'><marimo-dropdown data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Load existing model (overrides params below)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;7d374cb1&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;,&quot;glmhmm_2&quot;]' data-allow-select-none='true' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='lEQa-4' random-id='6b83d050-c112-7fe5-b33e-89e6c57ced8b'><marimo-text data-initial-value='&quot;&quot;' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Custom alias (optional)&lt;/span&gt;&lt;/span&gt;&quot;' data-placeholder='&quot;e.g. my_best_fit&quot;' data-kind='&quot;text&quot;' data-full-width='false' data-disabled='false' data-debounce='true'></marimo-text></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='lEQa-0' random-id='ea6b3e9e-9e00-6727-05b4-edb3f2632dc2'><marimo-slider data-initial-value='2' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;K&lt;/span&gt;&lt;/span&gt;&quot;' data-start='2' data-stop='6' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='lEQa-2' random-id='89eb0c0d-f57e-a611-8ea0-4e03aa7204d9'><marimo-slider data-initial-value='50' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;\u03c4 action trace half-life&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='200' data-step='1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='lEQa-1' random-id='5555ecbb-94f5-a621-1e21-9a19a5caf73a'><marimo-multiselect data-initial-value='[&quot;A87&quot;,&quot;A95&quot;,&quot;A93&quot;,&quot;A96&quot;,&quot;A92&quot;,&quot;A89&quot;,&quot;A86&quot;,&quot;A83&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A83&quot;,&quot;A86&quot;,&quot;A87&quot;,&quot;A89&quot;,&quot;A92&quot;,&quot;A93&quot;,&quot;A95&quot;,&quot;A96&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element><marimo-ui-element object-id='lEQa-3' random-id='9e1dd40a-7378-4bcf-a0e1-cfa13036d014'><marimo-multiselect data-initial-value='[&quot;biasL&quot;,&quot;biasC&quot;,&quot;biasR&quot;,&quot;onsetL&quot;,&quot;onsetC&quot;,&quot;onsetR&quot;,&quot;delay&quot;,&quot;SL&quot;,&quot;SC&quot;,&quot;SR&quot;,&quot;SLxdelay&quot;,&quot;SCxdelay&quot;,&quot;SRxdelay&quot;,&quot;A_L&quot;,&quot;A_C&quot;,&quot;A_R&quot;,&quot;speed1&quot;,&quot;speed2&quot;,&quot;speed3&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Emission regressors (X)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;biasL&quot;,&quot;biasC&quot;,&quot;biasR&quot;,&quot;onsetL&quot;,&quot;onsetC&quot;,&quot;onsetR&quot;,&quot;delay&quot;,&quot;SL&quot;,&quot;SC&quot;,&quot;SR&quot;,&quot;SLxdelay&quot;,&quot;SCxdelay&quot;,&quot;SRxdelay&quot;,&quot;A_L&quot;,&quot;A_C&quot;,&quot;A_R&quot;,&quot;speed1&quot;,&quot;speed2&quot;,&quot;speed3&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Current params hash:</strong> <code>7f904f91</code></span></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='PPUg-0' random-id='9827acbb-712e-6f8a-8fff-1ae43837d760'><marimo-button data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Run fit&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div></div>"
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: center;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"configuration\">Configuration</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='vblA-0' random-id='6d2612e6-09db-e683-1230-1a2cbe2632dc'><marimo-dropdown data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Load existing model (overrides params below)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;7d374cb1&quot;,&quot;One-hot&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;,&quot;glmhmm_2&quot;]' data-allow-select-none='true' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='lEQa-4' random-id='80b9c88c-244a-5b7d-c09c-9fc0bbdc19c7'><marimo-text data-initial-value='&quot;&quot;' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Custom alias (optional)&lt;/span&gt;&lt;/span&gt;&quot;' data-placeholder='&quot;e.g. my_best_fit&quot;' data-kind='&quot;text&quot;' data-full-width='false' data-disabled='false' data-debounce='true'></marimo-text></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='lEQa-0' random-id='cc9cb94d-7e5c-b0bd-44cc-a54e164d3984'><marimo-slider data-initial-value='2' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;K&lt;/span&gt;&lt;/span&gt;&quot;' data-start='2' data-stop='6' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='lEQa-2' random-id='e3a09277-02ff-613d-c904-0914a256b6ed'><marimo-slider data-initial-value='50' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;\u03c4 action trace half-life&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='200' data-step='1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='lEQa-1' random-id='fec07c6c-221b-5e71-a99b-0e6b3d1b28f0'><marimo-multiselect data-initial-value='[&quot;A83&quot;,&quot;A93&quot;,&quot;A92&quot;,&quot;A86&quot;,&quot;A89&quot;,&quot;A96&quot;,&quot;A87&quot;,&quot;A95&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A83&quot;,&quot;A86&quot;,&quot;A87&quot;,&quot;A89&quot;,&quot;A92&quot;,&quot;A93&quot;,&quot;A95&quot;,&quot;A96&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element><marimo-ui-element object-id='lEQa-3' random-id='55ccbeac-596f-1d8b-91db-5ce81459fdfe'><marimo-multiselect data-initial-value='[&quot;bias&quot;,&quot;biasL&quot;,&quot;biasC&quot;,&quot;biasR&quot;,&quot;onsetL&quot;,&quot;onsetC&quot;,&quot;onsetR&quot;,&quot;delay&quot;,&quot;SL&quot;,&quot;SC&quot;,&quot;SR&quot;,&quot;SLxdelay&quot;,&quot;SCxdelay&quot;,&quot;SRxdelay&quot;,&quot;SLxD&quot;,&quot;SCxD&quot;,&quot;SRxD&quot;,&quot;D&quot;,&quot;DL&quot;,&quot;DC&quot;,&quot;DR&quot;,&quot;A_L&quot;,&quot;A_C&quot;,&quot;A_R&quot;,&quot;speed1&quot;,&quot;speed2&quot;,&quot;speed3&quot;,&quot;stim1L&quot;,&quot;stim1C&quot;,&quot;stim1R&quot;,&quot;stim2L&quot;,&quot;stim2C&quot;,&quot;stim2R&quot;,&quot;stim3L&quot;,&quot;stim3C&quot;,&quot;stim3R&quot;,&quot;stim4L&quot;,&quot;stim4C&quot;,&quot;stim4R&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Emission regressors (X)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;bias&quot;,&quot;biasL&quot;,&quot;biasC&quot;,&quot;biasR&quot;,&quot;onsetL&quot;,&quot;onsetC&quot;,&quot;onsetR&quot;,&quot;delay&quot;,&quot;SL&quot;,&quot;SC&quot;,&quot;SR&quot;,&quot;SLxdelay&quot;,&quot;SCxdelay&quot;,&quot;SRxdelay&quot;,&quot;SLxD&quot;,&quot;SCxD&quot;,&quot;SRxD&quot;,&quot;D&quot;,&quot;DL&quot;,&quot;DC&quot;,&quot;DR&quot;,&quot;A_L&quot;,&quot;A_C&quot;,&quot;A_R&quot;,&quot;speed1&quot;,&quot;speed2&quot;,&quot;speed3&quot;,&quot;stim1L&quot;,&quot;stim1C&quot;,&quot;stim1R&quot;,&quot;stim2L&quot;,&quot;stim2C&quot;,&quot;stim2R&quot;,&quot;stim3L&quot;,&quot;stim3C&quot;,&quot;stim3R&quot;,&quot;stim4L&quot;,&quot;stim4C&quot;,&quot;stim4R&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Current params hash:</strong> <code>4aade523</code></span></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='PKri-0' random-id='1e50eaac-9c9b-5b89-6b7e-b47483066b35'><marimo-button data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Run fit&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div></div>"
           }
         }
       ],
       "console": []
     },
     {
-      "id": "PKri",
+      "id": "Xref",
       "code_hash": "39602f5cd454ee23a0989de43601d6ef",
       "outputs": [
         {
@@ -97,7 +97,7 @@
       "console": []
     },
     {
-      "id": "Xref",
+      "id": "SFPL",
       "code_hash": "ce2fbb06702a2717d355ce71024965ee",
       "outputs": [
         {
@@ -110,7 +110,7 @@
       "console": []
     },
     {
-      "id": "SFPL",
+      "id": "BYtC",
       "code_hash": "71d29f68603a403ba34520cba0a0eb6f",
       "outputs": [
         {
@@ -123,7 +123,7 @@
       "console": []
     },
     {
-      "id": "BYtC",
+      "id": "RGSE",
       "code_hash": "6ded8d359170adf920ce19f19bbd7a57",
       "outputs": [
         {
@@ -133,10 +133,17 @@
           "traceback": []
         }
       ],
-      "console": []
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_9700/__marimo__cell_RGSE_.py&quot;</span>, line <span class=\"m\">25</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_trial_frames</span><span class=\"o\">.</span><span class=\"n\">append</span><span class=\"p\">(</span><span class=\"n\">build_trial_df</span><span class=\"p\">(</span><span class=\"n\">_view</span><span class=\"p\">,</span> <span class=\"n\">_df_sub</span><span class=\"p\">,</span> <span class=\"n\">_bcols</span><span class=\"p\">))</span>\n<span class=\"w\">                         </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/postprocess.py&quot;</span>, line <span class=\"m\">155</span>, in <span class=\"n\">build_trial_df</span>\n<span class=\"w\">    </span><span class=\"n\">stimulus_vals</span> <span class=\"o\">=</span> <span class=\"n\">df_out</span><span class=\"p\">[</span><span class=\"s2\">&quot;stimulus&quot;</span><span class=\"p\">]</span><span class=\"o\">.</span><span class=\"n\">to_numpy</span><span class=\"p\">()</span><span class=\"o\">.</span><span class=\"n\">astype</span><span class=\"p\">(</span><span class=\"nb\">int</span><span class=\"p\">)</span>\n<span class=\"w\">                    </span><span class=\"pm\">~~~~~~^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">1431</span>, in <span class=\"n\">__getitem__</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">get_df_item_by_key</span><span class=\"p\">(</span><span class=\"bp\">self</span><span class=\"p\">,</span> <span class=\"n\">key</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/_utils/getitem.py&quot;</span>, line <span class=\"m\">163</span>, in <span class=\"n\">get_df_item_by_key</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">df</span><span class=\"o\">.</span><span class=\"n\">get_column</span><span class=\"p\">(</span><span class=\"n\">key</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">9193</span>, in <span class=\"n\">get_column</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">wrap_s</span><span class=\"p\">(</span><span class=\"bp\">self</span><span class=\"o\">.</span><span class=\"n\">_df</span><span class=\"o\">.</span><span class=\"n\">get_column</span><span class=\"p\">(</span><span class=\"n\">name</span><span class=\"p\">))</span>\n<span class=\"w\">                  </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">polars.exceptions.ColumnNotFoundError</span>: <span class=\"n\">&quot;stimulus&quot; not found</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
     },
     {
-      "id": "RGSE",
+      "id": "Kclp",
       "code_hash": "066a85376b98625974b5ce6465f82881",
       "outputs": [
         {
@@ -149,7 +156,7 @@
       "console": []
     },
     {
-      "id": "Kclp",
+      "id": "emfo",
       "code_hash": "c3e3b7cc400f0dcf1c697b7f3a83f32e",
       "outputs": [
         {
@@ -159,23 +166,30 @@
           "traceback": []
         }
       ],
-      "console": []
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_9700/__marimo__cell_emfo_.py:9: RuntimeWarning: More than 20 figures have been opened. Figures created through the pyplot interface (`matplotlib.pyplot.figure`) are retained until explicitly closed and may consume too much memory. (To control this warning, see the rcParam `figure.max_open_warning`). Consider using `matplotlib.pyplot.close()`.\n  _fig_t, _ax_t = plt.subplots(figsize=(3.2, 2.8))\n",
+          "mimetype": "text/plain"
+        }
+      ]
     },
     {
-      "id": "emfo",
+      "id": "Hstk",
       "code_hash": "fb146741d8909508f0bfc380ce484757",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"trial-window\">Trial window</h3></span><marimo-ui-element object-id='emfo-0' random-id='a9b66c18-005b-0937-daa0-890f65ca1468'><marimo-range-slider data-initial-value='[0,199]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Trial window&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0' data-stop='199' data-step='1' data-steps='[]' data-debounce='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-full-width='false' data-disabled='false'></marimo-range-slider></marimo-ui-element></div>"
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"trial-window\">Trial window</h3></span><marimo-ui-element object-id='Hstk-0' random-id='3f6bd596-214f-c771-3ce3-f25f7c9ce6c6'><marimo-range-slider data-initial-value='[0,199]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Trial window&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0' data-stop='199' data-step='1' data-steps='[]' data-debounce='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-full-width='false' data-disabled='false'></marimo-range-slider></marimo-ui-element></div>"
           }
         }
       ],
       "console": []
     },
     {
-      "id": "Hstk",
+      "id": "nWHF",
       "code_hash": "14dbe7e5ecad134b7dc5de405d5efc84",
       "outputs": [
         {
@@ -188,7 +202,7 @@
       "console": []
     },
     {
-      "id": "nWHF",
+      "id": "iLit",
       "code_hash": "37e076c2e596df7f39eadff8350061b4",
       "outputs": [
         {
@@ -198,10 +212,17 @@
           "traceback": []
         }
       ],
-      "console": []
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "[_mean_glm_curve] 332.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((25961, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((25961, 3))\n  W[0,0,:]=[-1.236, -0.159, -1.147]\n[_mean_glm_curve] 875.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((14514, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((14514, 3))\n  W[0,0,:]=[-1.537, 0.37, -0.099]\n[_mean_glm_curve] 620.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((869, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((869, 3))\n  W[0,0,:]=[-0.322, -0.302, -1.141]\n[_mean_glm_curve] 623.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12166, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12166, 3))\n  W[0,0,:]=[-0.831, 0.141, -1.339]\n[_mean_glm_curve] 909.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12201, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12201, 3))\n  W[0,0,:]=[-1.766, 0.216, -0.993]\n[_mean_glm_curve] 329.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((11155, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((11155, 3))\n  W[0,0,:]=[-0.988, -0.4, -1.341]\n[_mean_glm_curve] 807.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((3762, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((3762, 3))\n  W[0,0,:]=[-1.187, -0.196, -2.31]\n[_mean_glm_curve] 326.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2087, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2087, 3))\n  W[0,0,:]=[-0.833, 0.143, -0.866]\n[_mean_glm_curve] 907.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((33597, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((33597, 3))\n  W[0,0,:]=[-1.354, 0.409, -1.043]\n[_mean_glm_curve] 821.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((33569, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((33569, 3))\n  W[0,0,:]=[-0.858, 0.4, -2.22]\n[_mean_glm_curve] 335.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12108, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12108, 3))\n  W[0,0,:]=[-1.09, -0.319, -1.442]\n[_mean_glm_curve] 337.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((18669, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((18669, 3))\n  W[0,0,:]=[-2.362, 0.087, -0.066]\n[_mean_glm_curve] 422.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((19111, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((19111, 3))\n  W[0,0,:]=[-1.815, -0.051, -2.28]\n[_mean_glm_curve] 820.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((29568, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((29568, 3))\n  W[0,0,:]=[-0.691, 0.068, -1.613]\n[_mean_glm_curve] 617.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1529, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1529, 3))\n  W[0,0,:]=[-0.199, 0.212, -1.336]\n[_mean_glm_curve] 420.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((17907, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((17907, 3))\n  W[0,0,:]=[-1.218, -0.424, -1.813]\n[_mean_glm_curve] 333.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((23542, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((23542, 3))\n  W[0,0,:]=[-1.928, 0.262, -1.734]\n[_mean_glm_curve] 619.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((6464, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((6464, 3))\n  W[0,0,:]=[-1.634, 0.565, -1.138]\n[_mean_glm_curve] 876.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2114, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2114, 3))\n  W[0,0,:]=[-1.238, 0.039, -0.878]\n[_mean_glm_curve] 419.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((9552, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((9552, 3))\n  W[0,0,:]=[-1.415, 0.032, -1.015]\n[_mean_glm_curve] 330.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((4368, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((4368, 3))\n  W[0,0,:]=[-0.47, -0.172, -1.467]\n[_mean_glm_curve] 327.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((9040, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((9040, 3))\n  W[0,0,:]=[-1.637, 0.765, -1.327]\n[_mean_glm_curve] 616.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12716, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12716, 3))\n  W[0,0,:]=[-1.067, 0.059, -1.027]\n[_mean_glm_curve] 873.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((23625, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((23625, 3))\n  W[0,0,:]=[-1.119, 0.399, -1.69]\n[_mean_glm_curve] 334.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((82, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((82, 3))\n  W[0,0,:]=[-1.289, 2.466, -0.399]\n[_mean_glm_curve] 325.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((6947, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((6947, 3))\n  W[0,0,:]=[-1.102, -0.057, -1.245]\n[_mean_glm_curve] 911.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((32512, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((32512, 3))\n  W[0,0,:]=[-1.355, 0.225, -1.045]\n[_mean_glm_curve] 561.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((7465, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((7465, 3))\n  W[0,0,:]=[-0.971, 0.268, -1.887]\n",
+          "mimetype": "text/plain"
+        }
+      ]
     },
     {
-      "id": "iLit",
+      "id": "ZHCJ",
       "code_hash": "193eaf9b075ac88663c1db06b937afc0",
       "outputs": [
         {
@@ -214,7 +235,7 @@
       "console": []
     },
     {
-      "id": "ZHCJ",
+      "id": "ROlb",
       "code_hash": "21830c4b329c89229788a31b566477b2",
       "outputs": [
         {
@@ -227,20 +248,20 @@
       "console": []
     },
     {
-      "id": "ROlb",
+      "id": "qnkX",
       "code_hash": "2b50eec141733b36cee79204e02c8795",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-trajectory-occupancy\">Session trajectory &amp; occupancy</h3></span><marimo-ui-element object-id='ROlb-0' random-id='b1d90b2a-3378-b505-ffb2-ba9365b34327'><marimo-multiselect data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects (session trajectories &amp;amp; occupancy)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A86&quot;,&quot;A87&quot;,&quot;A93&quot;,&quot;A89&quot;,&quot;A96&quot;,&quot;A83&quot;,&quot;A95&quot;,&quot;A92&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div>"
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-trajectory-occupancy\">Session trajectory &amp; occupancy</h3></span><marimo-ui-element object-id='qnkX-0' random-id='9ac72163-2cad-777d-9f01-41366dfa199a'><marimo-multiselect data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects (session trajectories &amp;amp; occupancy)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A96&quot;,&quot;A89&quot;,&quot;A93&quot;,&quot;A87&quot;,&quot;A83&quot;,&quot;A92&quot;,&quot;A95&quot;,&quot;A86&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div>"
           }
         }
       ],
       "console": []
     },
     {
-      "id": "qnkX",
+      "id": "TqIu",
       "code_hash": "b9e4799652dbe9ac1cb173c1771e88cb",
       "outputs": [
         {
@@ -253,7 +274,7 @@
       "console": []
     },
     {
-      "id": "TqIu",
+      "id": "Vxnm",
       "code_hash": "b45b4501d78cb72cec7a9c192549c834",
       "outputs": [
         {
@@ -266,7 +287,7 @@
       "console": []
     },
     {
-      "id": "Vxnm",
+      "id": "DnEU",
       "code_hash": "548c2a457708709b4ec7f7f8758540fe",
       "outputs": [
         {
@@ -279,20 +300,20 @@
       "console": []
     },
     {
-      "id": "DnEU",
+      "id": "ulZA",
       "code_hash": "08e0c29b2216c002c8a57815c610c32b",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-deep-dive\">Session deep-dive</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='Vxnm-0' random-id='50061419-d97b-59bf-4f5c-c77505e95f7c'><marimo-dropdown data-initial-value='[&quot;(no fitted subjects)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subject&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;(no fitted subjects)&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='DnEU-0' random-id='8e95bee1-c115-2751-badd-aab8cb4317f7'><marimo-dropdown data-initial-value='[&quot;0&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Session&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;0&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div></div>"
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-deep-dive\">Session deep-dive</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='DnEU-0' random-id='9ff3b616-9f3e-386a-6490-9b42f2ec51d3'><marimo-dropdown data-initial-value='[&quot;(no fitted subjects)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subject&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;(no fitted subjects)&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='ulZA-0' random-id='8a03e9e4-a6d0-3aa7-18be-9a3b31567e6d'><marimo-dropdown data-initial-value='[&quot;0&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Session&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;0&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div></div>"
           }
         }
       ],
       "console": []
     },
     {
-      "id": "ulZA",
+      "id": "ecfG",
       "code_hash": "385dd0370b81891509da4382c4d4a095",
       "outputs": [
         {
@@ -302,30 +323,10 @@
           "traceback": []
         }
       ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stderr",
-          "text": "/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/plots.py:1378: UserWarning: No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.\n  _ax2.legend(bbox_to_anchor=(1.08, 1), loc=\"upper left\", fontsize=8, frameon=False)\n",
-          "mimetype": "text/plain"
-        }
-      ]
-    },
-    {
-      "id": "ecfG",
-      "code_hash": null,
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
       "console": []
     },
     {
-      "id": "Pvdt",
+      "id": "ZBYS",
       "code_hash": "382f2e72ff63757ac96069a0560ec92c",
       "outputs": [
         {
@@ -338,7 +339,7 @@
       "console": []
     },
     {
-      "id": "ZBYS",
+      "id": "aLJB",
       "code_hash": "65ea91b4117adf0fd703289603441030",
       "outputs": [
         {
@@ -351,7 +352,7 @@
       "console": []
     },
     {
-      "id": "aLJB",
+      "id": "nHfw",
       "code_hash": "a9516f03601ba5a05f8d5d182a2fcf92",
       "outputs": [
         {
@@ -364,8 +365,8 @@
       "console": []
     },
     {
-      "id": "nHfw",
-      "code_hash": "7807213cb5072f14767e538478896031",
+      "id": "xXTn",
+      "code_hash": "783464b3e3b08d99383adec5de65277d",
       "outputs": [
         {
           "type": "error",
@@ -378,13 +379,26 @@
         {
           "type": "stream",
           "name": "stderr",
-          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_62467/__marimo__cell_nHfw_.py&quot;</span>, line <span class=\"m\">10</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"o\">.</span><span class=\"n\">sort</span><span class=\"p\">(</span><span class=\"s2\">&quot;Trial&quot;</span><span class=\"p\">)</span>\n<span class=\"w\">     </span><span class=\"pm\">^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">6103</span>, in <span class=\"n\">sort</span>\n<span class=\"w\">    </span><span class=\"o\">.</span><span class=\"n\">collect</span><span class=\"p\">(</span><span class=\"n\">optimizations</span><span class=\"o\">=</span><span class=\"n\">QueryOptFlags</span><span class=\"o\">.</span><span class=\"n\">_eager</span><span class=\"p\">())</span>\n<span class=\"w\">     </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/_utils/deprecation.py&quot;</span>, line <span class=\"m\">97</span>, in <span class=\"n\">wrapper</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">function</span><span class=\"p\">(</span><span class=\"o\">*</span><span class=\"n\">args</span><span class=\"p\">,</span> <span class=\"o\">**</span><span class=\"n\">kwargs</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/lazyframe/opt_flags.py&quot;</span>, line <span class=\"m\">326</span>, in <span class=\"n\">wrapper</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">function</span><span class=\"p\">(</span><span class=\"o\">*</span><span class=\"n\">args</span><span class=\"p\">,</span> <span class=\"o\">**</span><span class=\"n\">kwargs</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/lazyframe/frame.py&quot;</span>, line <span class=\"m\">2440</span>, in <span class=\"n\">collect</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">wrap_df</span><span class=\"p\">(</span><span class=\"n\">ldf</span><span class=\"o\">.</span><span class=\"n\">collect</span><span class=\"p\">(</span><span class=\"n\">engine</span><span class=\"p\">,</span> <span class=\"n\">callback</span><span class=\"p\">))</span>\n<span class=\"w\">                   </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">polars.exceptions.ColumnNotFoundError</span>: <span class=\"n\">unable to find column &quot;Trial&quot;; valid columns: [&quot;subject&quot;, &quot;trial&quot;, &quot;session&quot;, &quot;date&quot;, &quot;x_c&quot;, &quot;r_c&quot;, &quot;ttype_n&quot;, &quot;stimd_n&quot;, &quot;performance&quot;, &quot;timepoint_1&quot;, &quot;timepoint_2&quot;, &quot;timepoint_3&quot;, &quot;timepoint_4&quot;, &quot;onset&quot;, &quot;offset&quot;, &quot;stim_d&quot;, &quot;delay_d&quot;, &quot;response&quot;, &quot;stimulus&quot;, &quot;trial_idx&quot;]</span>\n</pre></div>\n</span>",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_9700/__marimo__cell_xXTn_.py&quot;</span>, line <span class=\"m\">11</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"o\">.</span><span class=\"n\">filter</span><span class=\"p\">(</span><span class=\"n\">pl</span><span class=\"o\">.</span><span class=\"n\">col</span><span class=\"p\">(</span><span class=\"s2\">&quot;session&quot;</span><span class=\"p\">)</span><span class=\"o\">.</span><span class=\"n\">count</span><span class=\"p\">()</span><span class=\"o\">.</span><span class=\"n\">over</span><span class=\"p\">(</span><span class=\"s2\">&quot;session&quot;</span><span class=\"p\">)</span> <span class=\"o\">&gt;=</span> <span class=\"mi\">2</span><span class=\"p\">)</span>\n<span class=\"w\">     </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">5483</span>, in <span class=\"n\">filter</span>\n<span class=\"w\">    </span><span class=\"o\">.</span><span class=\"n\">collect</span><span class=\"p\">(</span><span class=\"n\">optimizations</span><span class=\"o\">=</span><span class=\"n\">QueryOptFlags</span><span class=\"o\">.</span><span class=\"n\">_eager</span><span class=\"p\">())</span>\n<span class=\"w\">     </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/_utils/deprecation.py&quot;</span>, line <span class=\"m\">97</span>, in <span class=\"n\">wrapper</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">function</span><span class=\"p\">(</span><span class=\"o\">*</span><span class=\"n\">args</span><span class=\"p\">,</span> <span class=\"o\">**</span><span class=\"n\">kwargs</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/lazyframe/opt_flags.py&quot;</span>, line <span class=\"m\">326</span>, in <span class=\"n\">wrapper</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">function</span><span class=\"p\">(</span><span class=\"o\">*</span><span class=\"n\">args</span><span class=\"p\">,</span> <span class=\"o\">**</span><span class=\"n\">kwargs</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/lazyframe/frame.py&quot;</span>, line <span class=\"m\">2440</span>, in <span class=\"n\">collect</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">wrap_df</span><span class=\"p\">(</span><span class=\"n\">ldf</span><span class=\"o\">.</span><span class=\"n\">collect</span><span class=\"p\">(</span><span class=\"n\">engine</span><span class=\"p\">,</span> <span class=\"n\">callback</span><span class=\"p\">))</span>\n<span class=\"w\">                   </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">polars.exceptions.ColumnNotFoundError</span>: <span class=\"n\">unable to find column &quot;session&quot;; valid columns: [&quot;subject&quot;, &quot;Trial&quot;, &quot;Side&quot;, &quot;Choice&quot;, &quot;Hit&quot;, &quot;Punish&quot;, &quot;Session&quot;, &quot;ILD&quot;, &quot;Filename&quot;, &quot;Experiment&quot;, &quot;Task&quot;, &quot;P&quot;, &quot;AW&quot;, &quot;WarmUp&quot;, &quot;Date&quot;]</span>\n</pre></div>\n</span>",
           "mimetype": "application/vnd.marimo+traceback"
         }
       ]
     },
     {
-      "id": "Vuqk",
+      "id": "Pvdt",
+      "code_hash": null,
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "AjVT",
       "code_hash": null,
       "outputs": [
         {

@@ -77,9 +77,14 @@ _ALL_EMISSION_COLS: list[str] = [
     "biasL", "biasC", "biasR", "onsetL", "onsetC", "onsetR", "delay",
     "SL", "SC", "SR",
     "SLxdelay", "SCxdelay", "SRxdelay",
+    "SLxD", "SCxD", "SRxD",
     "D", "DL", "DC", "DR",
     "A_L", "A_C", "A_R",
     "speed1", "speed2", "speed3",
+    "stim1L", "stim1C", "stim1R",
+    "stim2L", "stim2C", "stim2R",
+    "stim3L", "stim3C", "stim3R",
+    "stim4L", "stim4C", "stim4R",
 ]
 
 _ALL_TRANSITION_COLS: list[str] = ["A_plus", "A_minus", "A_L", "A_C", "A_R"]
@@ -148,10 +153,34 @@ def build_sequence_from_df(
         ((pl.col("x_c") == "C") * pl.col("delay_d")).cast(pl.Float32).alias("DC"),
         ((pl.col("x_c") == "R") * pl.col("delay_d")).cast(pl.Float32).alias("DR"),
         ((pl.col("ttype_n"))).cast(pl.Float32).alias("D"),
+        ((pl.col("x_c") == "L") * pl.col("stimd_n_z") * pl.col("ttype_n")).cast(pl.Float32).alias("SLxD"),
+        ((pl.col("x_c") == "C") * pl.col("stimd_n_z") * pl.col("ttype_n")).cast(pl.Float32).alias("SCxD"),
+        ((pl.col("x_c") == "R") * pl.col("stimd_n_z") * pl.col("ttype_n")).cast(pl.Float32).alias("SRxD"),
+
         
         ((pl.col("x_c") == "L") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SLxdelay"),
         ((pl.col("x_c") == "C") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SCxdelay"),
         ((pl.col("x_c") == "R") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SRxdelay"),
+
+        # stim interval one-hot × side
+        # stim_i = 1 when [onset, offset] overlaps interval i, matching onset_offset_from_codes logic
+        # VG (onset=0, offset=0) is detected by offset==0 and gets stim1=stim2=stim3=1
+        # stim4 is only triggered by SIL (offset > timepoint_3)
+        (((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0) | (pl.col("offset") == 0)) & (pl.col("x_c") == "L")).cast(pl.Float32).alias("stim1L"),
+        (((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0) | (pl.col("offset") == 0)) & (pl.col("x_c") == "C")).cast(pl.Float32).alias("stim1C"),
+        (((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0) | (pl.col("offset") == 0)) & (pl.col("x_c") == "R")).cast(pl.Float32).alias("stim1R"),
+        (((pl.col("onset") < pl.col("timepoint_2")) & (pl.col("offset") > pl.col("timepoint_1")) | (pl.col("offset") == 0)) & (pl.col("x_c") == "L")).cast(pl.Float32).alias("stim2L"),
+        (((pl.col("onset") < pl.col("timepoint_2")) & (pl.col("offset") > pl.col("timepoint_1")) | (pl.col("offset") == 0)) & (pl.col("x_c") == "C")).cast(pl.Float32).alias("stim2C"),
+        (((pl.col("onset") < pl.col("timepoint_2")) & (pl.col("offset") > pl.col("timepoint_1")) | (pl.col("offset") == 0)) & (pl.col("x_c") == "R")).cast(pl.Float32).alias("stim2R"),
+        (((pl.col("onset") < pl.col("timepoint_3")) & (pl.col("offset") > pl.col("timepoint_2")) | (pl.col("offset") == 0)) & (pl.col("x_c") == "L")).cast(pl.Float32).alias("stim3L"),
+        (((pl.col("onset") < pl.col("timepoint_3")) & (pl.col("offset") > pl.col("timepoint_2")) | (pl.col("offset") == 0)) & (pl.col("x_c") == "C")).cast(pl.Float32).alias("stim3C"),
+        (((pl.col("onset") < pl.col("timepoint_3")) & (pl.col("offset") > pl.col("timepoint_2")) | (pl.col("offset") == 0)) & (pl.col("x_c") == "R")).cast(pl.Float32).alias("stim3R"),
+        ((pl.col("onset") < pl.col("timepoint_4")) & (pl.col("offset") > pl.col("timepoint_3")) & (pl.col("x_c") == "L")).cast(pl.Float32).alias("stim4L"),
+        ((pl.col("onset") < pl.col("timepoint_4")) & (pl.col("offset") > pl.col("timepoint_3")) & (pl.col("x_c") == "C")).cast(pl.Float32).alias("stim4C"),
+        ((pl.col("onset") < pl.col("timepoint_4")) & (pl.col("offset") > pl.col("timepoint_3")) & (pl.col("x_c") == "R")).cast(pl.Float32).alias("stim4R"),
+
+        ((pl.col("x_c") == "L") * pl.col("delay_d") * pl.col("ttype_n")).cast(pl.Float32).alias("stim1"),
+
 
 
         pl.col("performance").shift(1).fill_null(0).cast(pl.Float32).over(session_col).alias("previous_outcome"),
