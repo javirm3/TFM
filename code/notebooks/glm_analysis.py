@@ -387,8 +387,8 @@ def _(
             df_all.filter(pl.col("subject") == _subj)
             .sort(_sort_col)
         )
-    
-        
+
+
         # Ensure length match
         if len(_df_sub) != len(_p_pred):
             # This happens if fit logic filtered differently (e.g. min session length)

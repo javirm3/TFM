@@ -77,7 +77,7 @@ class TwoAFCAdapter(TaskAdapter):
             "trial_idx":   "Trial",
             "trial":       "Trial",
             "session":     "Session",
-            "stimulus":    "stimulus",
+            "stimulus":    "Side",
             "response":    "response",
             "performance": "performance",
         }

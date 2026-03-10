@@ -148,7 +148,9 @@ def build_trial_df(
     p_map = _emission_probs(view.emission_weights, view.X, map_k, C)  # (T, C)
 
     stim_col = behavioral_cols.get("stimulus", "stimulus")
+    print(f"Stimulus column for subject {view.subject!r}: {stim_col!r}")
     if stim_col in df_out.columns:
+        print(f"Using stimulus column {stim_col!r} for subject {view.subject!r}")
         stimulus_vals = df_out[stim_col].to_numpy().astype(int)
     else:
         # fallback: use the canonical name (after rename)

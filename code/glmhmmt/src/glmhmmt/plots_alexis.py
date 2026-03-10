@@ -1745,11 +1745,11 @@ def plot_categorical_performance_all_by_state(
         slbls = {int(k): v for k, v in state_labels.items()}
 
     ilds = sorted(df_pd[ild_col].dropna().unique())
-    panel_w = max(4, 0.4 * len(ilds))
+    panel_w = max(3, 0.4 * len(ilds))
 
     # ── K-panel grid ──────────────────────────────────────────────────────────
     _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
-
+    
     # Pre-compute per-state smooth sigmoid curves if arrays_store provided
     _smooth_by_k: dict[int, Optional[Tuple[np.ndarray, np.ndarray]]] = {}
     if arrays_store is not None:
@@ -1780,9 +1780,8 @@ def plot_categorical_performance_all_by_state(
         lbl   = slbls.get(k, f"State {k}")
         color = _state_color(lbl, k)
         sub   = df_pd[df_pd["_state_k"] == k]
-        _psych_state_panel(ax, sub, ild_col, choice_col, pred_col, subj_col,
-                           color=color, label=lbl,
-                           smooth_curve=_smooth_by_k.get(k))
+        _psych_panel(ax, sub, ild_col, choice_col, pred_col, subj_col,
+                           color=color,smooth_curve=_smooth_by_k[k])
         ax.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
         ax.set_ylim(0, 1)
         ax.set_yticks([0, 0.5, 1])

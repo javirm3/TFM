@@ -131,8 +131,6 @@ def _(adapter, df_all, loaded_cfg: dict, mo):
         label="Custom alias (optional)",
         placeholder="e.g. my_best_fit",
     )
-
-
     return is_2afc, ui_K, ui_alias, ui_emission_cols, ui_subjects, ui_tau
 
 
@@ -161,7 +159,6 @@ def _(
         ],
         align="center",
     )
-
     return current_hash, fit_button
 
 
@@ -276,7 +273,7 @@ def _(
     _sort_col = adapter.sort_col
     _ses_col  = adapter.session_col
     _bcols    = adapter.behavioral_cols
-
+    print(_bcols["stimulus"])
     _trial_frames = []
     for _subj, _view in views.items():
         _df_sub = (
@@ -285,6 +282,7 @@ def _(
             .sort(_sort_col)
             .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
         )
+        print(_df_sub.columns)
         if _df_sub.height != _view.T:
             print(f"⚠️  {_subj}: row mismatch ({_df_sub.height} vs {_view.T}), skipping")
             continue
@@ -391,10 +389,13 @@ def _(
 
         # stacked area — color by label rank so Engaged is always palette[0]
         _colors = sns.color_palette("tab10", n_colors=K)
+        _colors = ["tab:green", "tab:grey"]
         _label_rank = { "Engaged": 0, "Disengaged": 1, **{f"Disengaged {i}": i for i in range(1, K)},}
         _bottom = np.zeros(_T_w)
         _slbl = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
-        for _k in range(K):
+        sorted_states = sorted(range(K), key=lambda k: _label_rank.get(_slbl.get(k, f"State {k}"), k))
+
+        for _k in sorted_states:
             _rank = _label_rank.get(_slbl.get(_k, ""), _k)
             _ax.fill_between( _x, _bottom, _bottom + _probs[:, _k], alpha=0.7, color=_colors[_rank], label=_slbl.get(_k, f"State {_k}"),)
             _bottom += _probs[:, _k]
@@ -433,6 +434,7 @@ def _(
     df_all,
     is_2afc,
     mo,
+    names,
     np,
     pl,
     plots,
@@ -542,15 +544,26 @@ def _(
         _pool_assigns.append(_norm)
 
     _df_state_pool = pl.concat(_pool_dfs)
+
+    # Pack the state assignments into an array mapping to each trial, but we also 
+    # need smoothed probs for the new `plot_categorical_performance_by_state` in 
+    # plots_alexis which evaluates state weights natively
+    _gamma_pool = np.concatenate([arrays_store[s]["smoothed_probs"] for s in _selected], axis=0)
+
     _assign_pool = np.concatenate(_pool_assigns)
     _state_lbl_global = {0: "Engaged", 1: "Disengaged", **{i: f"Disengaged {i}" for i in range(2, K)}}
+
+    # This renders the actual assigned MAP states
     _fig_state, _ = plots.plot_categorical_performance_by_state(
         df=_df_state_pool,
-        smoothed_probs=None,
-        state_assign=_assign_pool,
+        smoothed_probs=_gamma_pool,
         state_labels=_state_lbl_global,
         model_name=f"glmhmm K={K} \u2014 per state",
+        state_assign=None,  # let it use smoothed_probs directly
+        arrays_store=arrays_store, # ensures 2AFC curve draws the pure state model
+        X_cols=names.get("X_cols", []),
     )
+
     mo.vstack(
         [
             mo.md("### Categorical plots for accuracy"),
@@ -1187,7 +1200,6 @@ def _(K, arrays_store, df_all, mo, np, pl, plots, state_labels, ui_subjects):
         ],
         align="center",
     )
-
     return
 
 
