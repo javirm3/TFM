@@ -10,6 +10,7 @@ def _():
     import sys, os
     from pathlib import Path
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "glmhmmt", "src"))
     import paths
     import numpy as np
     import polars as pl

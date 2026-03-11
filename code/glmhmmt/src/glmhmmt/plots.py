@@ -818,21 +818,104 @@ def plot_emission_weights(
     _state_pal, _state_hue_order = _build_state_palette(state_labels)
 
     # ── 1. Agonist (collapsed) figure ─────────────────────────────────────────
-    fig_ag, ax_ag = plt.subplots(figsize=(max(4, len(_ag_order) * 0.75), 4))
+    # ── 1. Agonist (collapsed) figure ─────────────────────────────────────────
+    fig_ag, axes_ag = plt.subplots(1, 2, figsize=(len(_ag_order) * 2, 4), sharex=True)
+    ax_ag_line, ax_ag_box = axes_ag
+    
     sns.lineplot(
-        data=_df_ag, x="feature", y="weight", hue="state", ax=ax_ag,
+        data=_df_ag, x="feature", y="weight", hue="state", ax=ax_ag_line,
         markers=True, marker="o", markersize=8, markeredgewidth=0,
         alpha=0.85, errorbar="se",
         palette=_state_pal, hue_order=_state_hue_order,
     )
-    ax_ag.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
-    ax_ag.set_xticks(range(len(_ag_order)))
-    ax_ag.set_xticklabels(_ag_order)
-    ax_ag.set_xlabel("")
-    ax_ag.set_ylabel("ΔP (from 1/3 baseline)")
-    ax_ag.set_title(f"Emission weights - collapsed view  (K={K})")
-    ax_ag.get_legend().set_title("")
-    ax_ag.legend(frameon=False)
+    ax_ag_line.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+    ax_ag_line.set_ylabel("ΔP (from 1/3 baseline)")
+    ax_ag_line.set_xlabel("")
+    ax_ag_line.set_title(f"Emission weights - collapsed view  (K={K})")
+    ax_ag_line.get_legend().set_title("")
+    ax_ag_line.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+
+    sns.boxplot(
+        data=_df_ag, x="feature", y="weight", hue="state", ax=ax_ag_box,
+        palette=_state_pal, hue_order=_state_hue_order,
+        width=0.8, showfliers=False, boxprops={'alpha': 0.7}
+    )
+    sns.stripplot(
+        data=_df_ag, x="feature", y="weight", hue="state", ax=ax_ag_box,
+        palette=_state_pal, hue_order=_state_hue_order,
+        dodge=True, alpha=0.5, zorder=1, legend=False
+    )
+    ax_ag_box.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+
+    # Statistical annotations for agonist figure
+    from scipy.stats import ttest_rel
+    import itertools
+
+    def get_star(pval):
+        if pval < 0.001: return "***"
+        elif pval < 0.01: return "**"
+        elif pval < 0.05: return "*"
+        return "ns"
+
+    K_ag = len(_state_hue_order) # Number of states
+    state_pairs = list(itertools.combinations(range(K_ag), 2))
+    hue_width = 0.8 / K_ag
+
+    y_range_ag = _df_ag["weight"].max() - _df_ag["weight"].min()
+    if pd.isna(y_range_ag) or y_range_ag == 0:
+        y_range_ag = 1
+
+    for m, feat in enumerate(_ag_order):
+        feat_df = _df_ag[_df_ag["feature"] == feat]
+        if feat_df.empty: continue
+        
+        y_max = feat_df["weight"].max()
+        y_offset_step = y_range_ag * 0.05
+        current_y_offset = y_max + y_offset_step
+
+        for p1, p2 in state_pairs:
+            s1 = _state_hue_order[p1]
+            s2 = _state_hue_order[p2]
+            
+            # Align by subject for paired t-test
+            df1 = feat_df[feat_df["state"] == s1].set_index("subject")["weight"]
+            df2 = feat_df[feat_df["state"] == s2].set_index("subject")["weight"]
+            
+            common_subjs = df1.index.intersection(df2.index)
+            if len(common_subjs) < 2: continue
+            
+            w1 = df1.loc[common_subjs].values
+            w2 = df2.loc[common_subjs].values
+
+            try:
+                stat, pval = ttest_rel(w1, w2)
+                star = get_star(pval)
+            except Exception:
+                star = ""
+
+            if star:
+                offset_1 = (p1 - (K_ag - 1) / 2) * hue_width
+                offset_2 = (p2 - (K_ag - 1) / 2) * hue_width
+                x1 = m + offset_1
+                x2 = m + offset_2
+                
+                h = y_range_ag * 0.02
+                ax_ag_box.plot([x1, x1, x2, x2], [current_y_offset, current_y_offset+h, current_y_offset+h, current_y_offset], lw=1, c='k')
+                ax_ag_box.text((x1+x2)/2, current_y_offset+h, star, ha='center', va='bottom', color='k')
+                current_y_offset += y_offset_step * 1.5
+
+
+    ax_ag_box.set_xticks(range(len(_ag_order)))
+    ax_ag_box.set_xticklabels(_ag_order)
+    ax_ag_box.set_xlabel("")
+    ax_ag_box.set_ylabel("ΔP (from 1/3 baseline)")
+    
+    handles, labels_lgd = ax_ag_box.get_legend_handles_labels()
+    if len(handles) >= K_ag:
+        ax_ag_box.legend(handles[:K_ag], labels_lgd[:K_ag], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    else:
+        ax_ag_box.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+        
     fig_ag.tight_layout()
     sns.despine(fig=fig_ag)
     if save_path is not None:
@@ -840,26 +923,93 @@ def plot_emission_weights(
 
     # ── 2. Per-class figure ────────────────────────────────────────────────────
     _n_classes = _df_w["class"].nunique()
-    fig_cls, axes_cls = plt.subplots(
-        1, _n_classes, figsize=(6 * _n_classes, 4), sharey=True
+    fig_cls, axes_cls_grid = plt.subplots(
+        2, _n_classes, figsize=(6 * _n_classes, 8), sharex=True, squeeze=False
     )
-    axes_cls = np.atleast_1d(axes_cls)
-    for _c, _ax in enumerate(axes_cls):
+    
+    y_range_cls = _df_w["weight"].max() - _df_w["weight"].min()
+    if pd.isna(y_range_cls) or y_range_cls == 0:
+        y_range_cls = 1
+        
+    for _c in range(_n_classes):
+        _ax_line = axes_cls_grid[0, _c]
+        _ax_box = axes_cls_grid[1, _c]
         _sub = _df_w[_df_w["class"] == _c]
+        
         sns.lineplot(
-            data=_sub, x="feature", y="weight", hue="state", ax=_ax,
+            data=_sub, x="feature", y="weight", hue="state", ax=_ax_line,
             markers=True, marker="o", markersize=8, markeredgewidth=0,
             alpha=0.8, errorbar="se",
             palette=_state_pal, hue_order=_state_hue_order,
+            legend=False
         )
-        _ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
-        _ax.set_title(_CLS_LABELS[_c] if _c < len(_CLS_LABELS) else f"Class {_c}")
-        _ax.set_xticks(range(len(_feat_names)))
-        _ax.set_xticklabels(_feat_names, rotation=35, ha="right")
-        _ax.set_xlabel("")
-        _ax.set_ylabel("Weight" if _c == 0 else "")
-        if _ax.get_legend() is not None:
-            _ax.get_legend().set_title("")
+        _ax_line.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+        _ax_line.set_title(_CLS_LABELS[_c] if _c < len(_CLS_LABELS) else f"Class {_c}")
+        _ax_line.set_xlabel("")
+        _ax_line.set_ylabel("Weight" if _c == 0 else "")
+
+        sns.boxplot(
+            data=_sub, x="feature", y="weight", hue="state", ax=_ax_box,
+            palette=_state_pal, hue_order=_state_hue_order,
+            width=0.8, showfliers=False, boxprops={'alpha': 0.7}
+        )
+        sns.stripplot(
+            data=_sub, x="feature", y="weight", hue="state", ax=_ax_box,
+            palette=_state_pal, hue_order=_state_hue_order,
+            dodge=True, alpha=0.5, zorder=1, legend=False
+        )
+        _ax_box.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+        
+        # Annotations
+        for m, feat in enumerate(_feat_names):
+            feat_df = _sub[_sub["feature"] == feat]
+            if feat_df.empty: continue
+            
+            y_max = feat_df["weight"].max()
+            y_offset_step = y_range_cls * 0.05
+            current_y_offset = y_max + y_offset_step
+            
+            for p1, p2 in state_pairs:
+                s1 = _state_hue_order[p1]
+                s2 = _state_hue_order[p2]
+                
+                df1 = feat_df[feat_df["state"] == s1].set_index("subject")["weight"]
+                df2 = feat_df[feat_df["state"] == s2].set_index("subject")["weight"]
+                
+                common_subjs = df1.index.intersection(df2.index)
+                if len(common_subjs) < 2: continue
+                
+                w1 = df1.loc[common_subjs].values
+                w2 = df2.loc[common_subjs].values
+    
+                try:
+                    stat, pval = ttest_rel(w1, w2)
+                    star = get_star(pval)
+                except Exception:
+                    star = ""
+    
+                if star:
+                    offset_1 = (p1 - (K_ag - 1) / 2) * hue_width
+                    offset_2 = (p2 - (K_ag - 1) / 2) * hue_width
+                    x1 = m + offset_1
+                    x2 = m + offset_2
+                    
+                    h = y_range_cls * 0.02
+                    _ax_box.plot([x1, x1, x2, x2], [current_y_offset, current_y_offset+h, current_y_offset+h, current_y_offset], lw=1, c='k')
+                    _ax_box.text((x1+x2)/2, current_y_offset+h, star, ha='center', va='bottom', color='k')
+                    current_y_offset += y_offset_step * 1.5
+
+        _ax_box.set_xticks(range(len(_feat_names)))
+        _ax_box.set_xticklabels(_feat_names, rotation=35, ha="right")
+        _ax_box.set_xlabel("")
+        _ax_box.set_ylabel("Weight" if _c == 0 else "")
+        
+        handles, labels_lgd = _ax_box.get_legend_handles_labels()
+        if len(handles) >= K_ag:
+            _ax_box.legend(handles[:K_ag], labels_lgd[:K_ag], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+        else:
+            _ax_box.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+
     fig_cls.suptitle(f"Emission weights per choice  (K={K})", y=1.02)
     fig_cls.tight_layout()
     sns.despine(fig=fig_cls)

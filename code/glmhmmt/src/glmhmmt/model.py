@@ -684,20 +684,34 @@ class SoftmaxGLMHMM(HMM):
             *marginal_loglik* is the log-marginal likelihood scalar.
         """
         valid = (emissions != self.num_classes)           # (T,)  False = padding
-        args = self._inference_args(params, emissions, inputs)
+        
+        pi0 = self.initial_component._compute_initial_probs(params.initial, inputs)
+        A = self.transition_component._compute_transition_matrices(params.transitions, inputs)
+        # Broadcast time-homogeneous transition matrices to (T-1, K, K) so
+        # hmm_two_filter_smoother doesn't auto-sum padded steps over time.
+        if A.ndim == 2:
+            T = emissions.shape[0]
+            if T > 0:
+                A = jnp.broadcast_to(A[None, :, :], (T - 1, self.num_states, self.num_states))
+        lls = self.emission_component._compute_conditional_logliks(params.emissions, emissions, inputs)
+        
+        args = (pi0, A, lls)
         posterior = hmm_two_filter_smoother(*args)
 
         # Zero smoothed marginals at padded steps
         smoothed_probs = jnp.where(
             valid[:, None], posterior.smoothed_probs, 0.0)
 
-        # Zero pairwise marginals — shape can be (K,K) for time-homogeneous
-        # transitions (already summed) or (T-1,K,K) for input-driven ones.
+        # Zero pairwise marginals
         if posterior.trans_probs.ndim == 2:               # (K, K) — pre-summed
             trans_probs = posterior.trans_probs           # cannot mask per-step
         else:                                             # (T-1, K, K)
             valid_trans = (valid[:-1] & valid[1:])[:, None, None]
             trans_probs = jnp.where(valid_trans, posterior.trans_probs, 0.0)
+
+        # Re-sum to (K, K) if the transition component expects time-homogeneous stats
+        if self.transition_input_dim == 0 and trans_probs.ndim == 3:
+            trans_probs = trans_probs.sum(axis=0)
 
         masked_post = posterior._replace(
             smoothed_probs=smoothed_probs, trans_probs=trans_probs

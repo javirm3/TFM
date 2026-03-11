@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.20.2"
+__generated_with = "0.20.4"
 app = marimo.App(width="full")
 
 
@@ -12,26 +12,34 @@ def _():
     import polars as pl
     import matplotlib.pyplot as plt
     import seaborn as sns
-    from pathlib import Path
+    try:
+        import paths
+    except ImportError:
+        sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+        import paths
 
-    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-    import paths
+    # Add src to sys.path to prevent namespace shadowing by the code/glmhmmt directory
+    sys.path.insert(1, str(paths.CODE_DIR / "glmhmmt" / "src"))
+
     from tasks import get_adapter
 
     sns.set_style("white")
-    return Path, get_adapter, mo, np, paths, pl, plt, sns
-
-
-# ── Task & folder configuration ──────────────────────────────────────────────
+    return get_adapter, mo, np, paths, pl, plt, sns
 
 
 @app.cell
-def _(get_adapter, mo, paths):
+def _(mo):
     ui_task = mo.ui.dropdown(
         options=["MCDR", "2AFC"],
         value="MCDR",
         label="Task",
     )
+    return (ui_task,)
+
+
+@app.cell
+def _(get_adapter, mo, paths, ui_task):
+
     adapter = get_adapter(ui_task.value)
 
     def _model_aliases(task: str, kind: str) -> list:
@@ -65,10 +73,7 @@ def _(get_adapter, mo, paths):
         mo.hstack([ui_task]),
         mo.hstack([ui_glm_dir, ui_glmhmm_dir, ui_glmhmmt_dir]),
     ])
-    return adapter, ui_glm_dir, ui_glmhmm_dir, ui_glmhmmt_dir, ui_task
-
-
-# ── Subject & K range ─────────────────────────────────────────────────────────
+    return adapter, ui_glm_dir, ui_glmhmm_dir, ui_glmhmmt_dir
 
 
 @app.cell
@@ -92,9 +97,6 @@ def _(adapter, mo, paths, pl):
         mo.hstack([mo.md("K range:"), ui_K_range]),
     ])
     return ui_K_range, ui_subjects
-
-
-# ── Load metrics from cached _metrics.parquet files ──────────────────────────
 
 
 @app.cell
@@ -124,7 +126,9 @@ def _(mo, paths, pl, ui_glm_dir, ui_glmhmm_dir, ui_glmhmmt_dir, ui_task):
                 (-pl.col("nll") / pl.col("n_trials")).alias("ll_per_trial")
             )
         if "K" not in df.columns:
-            df = df.with_columns(pl.lit(1).alias("K"))
+            df = df.with_columns(pl.lit(1, dtype=pl.Int64).alias("K"))
+        else:
+            df = df.with_columns(pl.col("K").cast(pl.Int64))
         if "model_kind" not in df.columns:
             df = df.with_columns(pl.lit(expected_model_kind).alias("model_kind"))
         keep = ["subject", "K", "model_kind", "ll_per_trial", "bic", "acc"]
@@ -161,9 +165,6 @@ def _(mo, paths, pl, ui_glm_dir, ui_glmhmm_dir, ui_glmhmmt_dir, ui_task):
     return (results_long,)
 
 
-# ── Filter to selected subjects & K range ────────────────────────────────────
-
-
 @app.cell
 def _(pl, results_long, ui_K_range, ui_subjects):
     K_min, K_max = ui_K_range.value
@@ -173,9 +174,6 @@ def _(pl, results_long, ui_K_range, ui_subjects):
     )
     results_filtered
     return (results_filtered,)
-
-
-# ── Aggregate: mean ± SEM per (model_kind, K) ────────────────────────────────
 
 
 @app.cell
@@ -200,9 +198,6 @@ def _(pl, results_filtered):
     return (agg,)
 
 
-# ── BIC & LL/trial comparison curves ─────────────────────────────────────────
-
-
 @app.cell
 def _(agg, plt, sns):
     _MODEL_STYLES = {
@@ -211,7 +206,7 @@ def _(agg, plt, sns):
         "glmhmmt":  {"color": "#C44E52", "marker": "^", "label": "GLMHMM-T"},
     }
 
-    fig_cmp, (ax_ll, ax_bic) = plt.subplots(1, 2, figsize=(12, 4))
+    fig_cmp, (ax_ll, ax_bic) = plt.subplots(1, 2, figsize=(8, 4))
 
     for _kind_tup, _group in agg.group_by("model_kind"):
         _kind = _kind_tup[0]
@@ -243,10 +238,7 @@ def _(agg, plt, sns):
 
     fig_cmp.tight_layout()
     fig_cmp
-    return (fig_cmp,)
-
-
-# ── Per-subject LL/trial heatmap ──────────────────────────────────────────────
+    return
 
 
 @app.cell
@@ -278,9 +270,6 @@ def _(mo, pl, plt, results_filtered, sns):
     return
 
 
-# ── Accuracy comparison ───────────────────────────────────────────────────────
-
-
 @app.cell
 def _(agg, plt, sns):
     _MODEL_STYLES = {
@@ -307,10 +296,7 @@ def _(agg, plt, sns):
     sns.despine(ax=ax_acc)
     fig_acc.tight_layout()
     fig_acc
-    return (fig_acc,)
-
-
-# ── Weight visualisation — load arrays from .npz ─────────────────────────────
+    return
 
 
 @app.cell
@@ -405,9 +391,6 @@ def _(
     except Exception as _e:
         mo.md(f"⚠️  Could not render weight plot: `{_e}`")
     return
-
-
-# ── Optional re-fit ───────────────────────────────────────────────────────────
 
 
 @app.cell

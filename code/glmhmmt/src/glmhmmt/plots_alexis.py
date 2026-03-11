@@ -232,7 +232,10 @@ def plot_weights_boxplot(
     title: str = "GLM-HMM weights (across subjects)",
     figsize: Optional[Tuple[float, float]] = None,
 ) -> plt.Figure:
-    """Error-bar plot of weights per state across N subjects."""
+    """Lineplot and Boxplot of weights per state across N subjects with statistical annotations."""
+    from scipy.stats import ttest_rel
+    import itertools
+
     W = np.asarray(all_weights)
     if W.ndim == 3:
         W = W[:, :, None, :]
@@ -242,26 +245,97 @@ def plot_weights_boxplot(
     labels = list(state_labels) if state_labels else _default_labels(K, C_m1 + 1)
     colors = _state_colors(K)
     x = np.arange(M)
-    bar_w = 0.8 / K
 
-    fig, ax = plt.subplots(figsize=figsize or (max(5, 0.7 * M), 4))
-    ax.axhline(0, color="k", lw=0.8, ls="--")
+    # Convert to DataFrame for seaborn
+    records = []
+    for n in range(N):
+        for k in range(K):
+            for m in range(M):
+                records.append({
+                    "Subject": n,
+                    "State": labels[k],
+                    "Feature": feature_names[m],
+                    "Weight": W_avg[n, k, m],
+                    "StateIdx": k,
+                    "FeatureIdx": m
+                })
+    df = pd.DataFrame(records)
 
-    for k in range(K):
-        offset = (k - (K - 1) / 2) * bar_w
-        for n in range(N):
-            ax.plot(x + offset, W_avg[n, k], "o", color=colors[k], alpha=0.25, ms=4, zorder=2)
-        mean_w = W_avg[:, k].mean(axis=0)
-        sem_w  = sem(W_avg[:, k], axis=0)
-        ax.errorbar(x + offset, mean_w, yerr=sem_w, fmt="o-",
-                    color=colors[k], lw=1.5, capsize=3, label=labels[k], zorder=3)
+    fig, axes = plt.subplots(1, 2, figsize=figsize or (8,4), sharex=True)
+    ax_line, ax_box = axes
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(feature_names, rotation=45, ha="right")
-    ax.set_ylabel("Weight")
-    ax.set_title(title)
-    ax.legend(frameon=False)
-    sns.despine(ax=ax)
+    sns.lineplot(
+        data=df, x="Feature", y="Weight", hue="State",
+        palette=colors[:K], ax=ax_line,
+        markers=True, marker="o", markersize=8, markeredgewidth=0,
+        alpha=0.85, errorbar="se", legend=False
+    )
+    ax_line.axhline(0, color="k", lw=0.8, ls="--")
+    ax_line.set_ylabel("Weight")
+    ax_line.set_xlabel("")
+    ax_line.set_title(title)
+
+    sns.boxplot(
+        data=df, x="Feature", y="Weight", hue="State",
+        palette=colors[:K], ax=ax_box, width=0.8, showfliers=False,
+        boxprops={'alpha': 0.7}
+    )
+    sns.stripplot(
+        data=df, x="Feature", y="Weight", hue="State",
+        palette=colors[:K], ax=ax_box, dodge=True, alpha=0.5, zorder=1, legend=False
+    )
+    ax_box.axhline(0, color="k", lw=0.8, ls="--")
+
+    def get_star(pval):
+        if pval < 0.001: return "***"
+        elif pval < 0.01: return "**"
+        elif pval < 0.05: return "*"
+        return "ns"
+
+    y_range = df["Weight"].max() - df["Weight"].min()
+    if y_range == 0:
+        y_range = 1
+
+    state_pairs = list(itertools.combinations(range(K), 2))
+    hue_width = 0.8 / K
+
+    for m in range(M):
+        y_max = df[df["FeatureIdx"] == m]["Weight"].max()
+        y_offset_step = y_range * 0.05
+        current_y_offset = y_max + y_offset_step
+
+        for p1, p2 in state_pairs:
+            w1 = W_avg[:, p1, m]
+            w2 = W_avg[:, p2, m]
+
+            try:
+                stat, pval = ttest_rel(w1, w2)
+                star = get_star(pval)
+            except Exception:
+                star = ""
+
+            if star:
+                offset_1 = (p1 - (K - 1) / 2) * hue_width
+                offset_2 = (p2 - (K - 1) / 2) * hue_width
+                x1 = m + offset_1
+                x2 = m + offset_2
+                
+                h = y_range * 0.02
+                ax_box.plot([x1, x1, x2, x2], [current_y_offset, current_y_offset+h, current_y_offset+h, current_y_offset], lw=1, c='k')
+                ax_box.text((x1+x2)/2, current_y_offset+h, star, ha='center', va='bottom', color='k')
+                current_y_offset += y_offset_step * 1.5
+
+    ax_box.set_xticks(range(M))
+    ax_box.set_xticklabels(feature_names, rotation=45, ha="right")
+    ax_box.set_ylabel("Weight")
+    
+    handles, labels_lgd = ax_box.get_legend_handles_labels()
+    if len(handles) >= K:
+        ax_box.legend(handles[:K], labels_lgd[:K], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    else:
+        ax_box.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+        
+    sns.despine(fig=fig)
     fig.tight_layout()
     return fig
 
@@ -994,11 +1068,8 @@ def prepare_predictions_df(df_pred):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def plot_emission_weights(
-    arrays_store: dict,
-    state_labels: dict,
-    names: dict,
+    views: dict,
     K: int,
-    subjects: list,
     save_path=None,
 ) -> Tuple[plt.Figure, plt.Figure]:
     """Emission weights: per-subject bar charts + multi-subject error-bar figure.
@@ -1007,22 +1078,17 @@ def plot_emission_weights(
 
     Parameters
     ----------
-    arrays_store : {subj: npz-dict with "emission_weights"}
-    state_labels : {subj: {state_idx: label_str}}
-    names        : dict with key "X_cols"
-    K            : number of states
-    subjects     : subject IDs to include
-    save_path    : optional Path – per-subject figure saved there if provided
+    views     : {subj: SubjectFitView} as produced by build_views
+    K         : number of states
+    save_path : optional Path – per-subject figure saved there if provided
 
     Returns
     -------
     fig_single, fig_multi
     """
-    feat_names = names.get("X_cols", [])
-    _pal, _hue_order = _build_state_palette(state_labels)
-
-    valid_subjs = [s for s in subjects if s in arrays_store
-                   and arrays_store[s].get("emission_weights") is not None]
+    valid_subjs = list(views.keys())
+    feat_names = next(iter(views.values())).feat_names if views else []
+    _pal, _hue_order = _build_state_palette({s: v.state_name_by_idx for s, v in views.items()})
 
     if not valid_subjs:
         fig, ax = plt.subplots()
@@ -1042,10 +1108,10 @@ def plot_emission_weights(
     all_w = []
     for idx, subj in enumerate(valid_subjs):
         ax = axes_s[idx // n_cols][idx % n_cols]
-        W  = arrays_store[subj]["emission_weights"]
-        slbls = state_labels.get(subj, {})
+        W  = views[subj].emission_weights
+        slbls = views[subj].state_name_by_idx
         lbls  = [slbls.get(k, f"S{k}") for k in range(K)]
-        fn_subj = arrays_store[subj].get("X_cols", feat_names)
+        fn_subj = views[subj].feat_names or feat_names
         plot_weights(W, fn_subj, state_labels=lbls, title=f"Subject {subj}", ax=ax)
         all_w.append(np.asarray(W))
 
@@ -1065,7 +1131,7 @@ def plot_emission_weights(
         W_stack = np.stack(all_w, axis=0)
         if W_stack.ndim == 3:
             W_stack = W_stack[:, :, None, :]
-        fn = feat_names or (arrays_store[valid_subjs[0]].get("X_cols") or [])
+        fn = feat_names or (views[valid_subjs[0]].feat_names or [])
         fig_multi = plot_weights_boxplot(W_stack, fn,
                                          state_labels=_hue_order[:K],
                                          title=f"Emission weights – all subjects  (K={K})")
@@ -1076,10 +1142,8 @@ def plot_emission_weights(
 
 
 def plot_posterior_probs(
-    arrays_store: dict,
-    state_labels: dict,
+    views: dict,
     K: int,
-    subjects: list,
     t0: int = 0,
     t1: int = 199,
 ) -> plt.Figure:
@@ -1091,7 +1155,7 @@ def plot_posterior_probs(
     -------
     fig
     """
-    _selected = [s for s in subjects if s in arrays_store]
+    _selected = list(views.keys())
     if not _selected:
         fig, ax = plt.subplots()
         ax.text(0.5, 0.5, "No data", ha="center", va="center")
@@ -1103,12 +1167,12 @@ def plot_posterior_probs(
 
     for i, subj in enumerate(_selected):
         ax = axes[i, 0]
-        P     = np.asarray(arrays_store[subj]["smoothed_probs"])
+        P     = np.asarray(views[subj].smoothed_probs)
         P_sub = P[t0:min(t1, len(P))]
         T_sub = P_sub.shape[0]
 
         ax.stackplot(np.arange(T_sub), P_sub.T, colors=colors[:K], alpha=0.8)
-        slbls = state_labels.get(subj, {})
+        slbls = views[subj].state_name_by_idx
         legend_patches = [
             plt.matplotlib.patches.Patch(color=colors[k], label=slbls.get(k, f"S{k}"))
             for k in range(K)
@@ -1128,11 +1192,8 @@ def plot_posterior_probs(
 
 
 def plot_state_accuracy(
-    arrays_store: dict,
-    state_labels: dict,
-    df_all,
-    K: int,
-    subjects: list,
+    views: dict,
+    trial_df,
     thresh: float = 0.5,
     session_col: str = "Session",
     sort_col: str = "Trial",
@@ -1141,13 +1202,20 @@ def plot_state_accuracy(
     """Per-state accuracy bar chart.
 
     Mirrors plots.plot_state_accuracy.
-    Accuracy = fraction of correct trials (Hit==1) assigned to each state
+    Accuracy = fraction of correct trials assigned to each state
     with posterior probability ≥ thresh, on ILD≠0 trials only.
+
+    Parameters
+    ----------
+    trial_df : output of build_trial_df; must contain ``correct_bool`` and
+               ``ILD`` columns.
 
     Returns
     -------
     fig, summary_df
     """
+    subjects = list(views.keys())
+    K = next(iter(views.values())).K if views else 2
     _label_order = (
         ["Engaged", "Disengaged"] if K == 2
         else ["Engaged"] + [f"Disengaged {i}" for i in range(1, K)]
@@ -1159,21 +1227,19 @@ def plot_state_accuracy(
 
     _acc_records = []
     for subj in subjects:
-        if subj not in arrays_store:
-            continue
-        P = np.asarray(arrays_store[subj]["smoothed_probs"])  # (T, K)
+        P = np.asarray(views[subj].smoothed_probs)  # (T, K)
 
         try:
             import polars as pl
-            if hasattr(df_all, "filter"):
-                df_sub = df_all.filter(pl.col("subject") == subj)
-                hits = df_sub["Hit"].to_numpy().astype(float)
+            if hasattr(trial_df, "filter"):
+                df_sub = trial_df.filter(pl.col("subject") == subj)
+                hits = df_sub["correct_bool"].to_numpy().astype(float)
                 ilds = df_sub["ILD"].to_numpy().astype(float)
             else:
                 raise AttributeError
         except (ImportError, AttributeError):
-            df_sub = df_all[df_all["subject"] == subj]
-            hits = df_sub["Hit"].to_numpy().astype(float)
+            df_sub = trial_df[trial_df["subject"] == subj]
+            hits = df_sub["correct_bool"].to_numpy().astype(float)
             ilds = df_sub["ILD"].to_numpy().astype(float)
 
         T = min(len(P), len(hits))
@@ -1185,7 +1251,7 @@ def plot_state_accuracy(
             _acc_records.append({"subject": subj, "label": "All",
                                   "acc": hits[valid].mean() * 100, "n": valid.sum()})
 
-        slbls = state_labels.get(subj, {})
+        slbls = views[subj].state_name_by_idx
         for k in range(K):
             lbl  = slbls.get(k, f"State {k}")
             mask = stim_mask & (P[:, k] >= thresh) & np.isfinite(hits)
@@ -1234,11 +1300,8 @@ def plot_state_accuracy(
 
 
 def plot_session_trajectories(
-    arrays_store: dict,
-    state_labels: dict,
-    df_all,
-    K: int,
-    subjects: list,
+    views: dict,
+    trial_df,
     session_col: str = "Session",
     sort_col: str = "Trial",
     **kwargs,
@@ -1247,31 +1310,33 @@ def plot_session_trajectories(
 
     Mirrors plots.plot_session_trajectories.
 
+    Parameters
+    ----------
+    trial_df : output of build_trial_df.
+
     Returns
     -------
     fig
     """
+    subjects = list(views.keys())
+    K = next(iter(views.values())).K if views else 2
     palette = _state_colors(K)
     fig, axes = plt.subplots(len(subjects), 1,
                              figsize=(10, 3.5 * len(subjects)), squeeze=False)
 
     for i, subj in enumerate(subjects):
         ax = axes[i, 0]
-        if subj not in arrays_store:
-            ax.set_title(f"Subject {subj} — no fit")
-            continue
-
-        P = np.asarray(arrays_store[subj]["smoothed_probs"])
+        P = np.asarray(views[subj].smoothed_probs)
 
         try:
             import polars as pl
-            if hasattr(df_all, "filter"):
-                df_sub = df_all.filter(pl.col("subject") == subj).sort(sort_col)
+            if hasattr(trial_df, "filter"):
+                df_sub = trial_df.filter(pl.col("subject") == subj).sort(sort_col)
                 _sess_arr = df_sub[session_col].to_numpy()
             else:
                 raise AttributeError
         except (ImportError, AttributeError):
-            df_sub = df_all[df_all["subject"] == subj].sort_values(sort_col)
+            df_sub = trial_df[trial_df["subject"] == subj].sort_values(sort_col)
             _sess_arr = df_sub[session_col].to_numpy()
 
         T = min(len(P), len(_sess_arr))
@@ -1288,7 +1353,7 @@ def plot_session_trajectories(
         mean_traj = np.nanmean(traj, axis=0)
         sem_traj  = sem(traj, axis=0, nan_policy="omit")
 
-        slbls = state_labels.get(subj, {})
+        slbls = views[subj].state_name_by_idx
         for k in range(K):
             lbl = slbls.get(k, f"S{k}")
             t   = np.arange(mean_traj.shape[0])
@@ -1310,11 +1375,8 @@ def plot_session_trajectories(
 
 
 def plot_state_occupancy(
-    arrays_store: dict,
-    state_labels: dict,
-    df_all,
-    K: int,
-    subjects: list,
+    views: dict,
+    trial_df,
     session_col: str = "Session",
     sort_col: str = "Trial",
     **kwargs,
@@ -1323,22 +1385,24 @@ def plot_state_occupancy(
 
     Mirrors plots.plot_state_occupancy.
 
+    Parameters
+    ----------
+    trial_df : output of build_trial_df.
+
     Returns
     -------
     fig
     """
+    subjects = list(views.keys())
+    K = next(iter(views.values())).K if views else 2
     palette = _state_colors(K)
     fig, axes = plt.subplots(len(subjects), 2,
                              figsize=(10, 3.5 * len(subjects)), squeeze=False)
 
     for i, subj in enumerate(subjects):
         ax_occ, ax_chg = axes[i, 0], axes[i, 1]
-        if subj not in arrays_store:
-            ax_occ.set_title(f"Subject {subj} — no fit")
-            continue
-
-        P     = np.asarray(arrays_store[subj]["smoothed_probs"])
-        slbls = state_labels.get(subj, {})
+        P     = np.asarray(views[subj].smoothed_probs)
+        slbls = views[subj].state_name_by_idx
         labels = [slbls.get(k, f"S{k}") for k in range(K)]
 
         occ = P.mean(axis=0)
@@ -1349,13 +1413,13 @@ def plot_state_occupancy(
 
         try:
             import polars as pl
-            if hasattr(df_all, "filter"):
-                df_sub = df_all.filter(pl.col("subject") == subj).sort(sort_col)
+            if hasattr(trial_df, "filter"):
+                df_sub = trial_df.filter(pl.col("subject") == subj).sort(sort_col)
                 _sess_arr = df_sub[session_col].to_numpy()
             else:
                 raise AttributeError
         except (ImportError, AttributeError):
-            df_sub = df_all[df_all["subject"] == subj].sort_values(sort_col)
+            df_sub = trial_df[trial_df["subject"] == subj].sort_values(sort_col)
             _sess_arr = df_sub[session_col].to_numpy()
 
         T = min(len(P), len(_sess_arr))
@@ -1384,11 +1448,8 @@ def plot_state_occupancy(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def plot_session_deepdive(
-    arrays_store: dict,
-    state_labels: dict,
-    df_all,
-    names: dict,
-    K: int,
+    views: dict,
+    trial_df,
     subj: str,
     sess,
     session_col: str = "Session",
@@ -1402,10 +1463,16 @@ def plot_session_deepdive(
     Action traces are auto-detected from the saved X matrix; looks for
     columns whose names start with 'A_' (e.g. A_L, A_R, A_plus, A_minus).
 
+    Parameters
+    ----------
+    trial_df : output of build_trial_df; must contain ``correct_bool``,
+               ``ILD``, and ``response`` columns.
+
     Returns
     -------
     fig
     """
+    K = views[subj].K
     try:
         import polars as pl
         _has_pl = True
@@ -1418,41 +1485,30 @@ def plot_session_deepdive(
     except (TypeError, ValueError):
         pass
 
-    # ── filter df to subject, then to session ─────────────────────────────────
-    if _has_pl and hasattr(df_all, "filter"):
-        _df_sub_all = (
-            df_all
-            .filter(pl.col("subject") == subj)
-            .sort(sort_col)
-            .filter(pl.col(session_col).count().over(session_col) >= 2)
+    # ── filter trial_df to subject, then to session ───────────────────────────
+    # trial_df rows are row-aligned with views[subj].smoothed_probs per subject.
+    if _has_pl and hasattr(trial_df, "filter"):
+        _df_sub_all = trial_df.filter(pl.col("subject") == subj).sort(sort_col)
+        _sess_row_indices = (
+            _df_sub_all
+            .with_row_index("_r")
+            .filter(pl.col(session_col) == sess)["_r"]
+            .to_numpy()
         )
-        _sess_mask = _df_sub_all[session_col].to_numpy() == sess
-        _df_sess = (
-            df_all
-            .filter((pl.col("subject") == subj) & (pl.col(session_col) == sess))
-            .sort(sort_col)
-        )
-        _hit   = _df_sess["Hit"].to_numpy().astype(float)
-        _ild   = _df_sess["ILD"].to_numpy().astype(float)
-        _choice = _df_sess["Choice"].to_numpy().astype(int)
+        _df_sess  = _df_sub_all.filter(pl.col(session_col) == sess)
+        _hit      = _df_sess["Hit"].to_numpy().astype(float)
+        _ild      = _df_sess["ILD"].to_numpy().astype(float)
+        _choice   = _df_sess["Choice"].to_numpy().astype(int)
     else:
-        _df_sub_all = (
-            df_all[df_all["subject"] == subj]
-            .sort_values(sort_col)
-        )
-        _sess_counts = _df_sub_all.groupby(session_col)[sort_col].transform("count")
-        _df_sub_all = _df_sub_all[_sess_counts >= 2]
-        _sess_mask  = _df_sub_all[session_col].to_numpy() == sess
-        _df_sess = (
-            df_all[(df_all["subject"] == subj) & (df_all[session_col] == sess)]
-            .sort_values(sort_col)
-        )
-        _hit    = _df_sess["Hit"].to_numpy().astype(float)
-        _ild    = _df_sess["ILD"].to_numpy().astype(float)
-        _choice = _df_sess["Choice"].to_numpy().astype(int)
+        _df_sub_all = trial_df[trial_df["subject"] == subj].sort_values(sort_col).reset_index(drop=True)
+        _sess_row_indices = _df_sub_all.index[_df_sub_all[session_col] == sess].to_numpy()
+        _df_sess  = _df_sub_all[_df_sub_all[session_col] == sess]
+        _hit      = _df_sess["Hit"].to_numpy().astype(float)
+        _ild      = _df_sess["ILD"].to_numpy().astype(float)
+        _choice   = _df_sess["Choice"].to_numpy().astype(int)
 
-    _probs_all = arrays_store[subj]["smoothed_probs"]
-    _probs     = _probs_all[_sess_mask]
+    _probs_all = views[subj].smoothed_probs
+    _probs     = _probs_all[_sess_row_indices]
     _T         = _probs.shape[0]
     # guard: align lengths in case session filter differs
     _T = min(_T, len(_hit))
@@ -1462,9 +1518,9 @@ def plot_session_deepdive(
     _x = np.arange(_T)
 
     # ── auto-detect action traces from X ─────────────────────────────────────
-    _X_cols_s = arrays_store[subj].get("X_cols") or names.get("X_cols", [])
+    _X_cols_s = views[subj].feat_names
     _X_idx    = {f: i for i, f in enumerate(_X_cols_s)}
-    _X_sess   = arrays_store[subj]["X"][_sess_mask][:_T]
+    _X_sess   = views[subj].X[_sess_row_indices][:_T]
 
     _trace_colors = {
         "A_plus": "royalblue", "A_minus": "gold",
@@ -1487,10 +1543,8 @@ def plot_session_deepdive(
             _cum_acc[_ti] = 100.0 * _cum_s / _cum_n
 
     # ── find "Engaged" state index ────────────────────────────────────────────
-    _slbl = state_labels.get(subj, {k: f"State {k}" for k in range(K)})
-    _engaged_k = next(
-        (k for k in range(K) if _LABEL_RANK.get(_slbl.get(k, ""), k) == 0), 0
-    )
+    _slbl = views[subj].state_name_by_idx
+    _engaged_k = views[subj].engaged_k()
     _palette = _DEFAULT_COLORS
 
     # ── figure ────────────────────────────────────────────────────────────────
@@ -1577,7 +1631,7 @@ def plot_categorical_performance_all(
     subj_col: str = "subject",
     cond_col: str = "condition",
     exp_col: str = "experiment",
-    arrays_store: Optional[dict] = None,
+    views: Optional[dict] = None,
     X_cols: Optional[Sequence[str]] = None,
     ild_max: float = 70.0,
 ) -> plt.Figure:
@@ -1613,9 +1667,23 @@ def plot_categorical_performance_all(
 
     # Pre-compute smooth GLM sigmoid averaged over all subjects
     _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
+    # Build arrays_store-compatible dict for _mean_glm_curve.
+    # Reorder axes so that state index == rank (0=Engaged, …) for consistency.
+    def _rank_ordered_as(v):
+        _order = sorted(v.state_rank_by_idx, key=lambda ki: v.state_rank_by_idx[ki])
+        return {
+            "emission_weights": v.emission_weights[_order],
+            "X_cols": v.feat_names,
+            "X": v.X,
+            "smoothed_probs": v.smoothed_probs[:, _order],
+        }
+    _as = (
+        {s: _rank_ordered_as(v) for s, v in views.items()}
+        if views is not None else None
+    )
     _smooth_all = (
-        _mean_glm_curve(arrays_store, _all_subjects, X_cols, ild_max=ild_max)
-        if arrays_store is not None
+        _mean_glm_curve(_as, _all_subjects, X_cols, ild_max=ild_max)
+        if _as is not None
         else None
     )
 
@@ -1640,8 +1708,8 @@ def plot_categorical_performance_all(
         for cond in conds:
             _cond_subjs = list(df_pd[df_pd[cond_col] == cond][subj_col].unique())
             _smooth_cond = (
-                _mean_glm_curve(arrays_store, _cond_subjs, X_cols, ild_max=ild_max)
-                if arrays_store is not None
+                _mean_glm_curve(_as, _cond_subjs, X_cols, ild_max=ild_max)
+                if _as is not None
                 else None
             )
             _psych_panel(
@@ -1660,8 +1728,8 @@ def plot_categorical_performance_all(
         for ei, exp in enumerate(exps):
             _exp_subjs = list(df_pd[df_pd[exp_col] == exp][subj_col].unique())
             _smooth_exp = (
-                _mean_glm_curve(arrays_store, _exp_subjs, X_cols, ild_max=ild_max)
-                if arrays_store is not None
+                _mean_glm_curve(_as, _exp_subjs, X_cols, ild_max=ild_max)
+                if _as is not None
                 else None
             )
             _psych_panel(
@@ -1682,15 +1750,12 @@ def plot_categorical_performance_all(
 
 def plot_categorical_performance_all_by_state(
     df,
-    smoothed_probs: np.ndarray,
-    state_labels: dict,
+    views: dict,
     model_name: str,
-    state_assign: Optional[np.ndarray] = None,
     ild_col: str = "ILD",
     choice_col: str = "Choice",
     pred_col: str = "p_pred",
     subj_col: str = "subject",
-    arrays_store: Optional[dict] = None,
     X_cols: Optional[Sequence[str]] = None,
     ild_max: float = 70.0,
 ) -> plt.Figure:
@@ -1703,13 +1768,11 @@ def plot_categorical_performance_all_by_state(
 
     Parameters
     ----------
-    df             : Trial-level DataFrame (polars or pandas).
-    smoothed_probs : (T, K) posterior state probabilities, ignored when
-                     ``state_assign`` is provided.
-    state_labels   : {state_idx: label_str} for single-subject, or
-                     {subj: {state_idx: label_str}} for multi-subject.
-    model_name     : string used as figure suptitle.
-    state_assign   : optional pre-computed (T,) int array of MAP states.
+    df     : Trial-level DataFrame (polars or pandas). Must contain a
+             ``state_rank`` column (rank 0 = Engaged) produced by
+             :func:`~glmhmmt.postprocess.build_trial_df`.
+    views  : {subj: SubjectFitView} as produced by build_views.
+    model_name : string used as figure suptitle.
 
     Returns
     -------
@@ -1720,57 +1783,55 @@ def plot_categorical_performance_all_by_state(
     else:
         df_pd = df.reset_index(drop=True)
 
-    if state_assign is not None:
-        _arr = np.asarray(state_assign)
-        K    = int(_arr.max()) + 1
-    else:
-        _arr = np.argmax(np.asarray(smoothed_probs), axis=1)
-        K    = np.asarray(smoothed_probs).shape[1]
+    K = next(iter(views.values())).K if views else 2
 
-    assert len(df_pd) == len(_arr), (
-        f"df has {len(df_pd)} rows but state assignment has T={len(_arr)}"
-    )
+    # State assignment from trial_df (state_rank: 0=Engaged, 1=Disengaged, …)
+    if "state_rank" in df_pd.columns:
+        _arr = df_pd["state_rank"].to_numpy().astype(int)
+    elif "_state_k" in df_pd.columns:
+        _arr = df_pd["_state_k"].to_numpy().astype(int)
+    else:
+        raise ValueError("df must contain a 'state_rank' column (output of build_trial_df)")
 
     df_pd = df_pd.copy()
     df_pd["_state_k"] = _arr
 
-    # Resolve labels: accept {int: str} or {subj: {int: str}}
-    first_val = next(iter(state_labels.values()), None)
-    if isinstance(first_val, dict):
-        slbls: dict[int, str] = {}
-        for subj_lbl in state_labels.values():
-            for k, lbl in subj_lbl.items():
-                slbls.setdefault(int(k), lbl)
-    else:
-        slbls = {int(k): v for k, v in state_labels.items()}
+    # Resolve labels: {rank: label} merged across all subjects
+    slbls: dict[int, str] = {}
+    for v in views.values():
+        for k, lbl in v.state_name_by_idx.items():
+            rank = v.state_rank_by_idx.get(int(k), int(k))
+            slbls.setdefault(rank, lbl)
+
+    # Build arrays_store-compatible dict for _mean_glm_curve.
+    # Reorder axes so that state index == rank (0=Engaged, 1=Disengaged, …)
+    # so that state_k=0 means Engaged for every subject regardless of fit order.
+    def _rank_ordered_as(v):
+        _order = sorted(v.state_rank_by_idx, key=lambda ki: v.state_rank_by_idx[ki])
+        return {
+            "emission_weights": v.emission_weights[_order],
+            "X_cols": v.feat_names,
+            "X": v.X,
+            "smoothed_probs": v.smoothed_probs[:, _order],
+        }
+    _as = {s: _rank_ordered_as(v) for s, v in views.items()}
 
     ilds = sorted(df_pd[ild_col].dropna().unique())
     panel_w = max(3, 0.4 * len(ilds))
 
     # ── K-panel grid ──────────────────────────────────────────────────────────
     _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
-    
-    # Pre-compute per-state smooth sigmoid curves if arrays_store provided
+
+    # Pre-compute per-state smooth sigmoid curves from views
     _smooth_by_k: dict[int, Optional[Tuple[np.ndarray, np.ndarray]]] = {}
-    if arrays_store is not None:
-        _test_W = next(
-            (arrays_store[s].get("emission_weights")
-             for s in _all_subjects if s in arrays_store), None
-        )
-        _K_fit = int(np.asarray(_test_W).shape[0]) if _test_W is not None else 1
-        _smooth_single = _mean_glm_curve(arrays_store, _all_subjects, X_cols,
-                                         ild_max=ild_max, state_k=None)
-        for k in range(K):
-            if _K_fit == 1:
-                _smooth_by_k[k] = _smooth_single
-            else:
-                _smooth_by_k[k] = _mean_glm_curve(
-                    arrays_store, _all_subjects, X_cols,
-                    ild_max=ild_max, state_k=k,
-                )
-    else:
-        for k in range(K):
-            _smooth_by_k[k] = None
+    _test_W = next((v.emission_weights for v in views.values()), None)
+    _K_fit = int(np.asarray(_test_W).shape[0]) if _test_W is not None else 1
+    _smooth_single = _mean_glm_curve(_as, _all_subjects, X_cols, ild_max=ild_max, state_k=None)
+    for k in range(K):
+        if _K_fit == 1:
+            _smooth_by_k[k] = _smooth_single
+        else:
+            _smooth_by_k[k] = _mean_glm_curve(_as, _all_subjects, X_cols, ild_max=ild_max, state_k=k)
 
     fig, axes = plt.subplots(
         1, K, figsize=(panel_w * K, 4), sharey=True, squeeze=False

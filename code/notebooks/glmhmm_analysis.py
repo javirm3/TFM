@@ -11,6 +11,7 @@ def _():
     from pathlib import Path
 
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "glmhmmt", "src"))
     import paths
     import numpy as np
     import polars as pl
@@ -293,11 +294,22 @@ def _(
 
     # Emit emission-weights long DF for downstream use
     weights_df = build_emission_weights_df(views)
-    return
+    return (trial_df,)
 
 
 @app.cell
-def _(K, arrays_store, mo, names, paths, plots, state_labels, ui_subjects):
+def _(
+    K,
+    arrays_store,
+    is_2afc,
+    mo,
+    names,
+    paths,
+    plots,
+    state_labels,
+    ui_subjects,
+    views,
+):
     # ── emission weights ───────────────────────────────────────────────────────
     # W shape: (K, 2, n_features)  — axis-1: [L-choice=0, R-choice=1]
     # Center = reference class (implicit weight 0).
@@ -313,7 +325,16 @@ def _(K, arrays_store, mo, names, paths, plots, state_labels, ui_subjects):
 
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
-    _fig_ag, _fig_cls = plots.plot_emission_weights( arrays_store=arrays_store, state_labels=state_labels, names=names, K=K, subjects=_selected, save_path=paths.RESULTS / "plots/GLMHMM/emissions_coefs.png",)
+    _save_path = paths.RESULTS / "plots/GLMHMM/emissions_coefs.png"
+    if is_2afc:
+        _fig_ag, _fig_cls = plots.plot_emission_weights(
+            views={s: views[s] for s in _selected}, K=K, save_path=_save_path,
+        )
+    else:
+        _fig_ag, _fig_cls = plots.plot_emission_weights(
+            arrays_store=arrays_store, state_labels=state_labels, names=names,
+            K=K, subjects=_selected, save_path=_save_path,
+        )
     mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
     mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
     return
@@ -434,7 +455,6 @@ def _(
     df_all,
     is_2afc,
     mo,
-    names,
     np,
     pl,
     plots,
@@ -473,7 +493,7 @@ def _(
     mo.stop(not _frames, mo.md("No subjects with matching data lengths."))
     _df_all_pred = pl.concat(_frames)
     _plot_df = plots.prepare_predictions_df(_df_all_pred)
-    _perf_kwargs = {"arrays_store": arrays_store} if is_2afc else {}
+    _perf_kwargs = {"views": views} if is_2afc else {}
     _fig_all, _ = plots.plot_categorical_performance_all(_plot_df, f"glmhmm K={K}", **_perf_kwargs)
 
     # ── per-state pool with normalised rank indices ───────────────────────────
@@ -538,31 +558,30 @@ def _(
                 pl.Series("p_model_correct", _p_state_correct.astype(np.float64))
             )
 
-        _pool_dfs.append(_plot_df_s)
         rank_by_idx = views[_subj].state_rank_by_idx
         _norm = np.array([rank_by_idx[int(k)] for k in _map_k], dtype=int)
+        _pool_dfs.append(_plot_df_s.with_columns(pl.Series("state_rank", _norm)))
         _pool_assigns.append(_norm)
 
     _df_state_pool = pl.concat(_pool_dfs)
-
-    # Pack the state assignments into an array mapping to each trial, but we also 
-    # need smoothed probs for the new `plot_categorical_performance_by_state` in 
-    # plots_alexis which evaluates state weights natively
-    _gamma_pool = np.concatenate([arrays_store[s]["smoothed_probs"] for s in _selected], axis=0)
-
     _assign_pool = np.concatenate(_pool_assigns)
     _state_lbl_global = {0: "Engaged", 1: "Disengaged", **{i: f"Disengaged {i}" for i in range(2, K)}}
 
-    # This renders the actual assigned MAP states
-    _fig_state, _ = plots.plot_categorical_performance_by_state(
-        df=_df_state_pool,
-        smoothed_probs=_gamma_pool,
-        state_labels=_state_lbl_global,
-        model_name=f"glmhmm K={K} \u2014 per state",
-        state_assign=None,  # let it use smoothed_probs directly
-        arrays_store=arrays_store, # ensures 2AFC curve draws the pure state model
-        X_cols=names.get("X_cols", []),
-    )
+    if is_2afc:
+        _fig_state, _ = plots.plot_categorical_performance_by_state(
+            df=_df_state_pool,
+            views={s: views[s] for s in _selected},
+            model_name=f"glmhmm K={K} \u2014 per state",
+        )
+    else:
+        _gamma_pool = np.concatenate([arrays_store[s]["smoothed_probs"] for s in _selected], axis=0)
+        _fig_state, _ = plots.plot_categorical_performance_by_state(
+            df=_df_state_pool,
+            smoothed_probs=_gamma_pool,
+            state_labels=_state_lbl_global,
+            model_name=f"glmhmm K={K} \u2014 per state",
+            state_assign=_assign_pool,
+        )
 
     mo.vstack(
         [
@@ -597,10 +616,13 @@ def _(
     adapter,
     arrays_store,
     df_all,
+    is_2afc,
     mo,
     plots,
     state_labels,
+    trial_df,
     ui_subjects,
+    views,
 ):
     # ── Per-state accuracy — Ashwood et al. 2022 method ────────────────────────────────────────────────
     # All     : mean(performance) on nonzero-stim trials — the full pool
@@ -611,16 +633,25 @@ def _(
 
     _selected_acc = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected_acc, mo.md("No fitted subjects available."))
-    _fig_acc, _tbl = plots.plot_state_accuracy(
-        arrays_store=arrays_store,
-        state_labels=state_labels,
-        df_all=df_all,
-        K=K,
-        subjects=_selected_acc,
-        thresh=THRESH_ui.amount,
-        session_col=adapter.session_col,
-        sort_col=adapter.sort_col,
-    )
+    if is_2afc:
+        _fig_acc, _tbl = plots.plot_state_accuracy(
+            views={s: views[s] for s in _selected_acc},
+            trial_df=trial_df,
+            thresh=THRESH_ui.amount,
+            session_col=adapter.session_col,
+            sort_col=adapter.sort_col,
+        )
+    else:
+        _fig_acc, _tbl = plots.plot_state_accuracy(
+            arrays_store=arrays_store,
+            state_labels=state_labels,
+            df_all=df_all,
+            K=K,
+            subjects=_selected_acc,
+            thresh=THRESH_ui.amount,
+            session_col=adapter.session_col,
+            sort_col=adapter.sort_col,
+        )
     mo.vstack([
         mo.md("### Accuracy by state"),
         _fig_acc,
@@ -648,22 +679,33 @@ def _(
     adapter,
     arrays_store,
     df_all,
+    is_2afc,
     mo,
     plots,
     state_labels,
+    trial_df,
     ui_subjects_traj,
+    views,
 ):
     selected_traj = [s for s in ui_subjects_traj.value if s in arrays_store]
     mo.stop(not selected_traj, mo.md("Select subjects above to view session trajectories."))
-    _fig_traj = plots.plot_session_trajectories(
-        arrays_store=arrays_store,
-        state_labels=state_labels,
-        df_all=df_all,
-        K=K,
-        subjects=selected_traj,
-        session_col=adapter.session_col,
-        sort_col=adapter.sort_col,
-    )
+    if is_2afc:
+        _fig_traj = plots.plot_session_trajectories(
+            views={s: views[s] for s in selected_traj},
+            trial_df=trial_df,
+            session_col=adapter.session_col,
+            sort_col=adapter.sort_col,
+        )
+    else:
+        _fig_traj = plots.plot_session_trajectories(
+            arrays_store=arrays_store,
+            state_labels=state_labels,
+            df_all=df_all,
+            K=K,
+            subjects=selected_traj,
+            session_col=adapter.session_col,
+            sort_col=adapter.sort_col,
+        )
     mo.vstack([
         mo.md(f"### c. Average state-probability trajectories within a session  (K={K})"),
         _fig_traj,
@@ -678,22 +720,33 @@ def _(
     adapter,
     arrays_store,
     df_all,
+    is_2afc,
     mo,
     plots,
     state_labels,
+    trial_df,
     ui_subjects_traj,
+    views,
 ):
     selected_occ = [s for s in ui_subjects_traj.value if s in arrays_store]
     mo.stop(not selected_occ, mo.md("Select subjects above."))
-    _fig_occ = plots.plot_state_occupancy(
-        arrays_store=arrays_store,
-        state_labels=state_labels,
-        df_all=df_all,
-        K=K,
-        subjects=selected_occ,
-        session_col=adapter.session_col,
-        sort_col=adapter.sort_col,
-    )
+    if is_2afc:
+        _fig_occ = plots.plot_state_occupancy(
+            views={s: views[s] for s in selected_occ},
+            trial_df=trial_df,
+            session_col=adapter.session_col,
+            sort_col=adapter.sort_col,
+        )
+    else:
+        _fig_occ = plots.plot_state_occupancy(
+            arrays_store=arrays_store,
+            state_labels=state_labels,
+            df_all=df_all,
+            K=K,
+            subjects=selected_occ,
+            session_col=adapter.session_col,
+            sort_col=adapter.sort_col,
+        )
     mo.vstack([
         mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
         _fig_occ,
@@ -752,11 +805,14 @@ def _(
     adapter,
     arrays_store,
     df_all,
+    is_2afc,
     mo,
     plots,
     state_labels,
+    trial_df,
     ui_session_id,
     ui_session_subj,
+    views,
 ):
     _subj = ui_session_subj.value
     mo.stop(
@@ -765,17 +821,27 @@ def _(
     )
 
     _sess = ui_session_id.value
-    _fig = plots.plot_session_deepdive(
-        arrays_store=arrays_store,
-        state_labels=state_labels,
-        df_all=df_all,
-        names=arrays_store[_subj],
-        K=K,
-        subj=_subj,
-        sess=_sess,
-        session_col=adapter.session_col,
-        sort_col=adapter.sort_col,
-    )
+    if is_2afc:
+        _fig = plots.plot_session_deepdive(
+            views={_subj: views[_subj]},
+            trial_df=trial_df,
+            subj=_subj,
+            sess=_sess,
+            session_col="session",
+            sort_col="trial",
+        )
+    else:
+        _fig = plots.plot_session_deepdive(
+            arrays_store=arrays_store,
+            state_labels=state_labels,
+            df_all=df_all,
+            names=arrays_store[_subj],
+            K=K,
+            subj=_subj,
+            sess=_sess,
+            session_col=adapter.session_col,
+            sort_col=adapter.sort_col,
+        )
     mo.vstack([
         mo.md(f"### Session statistics  (K={K})"),
         mo.hstack([ui_session_subj, ui_session_id]),
@@ -1091,6 +1157,11 @@ def _(
         ),
         _fig_ssm,
     ], align="center")
+    return
+
+
+@app.cell
+def _():
     return
 
 

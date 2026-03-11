@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: tfm-code
+Version: 0.1.0
+Summary: TFM project code workspace
+Author-email: Javier Rodriguez Martinez <jrm2003@icloud.com>
+Requires-Dist: glmhmmt
