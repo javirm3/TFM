@@ -1108,7 +1108,7 @@ def plot_emission_weights(
     all_w = []
     for idx, subj in enumerate(valid_subjs):
         ax = axes_s[idx // n_cols][idx % n_cols]
-        W  = views[subj].emission_weights
+        W  = -views[subj].emission_weights   # flip sign: raw W = logit(Left); -W = logit(Right) (intuitive)
         slbls = views[subj].state_name_by_idx
         lbls  = [slbls.get(k, f"S{k}") for k in range(K)]
         fn_subj = views[subj].feat_names or feat_names
