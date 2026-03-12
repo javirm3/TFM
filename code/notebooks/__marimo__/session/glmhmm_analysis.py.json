@@ -8,169 +8,425 @@
     {
       "id": "Hbol",
       "code_hash": "403351b42594df73b469a7616145de27",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='Hbol-0' random-id='90ad35cb-a354-495e-aaa5-77b6a5805fd4'><marimo-dropdown data-initial-value='[&quot;MCDR&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Task:&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;2AFC&quot;,&quot;MCDR&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "MJUe",
       "code_hash": "d88263672f21f050f631a072646aaa73",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "vblA",
       "code_hash": "fda5adee2b673e6e14f5d763e5afb783",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='vblA-0' random-id='78fd7177-9ae2-66c6-6955-c1d678869a3d'><marimo-dropdown data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Load existing model (overrides params below)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;4aade523&quot;,&quot;7d374cb1&quot;,&quot;One-hot&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;,&quot;glmhmm_2&quot;]' data-allow-select-none='true' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "bkHC",
       "code_hash": "4f7bb66468c0b58314e0424de6d476c0",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "lEQa",
       "code_hash": "ec62256cf033b48c285c6fb12565ef9c",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "PKri",
       "code_hash": "88d36f4a9282ab908e9390f9d760ce35",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: center;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"configuration\">Configuration</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='vblA-0' random-id='78fd7177-9ae2-66c6-6955-c1d678869a3d'><marimo-dropdown data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Load existing model (overrides params below)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;4aade523&quot;,&quot;7d374cb1&quot;,&quot;One-hot&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;,&quot;glmhmm_2&quot;]' data-allow-select-none='true' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='lEQa-4' random-id='4ff8170b-4096-fe18-a361-685e02a4dc42'><marimo-text data-initial-value='&quot;&quot;' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Custom alias (optional)&lt;/span&gt;&lt;/span&gt;&quot;' data-placeholder='&quot;e.g. my_best_fit&quot;' data-kind='&quot;text&quot;' data-full-width='false' data-disabled='false' data-debounce='true'></marimo-text></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='lEQa-0' random-id='36ef2f7c-3362-79f1-5804-8341120d20e4'><marimo-slider data-initial-value='2' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;K&lt;/span&gt;&lt;/span&gt;&quot;' data-start='2' data-stop='6' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='lEQa-2' random-id='9336f8b8-4c21-e9ed-6d97-0a16cfc5fb33'><marimo-slider data-initial-value='50' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;\u03c4 action trace half-life&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='200' data-step='1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='lEQa-1' random-id='98aef535-beda-e784-06da-8aac4dabb552'><marimo-multiselect data-initial-value='[&quot;A87&quot;,&quot;A92&quot;,&quot;A95&quot;,&quot;A83&quot;,&quot;A89&quot;,&quot;A93&quot;,&quot;A86&quot;,&quot;A96&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A83&quot;,&quot;A86&quot;,&quot;A87&quot;,&quot;A89&quot;,&quot;A92&quot;,&quot;A93&quot;,&quot;A95&quot;,&quot;A96&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element><marimo-ui-element object-id='lEQa-3' random-id='2b2b457c-c21e-72a7-349c-331011db4ccd'><marimo-multiselect data-initial-value='[&quot;bias&quot;,&quot;biasL&quot;,&quot;biasC&quot;,&quot;biasR&quot;,&quot;onsetL&quot;,&quot;onsetC&quot;,&quot;onsetR&quot;,&quot;delay&quot;,&quot;SL&quot;,&quot;SC&quot;,&quot;SR&quot;,&quot;SLxdelay&quot;,&quot;SCxdelay&quot;,&quot;SRxdelay&quot;,&quot;SLxD&quot;,&quot;SCxD&quot;,&quot;SRxD&quot;,&quot;D&quot;,&quot;DL&quot;,&quot;DC&quot;,&quot;DR&quot;,&quot;A_L&quot;,&quot;A_C&quot;,&quot;A_R&quot;,&quot;speed1&quot;,&quot;speed2&quot;,&quot;speed3&quot;,&quot;stim1L&quot;,&quot;stim1C&quot;,&quot;stim1R&quot;,&quot;stim2L&quot;,&quot;stim2C&quot;,&quot;stim2R&quot;,&quot;stim3L&quot;,&quot;stim3C&quot;,&quot;stim3R&quot;,&quot;stim4L&quot;,&quot;stim4C&quot;,&quot;stim4R&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Emission regressors (X)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;bias&quot;,&quot;biasL&quot;,&quot;biasC&quot;,&quot;biasR&quot;,&quot;onsetL&quot;,&quot;onsetC&quot;,&quot;onsetR&quot;,&quot;delay&quot;,&quot;SL&quot;,&quot;SC&quot;,&quot;SR&quot;,&quot;SLxdelay&quot;,&quot;SCxdelay&quot;,&quot;SRxdelay&quot;,&quot;SLxD&quot;,&quot;SCxD&quot;,&quot;SRxD&quot;,&quot;D&quot;,&quot;DL&quot;,&quot;DC&quot;,&quot;DR&quot;,&quot;A_L&quot;,&quot;A_C&quot;,&quot;A_R&quot;,&quot;speed1&quot;,&quot;speed2&quot;,&quot;speed3&quot;,&quot;stim1L&quot;,&quot;stim1C&quot;,&quot;stim1R&quot;,&quot;stim2L&quot;,&quot;stim2C&quot;,&quot;stim2R&quot;,&quot;stim3L&quot;,&quot;stim3C&quot;,&quot;stim3R&quot;,&quot;stim4L&quot;,&quot;stim4C&quot;,&quot;stim4R&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Current params hash:</strong> <code>4aade523</code></span></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='PKri-0' random-id='2ce69ecc-7812-eabb-981d-af3dc78454cc'><marimo-button data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Run fit&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div></div>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "Xref",
       "code_hash": "39602f5cd454ee23a0989de43601d6ef",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Configure parameters and press <strong>Run fit</strong>.</span></span>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "SFPL",
       "code_hash": "ce2fbb06702a2717d355ce71024965ee",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "BYtC",
       "code_hash": "81bd909bb88e480907cb3dc19f4349fb",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"state-labelling-regressor\">State labelling regressor</h3></span><marimo-ui-element object-id='BYtC-0' random-id='6442d78f-58cd-2afb-64fc-076cf94d4633'><marimo-dropdown data-initial-value='[&quot;S_coh&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;State scoring regressor (Engaged = highest coherent weight)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;S_coh&quot;,&quot;S1_coh&quot;,&quot;S2_coh&quot;,&quot;S3_coh&quot;,&quot;S4_coh&quot;,&quot;onset_coh&quot;,&quot;bias_coh&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "RGSE",
       "code_hash": "93b3540f8f23211a46b7843490399d5d",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">No fitted arrays found \u2014 run the fit first.</span></span>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "Kclp",
       "code_hash": "b05e1d61a6955af7296a909f6dadd9d6",
-      "outputs": [],
-      "console": []
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "stimulus\n['subject', 'trial', 'session', 'date', 'x_c', 'r_c', 'ttype_n', 'stimd_n', 'performance', 'timepoint_1', 'timepoint_2', 'timepoint_3', 'timepoint_4', 'onset', 'offset', 'stim_d', 'delay_d', 'response', 'stimulus', 'trial_idx']\nStimulus column for subject 'A96': 'stimulus'\nUsing stimulus column 'stimulus' for subject 'A96'\n['subject', 'trial', 'session', 'date', 'x_c', 'r_c', 'ttype_n', 'stimd_n', 'performance', 'timepoint_1', 'timepoint_2', 'timepoint_3', 'timepoint_4', 'onset', 'offset', 'stim_d', 'delay_d', 'response', 'stimulus', 'trial_idx']\nStimulus column for subject 'A86': 'stimulus'\nUsing stimulus column 'stimulus' for subject 'A86'\n['subject', 'trial', 'session', 'date', 'x_c', 'r_c', 'ttype_n', 'stimd_n', 'performance', 'timepoint_1', 'timepoint_2', 'timepoint_3', 'timepoint_4', 'onset', 'offset', 'stim_d', 'delay_d', 'response', 'stimulus', 'trial_idx']\nStimulus column for subject 'A87': 'stimulus'\nUsing stimulus column 'stimulus' for subject 'A87'\n['subject', 'trial', 'session', 'date', 'x_c', 'r_c', 'ttype_n', 'stimd_n', 'performance', 'timepoint_1', 'timepoint_2', 'timepoint_3', 'timepoint_4', 'onset', 'offset', 'stim_d', 'delay_d', 'response', 'stimulus', 'trial_idx']\nStimulus column for subject 'A95': 'stimulus'\nUsing stimulus column 'stimulus' for subject 'A95'\n['subject', 'trial', 'session', 'date', 'x_c', 'r_c', 'ttype_n', 'stimd_n', 'performance', 'timepoint_1', 'timepoint_2', 'timepoint_3', 'timepoint_4', 'onset', 'offset', 'stim_d', 'delay_d', 'response', 'stimulus', 'trial_idx']\nStimulus column for subject 'A89': 'stimulus'\nUsing stimulus column 'stimulus' for subject 'A89'\n['subject', 'trial', 'session', 'date', 'x_c', 'r_c', 'ttype_n', 'stimd_n', 'performance', 'timepoint_1', 'timepoint_2', 'timepoint_3', 'timepoint_4', 'onset', 'offset', 'stim_d', 'delay_d', 'response', 'stimulus', 'trial_idx']\nStimulus column for subject 'A92': 'stimulus'\nUsing stimulus column 'stimulus' for subject 'A92'\n['subject', 'trial', 'session', 'date', 'x_c', 'r_c', 'ttype_n', 'stimd_n', 'performance', 'timepoint_1', 'timepoint_2', 'timepoint_3', 'timepoint_4', 'onset', 'offset', 'stim_d', 'delay_d', 'response', 'stimulus', 'trial_idx']\nStimulus column for subject 'A93': 'stimulus'\nUsing stimulus column 'stimulus' for subject 'A93'\n['subject', 'trial', 'session', 'date', 'x_c', 'r_c', 'ttype_n', 'stimd_n', 'performance', 'timepoint_1', 'timepoint_2', 'timepoint_3', 'timepoint_4', 'onset', 'offset', 'stim_d', 'delay_d', 'response', 'stimulus', 'trial_idx']\nStimulus column for subject 'A83': 'stimulus'\nUsing stimulus column 'stimulus' for subject 'A83'\n",
+          "mimetype": "text/plain"
+        }
+      ]
     },
     {
       "id": "emfo",
       "code_hash": "38dd5b29716887272d8209104d474442",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "Hstk",
       "code_hash": "c3e3b7cc400f0dcf1c697b7f3a83f32e",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "nWHF",
       "code_hash": "fb146741d8909508f0bfc380ce484757",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"trial-window\">Trial window</h3></span><marimo-ui-element object-id='nWHF-0' random-id='60ef3a2f-350e-da63-c0f1-b08c0cd27771'><marimo-range-slider data-initial-value='[0,199]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Trial window&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0' data-stop='199' data-step='1' data-steps='[]' data-debounce='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-full-width='false' data-disabled='false'></marimo-range-slider></marimo-ui-element></div>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "iLit",
       "code_hash": "6d3ed115b303da13460cb99747191791",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "ZHCJ",
       "code_hash": "1935523922945d23a5935e0a943866e5",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "ROlb",
       "code_hash": "193eaf9b075ac88663c1db06b937afc0",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "qnkX",
       "code_hash": "267f3c2e76f98528dc9a5dda30db558a",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "TqIu",
       "code_hash": "2b50eec141733b36cee79204e02c8795",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-trajectory-occupancy\">Session trajectory &amp; occupancy</h3></span><marimo-ui-element object-id='TqIu-0' random-id='b63c150e-4913-1c21-ec8c-77d8097f9a07'><marimo-multiselect data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects (session trajectories &amp;amp; occupancy)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A86&quot;,&quot;A87&quot;,&quot;A92&quot;,&quot;A93&quot;,&quot;A83&quot;,&quot;A89&quot;,&quot;A96&quot;,&quot;A95&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "Vxnm",
       "code_hash": "655b5011dafcd09602f467727aca9a8f",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "DnEU",
       "code_hash": "cdead6bc70c5b727efcccedf18bc500e",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "ulZA",
       "code_hash": "548c2a457708709b4ec7f7f8758540fe",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "ecfG",
       "code_hash": "08e0c29b2216c002c8a57815c610c32b",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-deep-dive\">Session deep-dive</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='ulZA-0' random-id='5cb0541d-63e8-b9be-d7f3-fb2d168be213'><marimo-dropdown data-initial-value='[&quot;(no fitted subjects)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subject&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;(no fitted subjects)&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='ecfG-0' random-id='65d876a8-b348-67d2-5924-ae2ce717e33e'><marimo-dropdown data-initial-value='[&quot;0&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Session&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;0&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div></div>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "Pvdt",
       "code_hash": "47319f45415134224e15fc23a151e2cc",
-      "outputs": [],
-      "console": []
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/plots.py:1539: UserWarning: No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.\n  _ax2.legend(bbox_to_anchor=(1.08, 1), loc=\"upper left\", fontsize=8, frameon=False)\n",
+          "mimetype": "text/plain"
+        }
+      ]
     },
     {
       "id": "aLJB",
       "code_hash": "382f2e72ff63757ac96069a0560ec92c",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>\u03c4 sweep results not found.</strong>   Run the sweep first:\n<div class=\"language-scdoc codehilite\"><pre><span></span><code>uv run python scripts/fit_tau_sweep.py --model glmhmm --K 2\n</code></pre></div></span></span>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "nHfw",
       "code_hash": "65ea91b4117adf0fd703289603441030",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">\u2139\ufe0f <strong>SSM safety check is only available for the 2AFC task.</strong> Switch task to 2AFC above.</span></span>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "xXTn",
       "code_hash": "a9516f03601ba5a05f8d5d182a2fcf92",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "pHFh",
       "code_hash": "783464b3e3b08d99383adec5de65277d",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_27814/__marimo__cell_pHFh_.py&quot;</span>, line <span class=\"m\">10</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"o\">.</span><span class=\"n\">sort</span><span class=\"p\">(</span><span class=\"s2\">&quot;Trial&quot;</span><span class=\"p\">)</span>\n<span class=\"w\">     </span><span class=\"pm\">^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">6103</span>, in <span class=\"n\">sort</span>\n<span class=\"w\">    </span><span class=\"o\">.</span><span class=\"n\">collect</span><span class=\"p\">(</span><span class=\"n\">optimizations</span><span class=\"o\">=</span><span class=\"n\">QueryOptFlags</span><span class=\"o\">.</span><span class=\"n\">_eager</span><span class=\"p\">())</span>\n<span class=\"w\">     </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/_utils/deprecation.py&quot;</span>, line <span class=\"m\">97</span>, in <span class=\"n\">wrapper</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">function</span><span class=\"p\">(</span><span class=\"o\">*</span><span class=\"n\">args</span><span class=\"p\">,</span> <span class=\"o\">**</span><span class=\"n\">kwargs</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/lazyframe/opt_flags.py&quot;</span>, line <span class=\"m\">326</span>, in <span class=\"n\">wrapper</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">function</span><span class=\"p\">(</span><span class=\"o\">*</span><span class=\"n\">args</span><span class=\"p\">,</span> <span class=\"o\">**</span><span class=\"n\">kwargs</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/lazyframe/frame.py&quot;</span>, line <span class=\"m\">2440</span>, in <span class=\"n\">collect</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">wrap_df</span><span class=\"p\">(</span><span class=\"n\">ldf</span><span class=\"o\">.</span><span class=\"n\">collect</span><span class=\"p\">(</span><span class=\"n\">engine</span><span class=\"p\">,</span> <span class=\"n\">callback</span><span class=\"p\">))</span>\n<span class=\"w\">                   </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">polars.exceptions.ColumnNotFoundError</span>: <span class=\"n\">unable to find column &quot;Trial&quot;; valid columns: [&quot;subject&quot;, &quot;trial&quot;, &quot;session&quot;, &quot;date&quot;, &quot;x_c&quot;, &quot;r_c&quot;, &quot;ttype_n&quot;, &quot;stimd_n&quot;, &quot;performance&quot;, &quot;timepoint_1&quot;, &quot;timepoint_2&quot;, &quot;timepoint_3&quot;, &quot;timepoint_4&quot;, &quot;onset&quot;, &quot;offset&quot;, &quot;stim_d&quot;, &quot;delay_d&quot;, &quot;response&quot;, &quot;stimulus&quot;, &quot;trial_idx&quot;]</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
+    },
+    {
+      "id": "ZBYS",
+      "code_hash": null,
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "AjVT",
+      "code_hash": null,
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "NCOB",
+      "code_hash": null,
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     }
   ]

@@ -32,6 +32,12 @@ export default defineConfig({
 						{ label: 'Views', slug: 'docs/api/views' },
 					],
 				},
+				{
+					label: 'Analysis',
+					items: [
+						{ label: 'Interactive Notebooks', slug: 'docs/notebooks' },
+					],
+				},
 			],
 		}),
 	],

@@ -1,7 +1,13 @@
 from pathlib import Path
 
-# Carpeta raíz del proyecto (dos niveles por encima de este archivo)
-ROOT = Path(__file__).resolve().parents[1]
+try:
+    # Carpeta raíz del proyecto (dos niveles por encima de este archivo)
+    ROOT = Path(__file__).resolve().parents[1]
+except NameError:
+    # Fallback for environments where __file__ is not defined (e.g. some notebook environments)
+    ROOT = Path(".").resolve()
+    if ROOT.name == "code":
+        ROOT = ROOT.parent
 
 CODE_DIR  = ROOT / "code"
 RESULTS = CODE_DIR / "results"

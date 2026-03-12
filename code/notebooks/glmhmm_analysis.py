@@ -1,3 +1,16 @@
+# /// script
+# dependencies = [
+#   "marimo",
+#   "numpy",
+#   "polars",
+#   "matplotlib",
+#   "seaborn",
+#   "pandas",
+#   "jax",
+#   "wigglystuff",
+# ]
+# ///
+
 import marimo
 
 __generated_with = "0.20.4"
@@ -18,7 +31,12 @@ def _():
     import matplotlib.pyplot as plt
     import seaborn as sns
     import pandas as pd
-    from scripts.fit_glmhmm import main as fit_main
+    try:
+        from scripts.fit_glmhmm import main as fit_main
+        _FITTING_AVAILABLE = True
+    except ImportError:
+        fit_main = None
+        _FITTING_AVAILABLE = False
     from tasks import get_adapter
     from glmhmmt.views import build_views
     from glmhmmt.postprocess import build_trial_df, build_emission_weights_df
@@ -45,6 +63,7 @@ def _():
         plt,
         sns,
         ui_task,
+        _FITTING_AVAILABLE,
     )
 
 
@@ -182,6 +201,10 @@ def _(
     mo.stop(
         not fit_button.value, mo.md("Configure parameters and press **Run fit**.")
     )
+    if not _FITTING_AVAILABLE:
+        mo.md("❌  Fitting scripts not available in this environment (likely WASM).")
+        mo.stop(True)
+
     _selected_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
     _OUT = paths.RESULTS / "fits" / ui_task.value / "glmhmm" / _selected_id
     with mo.status.spinner(

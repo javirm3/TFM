@@ -1,3 +1,14 @@
+# /// script
+# dependencies = [
+#   "marimo",
+#   "numpy",
+#   "polars",
+#   "matplotlib",
+#   "seaborn",
+#   "pandas",
+# ]
+# ///
+
 import marimo
 
 __generated_with = "0.20.4"
@@ -428,11 +439,19 @@ def _(
 
     import sys as _sys, os as _os
     _sys.path.append(_os.path.join(_os.path.dirname(__file__), ".."))
-    from scripts.fit_glmhmm  import main as _fit_glmhmm_main
-    from scripts.fit_glmhmmt import main as _fit_glmhmmt_main
+    try:
+        from scripts.fit_glmhmm  import main as _fit_glmhmm_main
+        from scripts.fit_glmhmmt import main as _fit_glmhmmt_main
+        _FITTING_AVAILABLE = True
+    except ImportError:
+        _FITTING_AVAILABLE = False
 
     _K_min, _K_max = ui_K_range.value
     _K_list = list(range(max(2, _K_min), _K_max + 1))
+
+    if not _FITTING_AVAILABLE:
+        mo.md("❌  Fitting scripts not available in this environment (likely WASM).")
+        mo.stop(True)
 
     with mo.status.spinner(title="Re-fitting GLMHMM…"):
         if ui_glmhmm_dir.value:
