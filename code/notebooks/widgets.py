@@ -5,19 +5,18 @@ import random
 import sys
 import os
 
-# Ensure paths and tasks can be imported
+# Ensure paths and tasks can be importable by sibling modules too
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-import paths
-import polars as pl
-from tasks import get_adapter
+
+from model_manager import ModelManagerWidget  # noqa: F401  (re-exported)
 
 def random_string(length=8):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-class ModelManagerWidget(anywidget.AnyWidget):
+
+class CoefTweakerWidget(anywidget.AnyWidget):
     _esm = """
     function render({ model, el }) {
-      const containerId = "model-manager-" + Math.random().toString(36).substring(7);
       
       const updateUI = () => {
         const existingModels = model.get("existing_models");
@@ -366,6 +365,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
     """
     
     _css = """
+    :host {
         --brand-main: #003660;
         --brand-light: #004b87;
         --brand-dark: #002240;
@@ -488,12 +488,12 @@ class ModelManagerWidget(anywidget.AnyWidget):
     
     .mm-chip {
         padding: 8px 14px;
-        border-radius: 20px;
+        border-radius: 10px;
         font-size: 15px;
         font-weight: 600;
         cursor: pointer;
         background: #ffffff;
-        color: #000000;
+        color: #9ca3af;
         border: 2px solid #9ca3af;
         transition: all 0.15s ease;
         user-select: none;

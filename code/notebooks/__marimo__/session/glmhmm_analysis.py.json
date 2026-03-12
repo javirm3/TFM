@@ -7,12 +7,12 @@
   "cells": [
     {
       "id": "Hbol",
-      "code_hash": "0bd96e8d03c93150c8c08c2d3ea86866",
+      "code_hash": "f4cfbb3ede7366229eeafccae5037b1a",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/html": "<marimo-ui-element object-id='Hbol-0' random-id='a2638b1b-d099-aac1-53e6-adc6bf651625'><marimo-dropdown data-initial-value='[&quot;MCDR&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Task:&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;2AFC&quot;,&quot;MCDR&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
+            "text/html": "<marimo-ui-element object-id='Hbol-0' random-id='e086c81e-5965-0bff-a8b1-7ee1652f8c3c'><marimo-dropdown data-initial-value='[&quot;MCDR&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Task:&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;2AFC&quot;,&quot;MCDR&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
           }
         }
       ],
@@ -33,12 +33,12 @@
     },
     {
       "id": "vblA",
-      "code_hash": "fda5adee2b673e6e14f5d763e5afb783",
+      "code_hash": "c021f34940a09e7e882ff19787d3ae59",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/html": "<marimo-ui-element object-id='vblA-0' random-id='188875d0-6c3b-ca11-d6bc-ee2ae848b60c'><marimo-dropdown data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Load existing model (overrides params below)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;7d374cb1&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;,&quot;glmhmm_2&quot;]' data-allow-select-none='true' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
+            "text/plain": ""
           }
         }
       ],
@@ -46,7 +46,7 @@
     },
     {
       "id": "bkHC",
-      "code_hash": "4f7bb66468c0b58314e0424de6d476c0",
+      "code_hash": "81044f09fb4149de0c3d60bd209fc289",
       "outputs": [
         {
           "type": "data",
@@ -59,25 +59,12 @@
     },
     {
       "id": "lEQa",
-      "code_hash": "6dee7f7212c84fd902e688621a6c4ef7",
+      "code_hash": "989427a75ca367604ae2252547c7d63c",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/plain": ""
-          }
-        }
-      ],
-      "console": []
-    },
-    {
-      "id": "PPUg",
-      "code_hash": "c5f456784a48c5fc192e218ddd6a9810",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: center;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"configuration\">Configuration</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='vblA-0' random-id='188875d0-6c3b-ca11-d6bc-ee2ae848b60c'><marimo-dropdown data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Load existing model (overrides params below)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;7d374cb1&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;,&quot;glmhmm_2&quot;]' data-allow-select-none='true' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='lEQa-4' random-id='6b83d050-c112-7fe5-b33e-89e6c57ced8b'><marimo-text data-initial-value='&quot;&quot;' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Custom alias (optional)&lt;/span&gt;&lt;/span&gt;&quot;' data-placeholder='&quot;e.g. my_best_fit&quot;' data-kind='&quot;text&quot;' data-full-width='false' data-disabled='false' data-debounce='true'></marimo-text></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='lEQa-0' random-id='ea6b3e9e-9e00-6727-05b4-edb3f2632dc2'><marimo-slider data-initial-value='2' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;K&lt;/span&gt;&lt;/span&gt;&quot;' data-start='2' data-stop='6' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='lEQa-2' random-id='89eb0c0d-f57e-a611-8ea0-4e03aa7204d9'><marimo-slider data-initial-value='50' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;\u03c4 action trace half-life&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='200' data-step='1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='lEQa-1' random-id='5555ecbb-94f5-a621-1e21-9a19a5caf73a'><marimo-multiselect data-initial-value='[&quot;A87&quot;,&quot;A95&quot;,&quot;A93&quot;,&quot;A96&quot;,&quot;A92&quot;,&quot;A89&quot;,&quot;A86&quot;,&quot;A83&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A83&quot;,&quot;A86&quot;,&quot;A87&quot;,&quot;A89&quot;,&quot;A92&quot;,&quot;A93&quot;,&quot;A95&quot;,&quot;A96&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element><marimo-ui-element object-id='lEQa-3' random-id='9e1dd40a-7378-4bcf-a0e1-cfa13036d014'><marimo-multiselect data-initial-value='[&quot;biasL&quot;,&quot;biasC&quot;,&quot;biasR&quot;,&quot;onsetL&quot;,&quot;onsetC&quot;,&quot;onsetR&quot;,&quot;delay&quot;,&quot;SL&quot;,&quot;SC&quot;,&quot;SR&quot;,&quot;SLxdelay&quot;,&quot;SCxdelay&quot;,&quot;SRxdelay&quot;,&quot;A_L&quot;,&quot;A_C&quot;,&quot;A_R&quot;,&quot;speed1&quot;,&quot;speed2&quot;,&quot;speed3&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Emission regressors (X)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;biasL&quot;,&quot;biasC&quot;,&quot;biasR&quot;,&quot;onsetL&quot;,&quot;onsetC&quot;,&quot;onsetR&quot;,&quot;delay&quot;,&quot;SL&quot;,&quot;SC&quot;,&quot;SR&quot;,&quot;SLxdelay&quot;,&quot;SCxdelay&quot;,&quot;SRxdelay&quot;,&quot;A_L&quot;,&quot;A_C&quot;,&quot;A_R&quot;,&quot;speed1&quot;,&quot;speed2&quot;,&quot;speed3&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Current params hash:</strong> <code>7f904f91</code></span></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='PPUg-0' random-id='9827acbb-712e-6f8a-8fff-1ae43837d760'><marimo-button data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Run fit&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div></div>"
+            "text/html": "<marimo-ui-element object-id='lEQa-0' random-id='cfd5f5a4-a6ed-9146-d7b0-00dfdb59d5d4'><marimo-anywidget data-initial-value='{&quot;model_id&quot;:&quot;cc4726bb16794529927d2c1e26a9f410&quot;}' data-label='null' data-js-url='&quot;./@file/16873-18819857-yyKw80tF.js&quot;' data-js-hash='&quot;0b266ea7fc11c76003d5b6cb00f0e620&quot;'></marimo-anywidget></marimo-ui-element>"
           }
         }
       ],
@@ -85,20 +72,7 @@
     },
     {
       "id": "PKri",
-      "code_hash": "39602f5cd454ee23a0989de43601d6ef",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Configure parameters and press <strong>Run fit</strong>.</span></span>"
-          }
-        }
-      ],
-      "console": []
-    },
-    {
-      "id": "Xref",
-      "code_hash": "ce2fbb06702a2717d355ce71024965ee",
+      "code_hash": "bb4d3adcb52881305dcf968bfd7de085",
       "outputs": [
         {
           "type": "data",
@@ -110,8 +84,34 @@
       "console": []
     },
     {
+      "id": "Xref",
+      "code_hash": "82e9d8db2480cf5818818fb8452bf136",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Configure parameters and press <strong>RUN FIT \ud83d\ude80</strong>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
       "id": "SFPL",
-      "code_hash": "71d29f68603a403ba34520cba0a0eb6f",
+      "code_hash": "e428548426ba35ec5b5086ddb092dccb",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "6b538c3755e6310b25ad366339246b57",
       "outputs": [
         {
           "type": "data",
@@ -123,7 +123,7 @@
       "console": []
     },
     {
-      "id": "BYtC",
+      "id": "RGSE",
       "code_hash": "6ded8d359170adf920ce19f19bbd7a57",
       "outputs": [
         {
@@ -136,21 +136,8 @@
       "console": []
     },
     {
-      "id": "RGSE",
-      "code_hash": "066a85376b98625974b5ce6465f82881",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
-      "console": []
-    },
-    {
       "id": "Kclp",
-      "code_hash": "c3e3b7cc400f0dcf1c697b7f3a83f32e",
+      "code_hash": "9702b68ecf5992c528eb32b7a06c156d",
       "outputs": [
         {
           "type": "error",
@@ -159,37 +146,44 @@
           "traceback": []
         }
       ],
-      "console": []
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_81462/__marimo__cell_Kclp_.py&quot;</span>, line <span class=\"m\">17</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_fig_ag</span><span class=\"p\">,</span> <span class=\"n\">_fig_cls</span> <span class=\"o\">=</span> <span class=\"n\">plots</span><span class=\"o\">.</span><span class=\"n\">plot_emission_weights</span><span class=\"p\">(</span> <span class=\"n\">arrays_store</span><span class=\"o\">=</span><span class=\"n\">arrays_store</span><span class=\"p\">,</span> <span class=\"n\">state_labels</span><span class=\"o\">=</span><span class=\"n\">state_labels</span><span class=\"p\">,</span> <span class=\"n\">names</span><span class=\"o\">=</span><span class=\"n\">names</span><span class=\"p\">,</span> <span class=\"n\">K</span><span class=\"o\">=</span><span class=\"n\">K</span><span class=\"p\">,</span> <span class=\"n\">subjects</span><span class=\"o\">=</span><span class=\"n\">_selected</span><span class=\"p\">,</span> <span class=\"n\">save_path</span><span class=\"o\">=</span><span class=\"n\">paths</span><span class=\"o\">.</span><span class=\"n\">RESULTS</span> <span class=\"o\">/</span> <span class=\"s2\">&quot;plots/GLMHMM/emissions_coefs.png&quot;</span><span class=\"p\">,)</span>\n<span class=\"w\">                        </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/plots.py&quot;</span>, line <span class=\"m\">806</span>, in <span class=\"n\">plot_emission_weights</span>\n<span class=\"w\">    </span><span class=\"n\">_ag_order</span> <span class=\"o\">=</span> <span class=\"p\">[</span><span class=\"n\">g</span> <span class=\"k\">for</span> <span class=\"n\">g</span><span class=\"p\">,</span> <span class=\"n\">_</span> <span class=\"ow\">in</span> <span class=\"n\">_AG_GROUPS</span> <span class=\"k\">if</span> <span class=\"n\">g</span> <span class=\"ow\">in</span> <span class=\"n\">_df_ag</span><span class=\"p\">[</span><span class=\"s2\">&quot;feature&quot;</span><span class=\"p\">]</span><span class=\"o\">.</span><span class=\"n\">values</span><span class=\"p\">]</span>\n<span class=\"w\">                </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/plots.py&quot;</span>, line <span class=\"m\">806</span>, in <span class=\"n\">&lt;listcomp&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_ag_order</span> <span class=\"o\">=</span> <span class=\"p\">[</span><span class=\"n\">g</span> <span class=\"k\">for</span> <span class=\"n\">g</span><span class=\"p\">,</span> <span class=\"n\">_</span> <span class=\"ow\">in</span> <span class=\"n\">_AG_GROUPS</span> <span class=\"k\">if</span> <span class=\"n\">g</span> <span class=\"ow\">in</span> <span class=\"n\">_df_ag</span><span class=\"p\">[</span><span class=\"s2\">&quot;feature&quot;</span><span class=\"p\">]</span><span class=\"o\">.</span><span class=\"n\">values</span><span class=\"p\">]</span>\n<span class=\"w\">                                                  </span><span class=\"pm\">~~~~~~^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/pandas/core/frame.py&quot;</span>, line <span class=\"m\">4378</span>, in <span class=\"n\">__getitem__</span>\n<span class=\"w\">    </span><span class=\"n\">indexer</span> <span class=\"o\">=</span> <span class=\"bp\">self</span><span class=\"o\">.</span><span class=\"n\">columns</span><span class=\"o\">.</span><span class=\"n\">get_loc</span><span class=\"p\">(</span><span class=\"n\">key</span><span class=\"p\">)</span>\n<span class=\"w\">              </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/pandas/core/indexes/range.py&quot;</span>, line <span class=\"m\">525</span>, in <span class=\"n\">get_loc</span>\n<span class=\"w\">    </span><span class=\"k\">raise</span> <span class=\"ne\">KeyError</span><span class=\"p\">(</span><span class=\"n\">key</span><span class=\"p\">)</span>\n<span class=\"gr\">KeyError</span>: <span class=\"n\">&#39;feature&#39;</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
     },
     {
       "id": "emfo",
-      "code_hash": "fb146741d8909508f0bfc380ce484757",
+      "code_hash": "d749f59235eed0be672d11c3b0c4664a",
       "outputs": [
         {
-          "type": "data",
-          "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"trial-window\">Trial window</h3></span><marimo-ui-element object-id='emfo-0' random-id='a9b66c18-005b-0937-daa0-890f65ca1468'><marimo-range-slider data-initial-value='[0,199]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Trial window&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0' data-stop='199' data-step='1' data-steps='[]' data-debounce='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-full-width='false' data-disabled='false'></marimo-range-slider></marimo-ui-element></div>"
-          }
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
         }
       ],
       "console": []
     },
     {
       "id": "Hstk",
-      "code_hash": "14dbe7e5ecad134b7dc5de405d5efc84",
+      "code_hash": "b1994b6d68c3a6be3d0b5de007b1fd28",
       "outputs": [
         {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"trial-window\">Trial window</h3></span><marimo-ui-element object-id='Hstk-0' random-id='bd719d27-6766-98b5-2772-1e7a6381301d'><marimo-range-slider data-initial-value='[0,199]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Trial window&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0' data-stop='199' data-step='1' data-steps='[]' data-debounce='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-full-width='false' data-disabled='false'></marimo-range-slider></marimo-ui-element></div>"
+          }
         }
       ],
       "console": []
     },
     {
       "id": "nWHF",
-      "code_hash": "37e076c2e596df7f39eadff8350061b4",
+      "code_hash": "07741f436f3597aa50c7caee48088f35",
       "outputs": [
         {
           "type": "error",
@@ -202,6 +196,19 @@
     },
     {
       "id": "iLit",
+      "code_hash": "cc65e109aa62da8fa0982df3e368fe36",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
       "code_hash": "193eaf9b075ac88663c1db06b937afc0",
       "outputs": [
         {
@@ -214,8 +221,8 @@
       "console": []
     },
     {
-      "id": "ZHCJ",
-      "code_hash": "21830c4b329c89229788a31b566477b2",
+      "id": "ROlb",
+      "code_hash": "78d5d21a8d1e25202996d969086d2893",
       "outputs": [
         {
           "type": "error",
@@ -227,20 +234,20 @@
       "console": []
     },
     {
-      "id": "ROlb",
+      "id": "qnkX",
       "code_hash": "2b50eec141733b36cee79204e02c8795",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-trajectory-occupancy\">Session trajectory &amp; occupancy</h3></span><marimo-ui-element object-id='ROlb-0' random-id='b1d90b2a-3378-b505-ffb2-ba9365b34327'><marimo-multiselect data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects (session trajectories &amp;amp; occupancy)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A86&quot;,&quot;A87&quot;,&quot;A93&quot;,&quot;A89&quot;,&quot;A96&quot;,&quot;A83&quot;,&quot;A95&quot;,&quot;A92&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div>"
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-trajectory-occupancy\">Session trajectory &amp; occupancy</h3></span><marimo-ui-element object-id='qnkX-0' random-id='b8120a58-0efa-8688-2775-e61568c373e8'><marimo-multiselect data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects (session trajectories &amp;amp; occupancy)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A87&quot;,&quot;A93&quot;,&quot;A86&quot;,&quot;A92&quot;,&quot;A96&quot;,&quot;A83&quot;,&quot;A95&quot;,&quot;A89&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div>"
           }
         }
       ],
       "console": []
     },
     {
-      "id": "qnkX",
+      "id": "TqIu",
       "code_hash": "b9e4799652dbe9ac1cb173c1771e88cb",
       "outputs": [
         {
@@ -253,7 +260,7 @@
       "console": []
     },
     {
-      "id": "TqIu",
+      "id": "Vxnm",
       "code_hash": "b45b4501d78cb72cec7a9c192549c834",
       "outputs": [
         {
@@ -266,8 +273,8 @@
       "console": []
     },
     {
-      "id": "Vxnm",
-      "code_hash": "548c2a457708709b4ec7f7f8758540fe",
+      "id": "DnEU",
+      "code_hash": "09b8d3a782d9fd64f6d3b9b1e6e78292",
       "outputs": [
         {
           "type": "data",
@@ -279,20 +286,20 @@
       "console": []
     },
     {
-      "id": "DnEU",
+      "id": "ulZA",
       "code_hash": "08e0c29b2216c002c8a57815c610c32b",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-deep-dive\">Session deep-dive</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='Vxnm-0' random-id='50061419-d97b-59bf-4f5c-c77505e95f7c'><marimo-dropdown data-initial-value='[&quot;(no fitted subjects)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subject&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;(no fitted subjects)&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='DnEU-0' random-id='8e95bee1-c115-2751-badd-aab8cb4317f7'><marimo-dropdown data-initial-value='[&quot;0&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Session&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;0&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div></div>"
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-deep-dive\">Session deep-dive</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='DnEU-0' random-id='94ebd9c9-3afb-beff-0bb9-285c9b47443b'><marimo-dropdown data-initial-value='[&quot;(no fitted subjects)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subject&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;(no fitted subjects)&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='ulZA-0' random-id='5275d8a4-96d5-2a23-afdb-df09d396ebf0'><marimo-dropdown data-initial-value='[&quot;0&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Session&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;0&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div></div>"
           }
         }
       ],
       "console": []
     },
     {
-      "id": "ulZA",
+      "id": "ecfG",
       "code_hash": "385dd0370b81891509da4382c4d4a095",
       "outputs": [
         {
@@ -312,20 +319,7 @@
       ]
     },
     {
-      "id": "ecfG",
-      "code_hash": null,
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
-      "console": []
-    },
-    {
-      "id": "Pvdt",
+      "id": "ZBYS",
       "code_hash": "382f2e72ff63757ac96069a0560ec92c",
       "outputs": [
         {
@@ -338,7 +332,7 @@
       "console": []
     },
     {
-      "id": "ZBYS",
+      "id": "aLJB",
       "code_hash": "65ea91b4117adf0fd703289603441030",
       "outputs": [
         {
@@ -351,7 +345,7 @@
       "console": []
     },
     {
-      "id": "aLJB",
+      "id": "nHfw",
       "code_hash": "a9516f03601ba5a05f8d5d182a2fcf92",
       "outputs": [
         {
@@ -364,8 +358,8 @@
       "console": []
     },
     {
-      "id": "nHfw",
-      "code_hash": "7807213cb5072f14767e538478896031",
+      "id": "xXTn",
+      "code_hash": "783464b3e3b08d99383adec5de65277d",
       "outputs": [
         {
           "type": "error",
@@ -378,13 +372,26 @@
         {
           "type": "stream",
           "name": "stderr",
-          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_62467/__marimo__cell_nHfw_.py&quot;</span>, line <span class=\"m\">10</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"o\">.</span><span class=\"n\">sort</span><span class=\"p\">(</span><span class=\"s2\">&quot;Trial&quot;</span><span class=\"p\">)</span>\n<span class=\"w\">     </span><span class=\"pm\">^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">6103</span>, in <span class=\"n\">sort</span>\n<span class=\"w\">    </span><span class=\"o\">.</span><span class=\"n\">collect</span><span class=\"p\">(</span><span class=\"n\">optimizations</span><span class=\"o\">=</span><span class=\"n\">QueryOptFlags</span><span class=\"o\">.</span><span class=\"n\">_eager</span><span class=\"p\">())</span>\n<span class=\"w\">     </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/_utils/deprecation.py&quot;</span>, line <span class=\"m\">97</span>, in <span class=\"n\">wrapper</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">function</span><span class=\"p\">(</span><span class=\"o\">*</span><span class=\"n\">args</span><span class=\"p\">,</span> <span class=\"o\">**</span><span class=\"n\">kwargs</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/lazyframe/opt_flags.py&quot;</span>, line <span class=\"m\">326</span>, in <span class=\"n\">wrapper</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">function</span><span class=\"p\">(</span><span class=\"o\">*</span><span class=\"n\">args</span><span class=\"p\">,</span> <span class=\"o\">**</span><span class=\"n\">kwargs</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/lazyframe/frame.py&quot;</span>, line <span class=\"m\">2440</span>, in <span class=\"n\">collect</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">wrap_df</span><span class=\"p\">(</span><span class=\"n\">ldf</span><span class=\"o\">.</span><span class=\"n\">collect</span><span class=\"p\">(</span><span class=\"n\">engine</span><span class=\"p\">,</span> <span class=\"n\">callback</span><span class=\"p\">))</span>\n<span class=\"w\">                   </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">polars.exceptions.ColumnNotFoundError</span>: <span class=\"n\">unable to find column &quot;Trial&quot;; valid columns: [&quot;subject&quot;, &quot;trial&quot;, &quot;session&quot;, &quot;date&quot;, &quot;x_c&quot;, &quot;r_c&quot;, &quot;ttype_n&quot;, &quot;stimd_n&quot;, &quot;performance&quot;, &quot;timepoint_1&quot;, &quot;timepoint_2&quot;, &quot;timepoint_3&quot;, &quot;timepoint_4&quot;, &quot;onset&quot;, &quot;offset&quot;, &quot;stim_d&quot;, &quot;delay_d&quot;, &quot;response&quot;, &quot;stimulus&quot;, &quot;trial_idx&quot;]</span>\n</pre></div>\n</span>",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_81462/__marimo__cell_xXTn_.py&quot;</span>, line <span class=\"m\">1</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_selected</span> <span class=\"o\">=</span> <span class=\"p\">[</span><span class=\"n\">s</span> <span class=\"k\">for</span> <span class=\"n\">s</span> <span class=\"ow\">in</span> <span class=\"n\">ui_subjects</span><span class=\"o\">.</span><span class=\"n\">value</span> <span class=\"k\">if</span> <span class=\"n\">s</span> <span class=\"ow\">in</span> <span class=\"n\">arrays_store</span><span class=\"p\">]</span>\n<span class=\"w\">                            </span><span class=\"pm\">^^^^^^^^^^^</span>\n<span class=\"gr\">NameError</span>: <span class=\"n\">name &#39;ui_subjects&#39; is not defined</span>\n</pre></div>\n</span>",
           "mimetype": "application/vnd.marimo+traceback"
         }
       ]
     },
     {
-      "id": "Vuqk",
+      "id": "Pvdt",
+      "code_hash": null,
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "AjVT",
       "code_hash": null,
       "outputs": [
         {
