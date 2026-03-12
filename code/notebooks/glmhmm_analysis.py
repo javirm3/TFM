@@ -241,11 +241,25 @@ def _(
 
 
 @app.cell
-def _(K, adapter, arrays_store, build_views, mo, ui_subjects):
+def _(adapter, mo):
+    # ── State-scoring regressor selector ─────────────────────────────────────
+    _opts = list(adapter._SCORING_OPTIONS.keys()) if hasattr(adapter, "_SCORING_OPTIONS") else ["S_coh"]
+    ui_scoring_key = mo.ui.dropdown(
+        options=_opts,
+        value="S_coh",
+        label="State scoring regressor (Engaged = highest coherent weight)",
+    )
+    mo.vstack([mo.md("### State labelling regressor"), ui_scoring_key])
+    return (ui_scoring_key,)
+
+
+@app.cell
+def _(K, adapter, arrays_store, build_views, mo, ui_scoring_key, ui_subjects):
     # ── Build SubjectFitViews + derive state_labels / state_order for backward compat ──
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
+    adapter.scoring_key = ui_scoring_key.value
     views = build_views(arrays_store, adapter, K, _selected)
     state_labels = {s: v.state_name_by_idx for s, v in views.items()}
     state_order  = {s: v.state_idx_order   for s, v in views.items()}

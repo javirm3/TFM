@@ -8,426 +8,169 @@
     {
       "id": "Hbol",
       "code_hash": "403351b42594df73b469a7616145de27",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<marimo-ui-element object-id='Hbol-0' random-id='b1004f7a-1a1e-21f6-a050-af5557e75065'><marimo-dropdown data-initial-value='[&quot;MCDR&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Task:&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;2AFC&quot;,&quot;MCDR&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
-          }
-        }
-      ],
+      "outputs": [],
       "console": []
     },
     {
       "id": "MJUe",
       "code_hash": "d88263672f21f050f631a072646aaa73",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "outputs": [],
       "console": []
     },
     {
       "id": "vblA",
       "code_hash": "fda5adee2b673e6e14f5d763e5afb783",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<marimo-ui-element object-id='vblA-0' random-id='770cf92d-f0f4-c9c5-60fb-9fca2f3cbfd8'><marimo-dropdown data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Load existing model (overrides params below)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;4aade523&quot;,&quot;7d374cb1&quot;,&quot;One-hot&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;,&quot;glmhmm_2&quot;]' data-allow-select-none='true' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element>"
-          }
-        }
-      ],
+      "outputs": [],
       "console": []
     },
     {
       "id": "bkHC",
       "code_hash": "4f7bb66468c0b58314e0424de6d476c0",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "outputs": [],
       "console": []
     },
     {
       "id": "lEQa",
       "code_hash": "ec62256cf033b48c285c6fb12565ef9c",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "outputs": [],
       "console": []
     },
     {
       "id": "PKri",
       "code_hash": "88d36f4a9282ab908e9390f9d760ce35",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: center;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"configuration\">Configuration</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='vblA-0' random-id='770cf92d-f0f4-c9c5-60fb-9fca2f3cbfd8'><marimo-dropdown data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Load existing model (overrides params below)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;4aade523&quot;,&quot;7d374cb1&quot;,&quot;One-hot&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;,&quot;glmhmm_2&quot;]' data-allow-select-none='true' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='lEQa-4' random-id='7d5cada3-51e6-305f-0fe6-5958ede876ce'><marimo-text data-initial-value='&quot;&quot;' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Custom alias (optional)&lt;/span&gt;&lt;/span&gt;&quot;' data-placeholder='&quot;e.g. my_best_fit&quot;' data-kind='&quot;text&quot;' data-full-width='false' data-disabled='false' data-debounce='true'></marimo-text></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='lEQa-0' random-id='22a44e6a-fabb-f307-0043-05a89c7110a4'><marimo-slider data-initial-value='2' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;K&lt;/span&gt;&lt;/span&gt;&quot;' data-start='2' data-stop='6' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='lEQa-2' random-id='304465d6-3968-5698-9a18-aa1ff2a3c277'><marimo-slider data-initial-value='50' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;\u03c4 action trace half-life&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='200' data-step='1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='lEQa-1' random-id='7efaceb3-dbc6-59c3-7cb1-68068d283678'><marimo-multiselect data-initial-value='[&quot;A95&quot;,&quot;A83&quot;,&quot;A93&quot;,&quot;A96&quot;,&quot;A92&quot;,&quot;A87&quot;,&quot;A89&quot;,&quot;A86&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A83&quot;,&quot;A86&quot;,&quot;A87&quot;,&quot;A89&quot;,&quot;A92&quot;,&quot;A93&quot;,&quot;A95&quot;,&quot;A96&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element><marimo-ui-element object-id='lEQa-3' random-id='3a5b4e92-b355-1f05-7b27-7bb80d5d7c54'><marimo-multiselect data-initial-value='[&quot;bias&quot;,&quot;biasL&quot;,&quot;biasC&quot;,&quot;biasR&quot;,&quot;onsetL&quot;,&quot;onsetC&quot;,&quot;onsetR&quot;,&quot;delay&quot;,&quot;SL&quot;,&quot;SC&quot;,&quot;SR&quot;,&quot;SLxdelay&quot;,&quot;SCxdelay&quot;,&quot;SRxdelay&quot;,&quot;SLxD&quot;,&quot;SCxD&quot;,&quot;SRxD&quot;,&quot;D&quot;,&quot;DL&quot;,&quot;DC&quot;,&quot;DR&quot;,&quot;A_L&quot;,&quot;A_C&quot;,&quot;A_R&quot;,&quot;speed1&quot;,&quot;speed2&quot;,&quot;speed3&quot;,&quot;stim1L&quot;,&quot;stim1C&quot;,&quot;stim1R&quot;,&quot;stim2L&quot;,&quot;stim2C&quot;,&quot;stim2R&quot;,&quot;stim3L&quot;,&quot;stim3C&quot;,&quot;stim3R&quot;,&quot;stim4L&quot;,&quot;stim4C&quot;,&quot;stim4R&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Emission regressors (X)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;bias&quot;,&quot;biasL&quot;,&quot;biasC&quot;,&quot;biasR&quot;,&quot;onsetL&quot;,&quot;onsetC&quot;,&quot;onsetR&quot;,&quot;delay&quot;,&quot;SL&quot;,&quot;SC&quot;,&quot;SR&quot;,&quot;SLxdelay&quot;,&quot;SCxdelay&quot;,&quot;SRxdelay&quot;,&quot;SLxD&quot;,&quot;SCxD&quot;,&quot;SRxD&quot;,&quot;D&quot;,&quot;DL&quot;,&quot;DC&quot;,&quot;DR&quot;,&quot;A_L&quot;,&quot;A_C&quot;,&quot;A_R&quot;,&quot;speed1&quot;,&quot;speed2&quot;,&quot;speed3&quot;,&quot;stim1L&quot;,&quot;stim1C&quot;,&quot;stim1R&quot;,&quot;stim2L&quot;,&quot;stim2C&quot;,&quot;stim2R&quot;,&quot;stim3L&quot;,&quot;stim3C&quot;,&quot;stim3R&quot;,&quot;stim4L&quot;,&quot;stim4C&quot;,&quot;stim4R&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Current params hash:</strong> <code>4aade523</code></span></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='PKri-0' random-id='2ed02e26-2907-3493-1314-b36abc4ad398'><marimo-button data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Run fit&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div></div>"
-          }
-        }
-      ],
+      "outputs": [],
       "console": []
     },
     {
       "id": "Xref",
       "code_hash": "39602f5cd454ee23a0989de43601d6ef",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Configure parameters and press <strong>Run fit</strong>.</span></span>"
-          }
-        }
-      ],
+      "outputs": [],
       "console": []
     },
     {
       "id": "SFPL",
       "code_hash": "ce2fbb06702a2717d355ce71024965ee",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "outputs": [],
       "console": []
     },
     {
       "id": "BYtC",
-      "code_hash": "71d29f68603a403ba34520cba0a0eb6f",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">No fitted arrays found \u2014 run the fit first.</span></span>"
-          }
-        }
-      ],
+      "code_hash": "81bd909bb88e480907cb3dc19f4349fb",
+      "outputs": [],
       "console": []
     },
     {
       "id": "RGSE",
-      "code_hash": "b05e1d61a6955af7296a909f6dadd9d6",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stdout",
-          "text": "Side\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '325.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '821.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '326.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '419.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '335.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '907.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '616.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '334.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '422.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '329.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '327.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '561.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '876.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '617.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '337.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '873.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '332.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '330.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '623.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '820.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '620.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '333.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '875.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '807.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '911.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '909.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '619.0': 'Side'\n['subject', 'Trial', 'Side', 'Choice', 'Hit', 'Punish', 'Session', 'ILD', 'Filename', 'Experiment', 'Task', 'P', 'AW', 'WarmUp', 'Date']\nStimulus column for subject '420.0': 'Side'\n",
-          "mimetype": "text/plain"
-        }
-      ]
+      "code_hash": "93b3540f8f23211a46b7843490399d5d",
+      "outputs": [],
+      "console": []
     },
     {
       "id": "Kclp",
-      "code_hash": "38dd5b29716887272d8209104d474442",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "b05e1d61a6955af7296a909f6dadd9d6",
+      "outputs": [],
       "console": []
     },
     {
       "id": "emfo",
-      "code_hash": "c3e3b7cc400f0dcf1c697b7f3a83f32e",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stderr",
-          "text": "/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_91206/__marimo__cell_emfo_.py:9: RuntimeWarning: More than 20 figures have been opened. Figures created through the pyplot interface (`matplotlib.pyplot.figure`) are retained until explicitly closed and may consume too much memory. (To control this warning, see the rcParam `figure.max_open_warning`). Consider using `matplotlib.pyplot.close()`.\n  _fig_t, _ax_t = plt.subplots(figsize=(3.2, 2.8))\n",
-          "mimetype": "text/plain"
-        }
-      ]
+      "code_hash": "38dd5b29716887272d8209104d474442",
+      "outputs": [],
+      "console": []
     },
     {
       "id": "Hstk",
-      "code_hash": "fb146741d8909508f0bfc380ce484757",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"trial-window\">Trial window</h3></span><marimo-ui-element object-id='Hstk-0' random-id='8bb08eea-fc35-7a1e-2920-ce1c14092a96'><marimo-range-slider data-initial-value='[0,199]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Trial window&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0' data-stop='199' data-step='1' data-steps='[]' data-debounce='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-full-width='false' data-disabled='false'></marimo-range-slider></marimo-ui-element></div>"
-          }
-        }
-      ],
+      "code_hash": "c3e3b7cc400f0dcf1c697b7f3a83f32e",
+      "outputs": [],
       "console": []
     },
     {
       "id": "nWHF",
-      "code_hash": "6d3ed115b303da13460cb99747191791",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "fb146741d8909508f0bfc380ce484757",
+      "outputs": [],
       "console": []
     },
     {
       "id": "iLit",
-      "code_hash": "1935523922945d23a5935e0a943866e5",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stdout",
-          "text": "[_mean_glm_curve] 325.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((6947, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((6947, 3))\n  W[0,0,:]=[-2.722, 0.621, -0.806]\n[_mean_glm_curve] 821.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((33569, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((33569, 3))\n  W[0,0,:]=[-1.187, 0.06, -0.843]\n[_mean_glm_curve] 326.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2087, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2087, 3))\n  W[0,0,:]=[-0.82, -0.57, -2.04]\n[_mean_glm_curve] 419.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((9552, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((9552, 3))\n  W[0,0,:]=[-4.508, 1.309, -0.537]\n[_mean_glm_curve] 335.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12108, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12108, 3))\n  W[0,0,:]=[-3.176, -0.503, -1.255]\n[_mean_glm_curve] 907.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((33597, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((33597, 3))\n  W[0,0,:]=[-2.804, 0.418, -0.458]\n[_mean_glm_curve] 616.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12716, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12716, 3))\n  W[0,0,:]=[-3.485, -0.891, -0.421]\n[_mean_glm_curve] 334.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((82, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((82, 3))\n  W[0,0,:]=[-1.289, 2.466, -0.399]\n[_mean_glm_curve] 422.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((19111, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((19111, 3))\n  W[0,0,:]=[-3.099, -0.219, -0.963]\n[_mean_glm_curve] 329.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((11155, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((11155, 3))\n  W[0,0,:]=[-3.436, 1.09, -1.038]\n[_mean_glm_curve] 327.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((9040, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((9040, 3))\n  W[0,0,:]=[-4.978, -2.044, -1.335]\n[_mean_glm_curve] 561.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((7465, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((7465, 3))\n  W[0,0,:]=[-1.566, 0.46, -0.67]\n[_mean_glm_curve] 876.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2114, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2114, 3))\n  W[0,0,:]=[-1.235, 0.031, -0.87]\n[_mean_glm_curve] 617.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1529, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1529, 3))\n  W[0,0,:]=[-2.237, 0.371, -1.369]\n[_mean_glm_curve] 337.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((18669, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((18669, 3))\n  W[0,0,:]=[-2.078, 0.032, -0.572]\n[_mean_glm_curve] 873.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((23625, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((23625, 3))\n  W[0,0,:]=[-3.127, -0.691, -1.061]\n[_mean_glm_curve] 332.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((25961, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((25961, 3))\n  W[0,0,:]=[-2.991, 0.211, -0.351]\n[_mean_glm_curve] 330.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((4368, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((4368, 3))\n  W[0,0,:]=[-2.515, -0.074, -1.33]\n[_mean_glm_curve] 623.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12166, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12166, 3))\n  W[0,0,:]=[-2.093, -0.274, -1.516]\n[_mean_glm_curve] 820.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((29568, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((29568, 3))\n  W[0,0,:]=[-0.901, -0.454, -0.631]\n[_mean_glm_curve] 620.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((869, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((869, 3))\n  W[0,0,:]=[-1.269, -0.716, -0.627]\n[_mean_glm_curve] 333.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((23542, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((23542, 3))\n  W[0,0,:]=[-8.341, 0.07, -0.801]\n[_mean_glm_curve] 875.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((14514, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((14514, 3))\n  W[0,0,:]=[-1.819, 0.561, 0.149]\n[_mean_glm_curve] 807.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((3762, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((3762, 3))\n  W[0,0,:]=[-1.902, -0.282, -0.917]\n[_mean_glm_curve] 911.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((32512, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((32512, 3))\n  W[0,0,:]=[-2.672, -0.245, 0.793]\n[_mean_glm_curve] 909.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12201, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12201, 3))\n  W[0,0,:]=[-1.761, 0.213, -0.996]\n[_mean_glm_curve] 619.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((6464, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((6464, 3))\n  W[0,0,:]=[-6.794, -1.117, -0.525]\n[_mean_glm_curve] 420.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((17907, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((17907, 3))\n  W[0,0,:]=[-2.448, -0.245, -1.338]\n[_mean_glm_curve] 325.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((6947, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((6947, 3))\n  W[0,0,:]=[-2.722, 0.621, -0.806]\n[_mean_glm_curve] 821.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((33569, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((33569, 3))\n  W[0,0,:]=[-1.187, 0.06, -0.843]\n[_mean_glm_curve] 326.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2087, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2087, 3))\n  W[0,0,:]=[-0.82, -0.57, -2.04]\n[_mean_glm_curve] 419.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((9552, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((9552, 3))\n  W[0,0,:]=[-4.508, 1.309, -0.537]\n[_mean_glm_curve] 335.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12108, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12108, 3))\n  W[0,0,:]=[-3.176, -0.503, -1.255]\n[_mean_glm_curve] 907.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((33597, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((33597, 3))\n  W[0,0,:]=[-2.804, 0.418, -0.458]\n[_mean_glm_curve] 616.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12716, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12716, 3))\n  W[0,0,:]=[-3.485, -0.891, -0.421]\n[_mean_glm_curve] 334.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((82, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((82, 3))\n  W[0,0,:]=[-1.289, 2.466, -0.399]\n[_mean_glm_curve] 422.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((19111, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((19111, 3))\n  W[0,0,:]=[-3.099, -0.219, -0.963]\n[_mean_glm_curve] 329.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((11155, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((11155, 3))\n  W[0,0,:]=[-3.436, 1.09, -1.038]\n[_mean_glm_curve] 327.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((9040, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((9040, 3))\n  W[0,0,:]=[-4.978, -2.044, -1.335]\n[_mean_glm_curve] 561.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((7465, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((7465, 3))\n  W[0,0,:]=[-1.566, 0.46, -0.67]\n[_mean_glm_curve] 876.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2114, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2114, 3))\n  W[0,0,:]=[-1.235, 0.031, -0.87]\n[_mean_glm_curve] 617.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1529, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1529, 3))\n  W[0,0,:]=[-2.237, 0.371, -1.369]\n[_mean_glm_curve] 337.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((18669, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((18669, 3))\n  W[0,0,:]=[-2.078, 0.032, -0.572]\n[_mean_glm_curve] 873.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((23625, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((23625, 3))\n  W[0,0,:]=[-3.127, -0.691, -1.061]\n[_mean_glm_curve] 332.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((25961, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((25961, 3))\n  W[0,0,:]=[-2.991, 0.211, -0.351]\n[_mean_glm_curve] 330.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((4368, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((4368, 3))\n  W[0,0,:]=[-2.515, -0.074, -1.33]\n[_mean_glm_curve] 623.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12166, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12166, 3))\n  W[0,0,:]=[-2.093, -0.274, -1.516]\n[_mean_glm_curve] 820.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((29568, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((29568, 3))\n  W[0,0,:]=[-0.901, -0.454, -0.631]\n[_mean_glm_curve] 620.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((869, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((869, 3))\n  W[0,0,:]=[-1.269, -0.716, -0.627]\n[_mean_glm_curve] 333.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((23542, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((23542, 3))\n  W[0,0,:]=[-8.341, 0.07, -0.801]\n[_mean_glm_curve] 875.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((14514, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((14514, 3))\n  W[0,0,:]=[-1.819, 0.561, 0.149]\n[_mean_glm_curve] 807.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((3762, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((3762, 3))\n  W[0,0,:]=[-1.902, -0.282, -0.917]\n[_mean_glm_curve] 911.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((32512, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((32512, 3))\n  W[0,0,:]=[-2.672, -0.245, 0.793]\n[_mean_glm_curve] 909.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((12201, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((12201, 3))\n  W[0,0,:]=[-1.761, 0.213, -0.996]\n[_mean_glm_curve] 619.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((6464, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((6464, 3))\n  W[0,0,:]=[-6.794, -1.117, -0.525]\n[_mean_glm_curve] 420.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((17907, 3))  state_k=None\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((17907, 3))\n  W[0,0,:]=[-2.448, -0.245, -1.338]\n[_mean_glm_curve] 325.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((3910, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((3910, 3))\n  W[0,0,:]=[-2.722, 0.621, -0.806]\n[_mean_glm_curve] 821.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((10980, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((10980, 3))\n  W[0,0,:]=[-1.187, 0.06, -0.843]\n[_mean_glm_curve] 326.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((965, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((965, 3))\n  W[0,0,:]=[-0.82, -0.57, -2.04]\n[_mean_glm_curve] 419.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((4556, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((4556, 3))\n  W[0,0,:]=[-4.508, 1.309, -0.537]\n[_mean_glm_curve] 335.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((10537, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((10537, 3))\n  W[0,0,:]=[-3.176, -0.503, -1.255]\n[_mean_glm_curve] 907.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2489, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2489, 3))\n  W[0,0,:]=[-2.804, 0.418, -0.458]\n[_mean_glm_curve] 616.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((4226, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((4226, 3))\n  W[0,0,:]=[-3.485, -0.891, -0.421]\n[_mean_glm_curve] 334.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((51, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((51, 3))\n  W[0,0,:]=[-1.289, 2.466, -0.399]\n[_mean_glm_curve] 422.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((16173, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((16173, 3))\n  W[0,0,:]=[-3.099, -0.219, -0.963]\n[_mean_glm_curve] 329.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((7386, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((7386, 3))\n  W[0,0,:]=[-3.436, 1.09, -1.038]\n[_mean_glm_curve] 327.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((7846, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((7846, 3))\n  W[0,0,:]=[-4.978, -2.044, -1.335]\n[_mean_glm_curve] 561.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((5595, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((5595, 3))\n  W[0,0,:]=[-1.566, 0.46, -0.67]\n[_mean_glm_curve] 876.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((845, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((845, 3))\n  W[0,0,:]=[-1.235, 0.031, -0.87]\n[_mean_glm_curve] 617.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1259, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1259, 3))\n  W[0,0,:]=[-2.237, 0.371, -1.369]\n[_mean_glm_curve] 337.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((15914, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((15914, 3))\n  W[0,0,:]=[-2.078, 0.032, -0.572]\n[_mean_glm_curve] 873.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1528, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1528, 3))\n  W[0,0,:]=[-3.127, -0.691, -1.061]\n[_mean_glm_curve] 332.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((11241, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((11241, 3))\n  W[0,0,:]=[-2.991, 0.211, -0.351]\n[_mean_glm_curve] 330.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((3385, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((3385, 3))\n  W[0,0,:]=[-2.515, -0.074, -1.33]\n[_mean_glm_curve] 623.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((10252, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((10252, 3))\n  W[0,0,:]=[-2.093, -0.274, -1.516]\n[_mean_glm_curve] 820.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((22120, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((22120, 3))\n  W[0,0,:]=[-0.901, -0.454, -0.631]\n[_mean_glm_curve] 620.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((627, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((627, 3))\n  W[0,0,:]=[-1.269, -0.716, -0.627]\n[_mean_glm_curve] 333.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((17411, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((17411, 3))\n  W[0,0,:]=[-8.341, 0.07, -0.801]\n[_mean_glm_curve] 875.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((790, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((790, 3))\n  W[0,0,:]=[-1.819, 0.561, 0.149]\n[_mean_glm_curve] 807.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((990, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((990, 3))\n  W[0,0,:]=[-1.902, -0.282, -0.917]\n[_mean_glm_curve] 911.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((880, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((880, 3))\n  W[0,0,:]=[-2.672, -0.245, 0.793]\n[_mean_glm_curve] 909.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((6679, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((6679, 3))\n  W[0,0,:]=[-1.761, 0.213, -0.996]\n[_mean_glm_curve] 619.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((3109, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((3109, 3))\n  W[0,0,:]=[-6.794, -1.117, -0.525]\n[_mean_glm_curve] 420.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((15330, 3))  state_k=0\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((15330, 3))\n  W[0,0,:]=[-2.448, -0.245, -1.338]\n[_mean_glm_curve] 325.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((3037, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((3037, 3))\n  W[0,0,:]=[-2.722, 0.621, -0.806]\n[_mean_glm_curve] 821.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((22589, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((22589, 3))\n  W[0,0,:]=[-1.187, 0.06, -0.843]\n[_mean_glm_curve] 326.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1122, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1122, 3))\n  W[0,0,:]=[-0.82, -0.57, -2.04]\n[_mean_glm_curve] 419.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((4996, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((4996, 3))\n  W[0,0,:]=[-4.508, 1.309, -0.537]\n[_mean_glm_curve] 335.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1571, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1571, 3))\n  W[0,0,:]=[-3.176, -0.503, -1.255]\n[_mean_glm_curve] 907.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((31108, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((31108, 3))\n  W[0,0,:]=[-2.804, 0.418, -0.458]\n[_mean_glm_curve] 616.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((8490, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((8490, 3))\n  W[0,0,:]=[-3.485, -0.891, -0.421]\n[_mean_glm_curve] 334.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((31, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((31, 3))\n  W[0,0,:]=[-1.289, 2.466, -0.399]\n[_mean_glm_curve] 422.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2938, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2938, 3))\n  W[0,0,:]=[-3.099, -0.219, -0.963]\n[_mean_glm_curve] 329.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((3769, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((3769, 3))\n  W[0,0,:]=[-3.436, 1.09, -1.038]\n[_mean_glm_curve] 327.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1194, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1194, 3))\n  W[0,0,:]=[-4.978, -2.044, -1.335]\n[_mean_glm_curve] 561.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1870, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1870, 3))\n  W[0,0,:]=[-1.566, 0.46, -0.67]\n[_mean_glm_curve] 876.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1269, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1269, 3))\n  W[0,0,:]=[-1.235, 0.031, -0.87]\n[_mean_glm_curve] 617.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((270, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((270, 3))\n  W[0,0,:]=[-2.237, 0.371, -1.369]\n[_mean_glm_curve] 337.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2755, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2755, 3))\n  W[0,0,:]=[-2.078, 0.032, -0.572]\n[_mean_glm_curve] 873.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((22097, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((22097, 3))\n  W[0,0,:]=[-3.127, -0.691, -1.061]\n[_mean_glm_curve] 332.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((14720, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((14720, 3))\n  W[0,0,:]=[-2.991, 0.211, -0.351]\n[_mean_glm_curve] 330.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((983, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((983, 3))\n  W[0,0,:]=[-2.515, -0.074, -1.33]\n[_mean_glm_curve] 623.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((1914, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((1914, 3))\n  W[0,0,:]=[-2.093, -0.274, -1.516]\n[_mean_glm_curve] 820.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((7448, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((7448, 3))\n  W[0,0,:]=[-0.901, -0.454, -0.631]\n[_mean_glm_curve] 620.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((242, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((242, 3))\n  W[0,0,:]=[-1.269, -0.716, -0.627]\n[_mean_glm_curve] 333.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((6131, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((6131, 3))\n  W[0,0,:]=[-8.341, 0.07, -0.801]\n[_mean_glm_curve] 875.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((13724, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((13724, 3))\n  W[0,0,:]=[-1.819, 0.561, 0.149]\n[_mean_glm_curve] 807.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2772, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2772, 3))\n  W[0,0,:]=[-1.902, -0.282, -0.917]\n[_mean_glm_curve] 911.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((31632, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((31632, 3))\n  W[0,0,:]=[-2.672, -0.245, 0.793]\n[_mean_glm_curve] 909.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((5522, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((5522, 3))\n  W[0,0,:]=[-1.761, 0.213, -0.996]\n[_mean_glm_curve] 619.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((3355, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((3355, 3))\n  W[0,0,:]=[-6.794, -1.117, -0.525]\n[_mean_glm_curve] 420.0: cols=['stim_vals', 'bias', 'at_choice']  X_data=yes ((2577, 3))  state_k=1\n[eval_glm_on_ild_grid] X_cols=['stim_vals', 'bias', 'at_choice']\n  ild_idx=0  bias_idx=1  K=2  M=3  X_data=yes ((2577, 3))\n  W[0,0,:]=[-2.448, -0.245, -1.338]\n",
-          "mimetype": "text/plain"
-        }
-      ]
+      "code_hash": "6d3ed115b303da13460cb99747191791",
+      "outputs": [],
+      "console": []
     },
     {
       "id": "ZHCJ",
-      "code_hash": "193eaf9b075ac88663c1db06b937afc0",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "code_hash": "1935523922945d23a5935e0a943866e5",
+      "outputs": [],
       "console": []
     },
     {
       "id": "ROlb",
-      "code_hash": "267f3c2e76f98528dc9a5dda30db558a",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stderr",
-          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_91206/__marimo__cell_ROlb_.py&quot;</span>, line <span class=\"m\">11</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_fig_acc</span><span class=\"p\">,</span> <span class=\"n\">_tbl</span> <span class=\"o\">=</span> <span class=\"n\">plots</span><span class=\"o\">.</span><span class=\"n\">plot_state_accuracy</span><span class=\"p\">(</span>\n<span class=\"w\">                     </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/plots_alexis.py&quot;</span>, line <span class=\"m\">1236</span>, in <span class=\"n\">plot_state_accuracy</span>\n<span class=\"w\">    </span><span class=\"n\">hits</span> <span class=\"o\">=</span> <span class=\"n\">df_sub</span><span class=\"p\">[</span><span class=\"s2\">&quot;correct_bool&quot;</span><span class=\"p\">]</span><span class=\"o\">.</span><span class=\"n\">to_numpy</span><span class=\"p\">()</span><span class=\"o\">.</span><span class=\"n\">astype</span><span class=\"p\">(</span><span class=\"nb\">float</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">~~~~~~^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">1431</span>, in <span class=\"n\">__getitem__</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">get_df_item_by_key</span><span class=\"p\">(</span><span class=\"bp\">self</span><span class=\"p\">,</span> <span class=\"n\">key</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/_utils/getitem.py&quot;</span>, line <span class=\"m\">163</span>, in <span class=\"n\">get_df_item_by_key</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">df</span><span class=\"o\">.</span><span class=\"n\">get_column</span><span class=\"p\">(</span><span class=\"n\">key</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">9193</span>, in <span class=\"n\">get_column</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">wrap_s</span><span class=\"p\">(</span><span class=\"bp\">self</span><span class=\"o\">.</span><span class=\"n\">_df</span><span class=\"o\">.</span><span class=\"n\">get_column</span><span class=\"p\">(</span><span class=\"n\">name</span><span class=\"p\">))</span>\n<span class=\"w\">                  </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">polars.exceptions.ColumnNotFoundError</span>: <span class=\"n\">&quot;correct_bool&quot; not found</span>\n</pre></div>\n</span>",
-          "mimetype": "application/vnd.marimo+traceback"
-        }
-      ]
+      "code_hash": "193eaf9b075ac88663c1db06b937afc0",
+      "outputs": [],
+      "console": []
     },
     {
       "id": "qnkX",
-      "code_hash": "2b50eec141733b36cee79204e02c8795",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-trajectory-occupancy\">Session trajectory &amp; occupancy</h3></span><marimo-ui-element object-id='qnkX-0' random-id='2af0f1d5-36d3-80ec-9502-07fe151e1a11'><marimo-multiselect data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects (session trajectories &amp;amp; occupancy)&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A89&quot;,&quot;A87&quot;,&quot;A96&quot;,&quot;A95&quot;,&quot;A86&quot;,&quot;A93&quot;,&quot;A92&quot;,&quot;A83&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div>"
-          }
-        }
-      ],
+      "code_hash": "267f3c2e76f98528dc9a5dda30db558a",
+      "outputs": [],
       "console": []
     },
     {
       "id": "TqIu",
-      "code_hash": "655b5011dafcd09602f467727aca9a8f",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "2b50eec141733b36cee79204e02c8795",
+      "outputs": [],
       "console": []
     },
     {
       "id": "Vxnm",
-      "code_hash": "cdead6bc70c5b727efcccedf18bc500e",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "655b5011dafcd09602f467727aca9a8f",
+      "outputs": [],
       "console": []
     },
     {
       "id": "DnEU",
-      "code_hash": "548c2a457708709b4ec7f7f8758540fe",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "code_hash": "cdead6bc70c5b727efcccedf18bc500e",
+      "outputs": [],
       "console": []
     },
     {
       "id": "ulZA",
-      "code_hash": "08e0c29b2216c002c8a57815c610c32b",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"session-deep-dive\">Session deep-dive</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='DnEU-0' random-id='ae52cc9d-acab-5d51-a30d-fd9112c177a1'><marimo-dropdown data-initial-value='[&quot;(no fitted subjects)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subject&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;(no fitted subjects)&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='ulZA-0' random-id='8384fa13-8311-b878-1b99-654c7b255728'><marimo-dropdown data-initial-value='[&quot;0&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Session&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;0&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div></div>"
-          }
-        }
-      ],
+      "code_hash": "548c2a457708709b4ec7f7f8758540fe",
+      "outputs": [],
       "console": []
     },
     {
       "id": "ecfG",
-      "code_hash": "47319f45415134224e15fc23a151e2cc",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "08e0c29b2216c002c8a57815c610c32b",
+      "outputs": [],
       "console": []
     },
     {
-      "id": "ZBYS",
-      "code_hash": "382f2e72ff63757ac96069a0560ec92c",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>\u03c4 sweep results not found.</strong>   Run the sweep first:\n<div class=\"language-scdoc codehilite\"><pre><span></span><code>uv run python scripts/fit_tau_sweep.py --model glmhmm --K 2\n</code></pre></div></span></span>"
-          }
-        }
-      ],
+      "id": "Pvdt",
+      "code_hash": "47319f45415134224e15fc23a151e2cc",
+      "outputs": [],
       "console": []
     },
     {
       "id": "aLJB",
-      "code_hash": "65ea91b4117adf0fd703289603441030",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">\u2139\ufe0f <strong>SSM safety check is only available for the 2AFC task.</strong> Switch task to 2AFC above.</span></span>"
-          }
-        }
-      ],
+      "code_hash": "382f2e72ff63757ac96069a0560ec92c",
+      "outputs": [],
       "console": []
     },
     {
       "id": "nHfw",
-      "code_hash": "a9516f03601ba5a05f8d5d182a2fcf92",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
-      "console": []
-    },
-    {
-      "id": "AjVT",
-      "code_hash": "783464b3e3b08d99383adec5de65277d",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "ancestor-stopped",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stderr",
-          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_91206/__marimo__cell_AjVT_.py&quot;</span>, line <span class=\"m\">11</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"o\">.</span><span class=\"n\">filter</span><span class=\"p\">(</span><span class=\"n\">pl</span><span class=\"o\">.</span><span class=\"n\">col</span><span class=\"p\">(</span><span class=\"s2\">&quot;session&quot;</span><span class=\"p\">)</span><span class=\"o\">.</span><span class=\"n\">count</span><span class=\"p\">()</span><span class=\"o\">.</span><span class=\"n\">over</span><span class=\"p\">(</span><span class=\"s2\">&quot;session&quot;</span><span class=\"p\">)</span> <span class=\"o\">&gt;=</span> <span class=\"mi\">2</span><span class=\"p\">)</span>\n<span class=\"w\">     </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">5483</span>, in <span class=\"n\">filter</span>\n<span class=\"w\">    </span><span class=\"o\">.</span><span class=\"n\">collect</span><span class=\"p\">(</span><span class=\"n\">optimizations</span><span class=\"o\">=</span><span class=\"n\">QueryOptFlags</span><span class=\"o\">.</span><span class=\"n\">_eager</span><span class=\"p\">())</span>\n<span class=\"w\">     </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/_utils/deprecation.py&quot;</span>, line <span class=\"m\">97</span>, in <span class=\"n\">wrapper</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">function</span><span class=\"p\">(</span><span class=\"o\">*</span><span class=\"n\">args</span><span class=\"p\">,</span> <span class=\"o\">**</span><span class=\"n\">kwargs</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/lazyframe/opt_flags.py&quot;</span>, line <span class=\"m\">326</span>, in <span class=\"n\">wrapper</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">function</span><span class=\"p\">(</span><span class=\"o\">*</span><span class=\"n\">args</span><span class=\"p\">,</span> <span class=\"o\">**</span><span class=\"n\">kwargs</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/lazyframe/frame.py&quot;</span>, line <span class=\"m\">2440</span>, in <span class=\"n\">collect</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">wrap_df</span><span class=\"p\">(</span><span class=\"n\">ldf</span><span class=\"o\">.</span><span class=\"n\">collect</span><span class=\"p\">(</span><span class=\"n\">engine</span><span class=\"p\">,</span> <span class=\"n\">callback</span><span class=\"p\">))</span>\n<span class=\"w\">                   </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">polars.exceptions.ColumnNotFoundError</span>: <span class=\"n\">unable to find column &quot;session&quot;; valid columns: [&quot;subject&quot;, &quot;Trial&quot;, &quot;Side&quot;, &quot;Choice&quot;, &quot;Hit&quot;, &quot;Punish&quot;, &quot;Session&quot;, &quot;ILD&quot;, &quot;Filename&quot;, &quot;Experiment&quot;, &quot;Task&quot;, &quot;P&quot;, &quot;AW&quot;, &quot;WarmUp&quot;, &quot;Date&quot;]</span>\n</pre></div>\n</span>",
-          "mimetype": "application/vnd.marimo+traceback"
-        }
-      ]
-    },
-    {
-      "id": "Pvdt",
-      "code_hash": null,
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "code_hash": "65ea91b4117adf0fd703289603441030",
+      "outputs": [],
       "console": []
     },
     {
       "id": "xXTn",
-      "code_hash": null,
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "code_hash": "a9516f03601ba5a05f8d5d182a2fcf92",
+      "outputs": [],
       "console": []
     },
     {
       "id": "pHFh",
-      "code_hash": null,
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "code_hash": "783464b3e3b08d99383adec5de65277d",
+      "outputs": [],
       "console": []
     }
   ]

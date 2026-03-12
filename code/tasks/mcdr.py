@@ -24,6 +24,22 @@ class MCDRAdapter(TaskAdapter):
     sort_col: str    = "trial_idx"
     session_col: str = "session"
 
+    # ── state-scoring options ────────────────────────────────────────────────
+    # Each entry maps a label to a list of (feature_name, class_idx) pairs;
+    # class_idx 0 = Left weight, 1 = Right weight.
+    # The score for each state k is the mean of W[k, cls, feat_idx] over the
+    # listed pairs.  States are then ranked highest-score → "Engaged".
+    _SCORING_OPTIONS: dict = {
+        "S_coh":     [("SL", 0), ("SR", 1)],
+        "S1_coh":   [("stim1L", 0), ("stim1R", 1)],
+        "S2_coh":   [("stim2L", 0), ("stim2R", 1)],
+        "S3_coh":   [("stim3L", 0), ("stim3R", 1)],
+        "S4_coh":   [("stim4L", 0), ("stim4R", 1)],
+        "onset_coh": [("onsetL", 0), ("onsetR", 1)],
+        "bias_coh":  [("biasL", 0), ("biasR", 1)],
+    }
+    scoring_key: str = "S_coh"
+
     # ── data preparation ────────────────────────────────────────────────────
 
     def subject_filter(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -81,17 +97,27 @@ class MCDRAdapter(TaskAdapter):
         K: int,
         subjects: list,
     ) -> tuple:
-        """MCDR engagement scoring: S_coh = mean(W[k, L, SL], W[k, R, SR])."""
+        """MCDR engagement scoring driven by ``self.scoring_key``.
+
+        The state with the highest mean coherent weight (as defined by the
+        selected scoring regressor) is labelled "Engaged"; the rest are
+        "Disengaged" (or "Disengaged 1", "Disengaged 2", … for K>2).
+        """
         import numpy as np
+
+        pairs = self._SCORING_OPTIONS.get(
+            getattr(self, "scoring_key", "S_coh"),
+            self._SCORING_OPTIONS["S_coh"],
+        )
 
         def _scoh(W, feat_names):
             name2fi = {n: i for i, n in enumerate(feat_names)}
             scores = np.zeros(W.shape[0])
             n = 0
-            if "SL" in name2fi:
-                scores += W[:, 0, name2fi["SL"]]; n += 1
-            if "SR" in name2fi:
-                scores += W[:, 1, name2fi["SR"]]; n += 1
+            for feat, cls in pairs:
+                if feat in name2fi:
+                    scores += W[:, cls, name2fi[feat]]
+                    n += 1
             return scores / max(1, n)
 
         base_feat = list(names.get("X_cols", []))

@@ -653,6 +653,8 @@ def plot_delay_binned_1d(df, model_name, subject=None, n_bins=7):
 # ─────────────────────────────────────────────────────────────────────────────
 
 _AG_GROUPS = [
+    # neutral intercept bias (constant 1): overall lateral vs centre preference
+    ("$bias$", [("bias", "mean")]),
     # bias: L/R context indicators (no C equivalent)
     ("$bias_{coh}$",  [("biasL", 0), ("biasR", 1)]),
     ("$bias_{incoh}$", [("biasL", 1), ("biasR", 0)]),
