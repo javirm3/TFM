@@ -129,17 +129,49 @@ class MCDRAdapter(TaskAdapter):
                 state_labels[subj] = {k: f"State {k+1}" for k in range(K)}
                 state_order[subj]  = list(range(K))
                 continue
+            W_np    = np.asarray(W)
             feat    = list(arrays_store[subj].get("X_cols", base_feat))
-            scores  = _scoh(np.asarray(W), feat)
+            scores  = _scoh(W_np, feat)
             ranking = list(np.argsort(scores)[::-1])
-            labels: dict = {}
-            dis = 1
-            for rank, k in enumerate(ranking):
-                if rank == 0:
-                    labels[int(k)] = "Engaged"
+            engaged_k = int(ranking[0])
+            others    = [int(k) for k in ranking[1:]]
+            labels: dict = {engaged_k: "Engaged"}
+
+            if K == 2:
+                labels[others[0]] = "Disengaged"
+                order = [engaged_k] + others
+
+            elif K == 4:
+                name2fi = {n: i for i, n in enumerate(feat)}
+                sl_fi   = name2fi.get("SL")
+                sr_fi   = name2fi.get("SR")
+
+                # Disengaged L: state most driven by SL (left-choice weight)
+                if sl_fi is not None:
+                    dis_l = others[int(np.argmax(W_np[others, 0, sl_fi]))]
                 else:
-                    labels[int(k)] = "Disengaged" if K == 2 else f"Disengaged {dis}"
+                    dis_l = others[0]
+                remaining = [k for k in others if k != dis_l]
+
+                # Disengaged R: state most driven by SR (right-choice weight)
+                if sr_fi is not None:
+                    dis_r = remaining[int(np.argmax(W_np[remaining, 1, sr_fi]))]
+                else:
+                    dis_r = remaining[0]
+                dis_c = [k for k in remaining if k != dis_r][0]
+
+                labels[dis_l] = "Disengaged L"
+                labels[dis_r] = "Disengaged R"
+                labels[dis_c] = "Disengaged C"
+                order = [engaged_k, dis_l, dis_r, dis_c]
+
+            else:
+                dis = 1
+                for k in others:
+                    labels[k] = f"Disengaged {dis}"
                     dis += 1
+                order = [engaged_k] + others
+
             state_labels[subj] = labels
-            state_order[subj]  = [int(k) for k in ranking]
+            state_order[subj]  = order
         return state_labels, state_order

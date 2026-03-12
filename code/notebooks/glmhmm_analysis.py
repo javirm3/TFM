@@ -1,16 +1,3 @@
-# /// script
-# dependencies = [
-#   "marimo",
-#   "numpy",
-#   "polars",
-#   "matplotlib",
-#   "seaborn",
-#   "pandas",
-#   "jax",
-#   "wigglystuff",
-# ]
-# ///
-
 import marimo
 
 __generated_with = "0.20.4"
@@ -45,7 +32,7 @@ def _():
 
     ui_task = mo.ui.dropdown(
         options=["2AFC", "MCDR"],
-        value="MCDR",
+        value="2AFC",
         label="Task:",
 
     )
@@ -63,7 +50,6 @@ def _():
         plt,
         sns,
         ui_task,
-        _FITTING_AVAILABLE,
     )
 
 
@@ -201,9 +187,6 @@ def _(
     mo.stop(
         not fit_button.value, mo.md("Configure parameters and press **Run fit**.")
     )
-    if not _FITTING_AVAILABLE:
-        mo.md("❌  Fitting scripts not available in this environment (likely WASM).")
-        mo.stop(True)
 
     _selected_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
     _OUT = paths.RESULTS / "fits" / ui_task.value / "glmhmm" / _selected_id
@@ -266,11 +249,14 @@ def _(
 @app.cell
 def _(adapter, mo):
     # ── State-scoring regressor selector ─────────────────────────────────────
-    _opts = list(adapter._SCORING_OPTIONS.keys()) if hasattr(adapter, "_SCORING_OPTIONS") else ["S_coh"]
+    _opts = list(adapter._SCORING_OPTIONS.keys()) if hasattr(adapter, "_SCORING_OPTIONS") else ["default"]
+    _default_key = getattr(adapter, "scoring_key", _opts[0])
+    if _default_key not in _opts:
+        _default_key = _opts[0]
     ui_scoring_key = mo.ui.dropdown(
         options=_opts,
-        value="S_coh",
-        label="State scoring regressor (Engaged = highest coherent weight)",
+        value=_default_key,
+        label="State scoring regressor (Engaged = highest score)",
     )
     mo.vstack([mo.md("### State labelling regressor"), ui_scoring_key])
     return (ui_scoring_key,)
@@ -282,7 +268,8 @@ def _(K, adapter, arrays_store, build_views, mo, ui_scoring_key, ui_subjects):
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
-    adapter.scoring_key = ui_scoring_key.value
+    if hasattr(adapter, "scoring_key"):
+        adapter.scoring_key = ui_scoring_key.value
     views = build_views(arrays_store, adapter, K, _selected)
     state_labels = {s: v.state_name_by_idx for s, v in views.items()}
     state_order  = {s: v.state_idx_order   for s, v in views.items()}

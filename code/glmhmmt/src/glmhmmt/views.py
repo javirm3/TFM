@@ -39,6 +39,11 @@ _STATE_HEX: list[str] = _cfg.get("palettes", {}).get("states_hex", [
 _LABEL_RANK: dict[str, int] = {
     "Engaged": 0,
     "Disengaged": 1,
+    "Biased L": 1,
+    "Biased R": 2,
+    "Disengaged L": 1,
+    "Disengaged R": 2,
+    "Disengaged C": 3,
     **{f"Disengaged {i}": i for i in range(1, 10)},
 }
 

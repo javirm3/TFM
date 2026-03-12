@@ -49,6 +49,8 @@ _DEFAULT_COLORS = ["#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB
 _LABEL_RANK = {
     "Engaged": 0,
     "Disengaged": 1,
+    "Biased L": 1,
+    "Biased R": 2,
     **{f"Disengaged {i}": i for i in range(1, 10)},
 }
 
@@ -1108,12 +1110,15 @@ def plot_emission_weights(
     all_w = []
     for idx, subj in enumerate(valid_subjs):
         ax = axes_s[idx // n_cols][idx % n_cols]
-        W  = -views[subj].emission_weights   # flip sign: raw W = logit(Left); -W = logit(Right) (intuitive)
+        W_raw = -views[subj].emission_weights   # flip sign: raw W = logit(Left); -W = logit(Right) (intuitive)
         slbls = views[subj].state_name_by_idx
-        lbls  = [slbls.get(k, f"S{k}") for k in range(K)]
+        # reorder by rank so color index 0 = Engaged = green, 1 = Disengaged = orange
+        rank_order = views[subj].state_idx_order   # [Engaged_k, Disengaged_k, ...]
+        W  = W_raw[rank_order]
+        lbls = [slbls.get(k, f"S{k}") for k in rank_order]
         fn_subj = views[subj].feat_names or feat_names
         plot_weights(W, fn_subj, state_labels=lbls, title=f"Subject {subj}", ax=ax)
-        all_w.append(np.asarray(W))
+        all_w.append(np.asarray(W))  # rank-reordered so position k=0 = Engaged across all subjects
 
     for idx in range(len(valid_subjs), n_rows * n_cols):
         axes_s[idx // n_cols][idx % n_cols].set_visible(False)

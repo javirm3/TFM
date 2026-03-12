@@ -694,6 +694,9 @@ _AG_GROUPS = [
 _LABEL_RANK = {
     "Engaged": 0,
     "Disengaged": 1,
+    "Disengaged L": 1,
+    "Disengaged R": 2,
+    "Disengaged C": 3,
     **{f"Disengaged {i}": i for i in range(1, 10)},
 }
 

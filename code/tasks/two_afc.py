@@ -28,6 +28,23 @@ class TwoAFCAdapter(TaskAdapter):
     sort_col: str    = "Trial"
     session_col: str = "Session"
 
+    # ── state-scoring options ────────────────────────────────────────────────
+    # For 2AFC the weight matrix is (K, 1, M) where W[k,0,:] = logit(Left)
+    # weights (reference = Right).  The plot shows -W for intuition.
+    # Modes:
+    #   "neg"  – -W[k, 0, fi]  (more negative raw = more stimulus-following)
+    #   "abs"  – |W[k, 0, fi]|  (unsigned magnitude)
+    #   "pos"  – +W[k, 0, fi]  (raw positive = anti-stimulus tendency)
+    # Score per state = mean over listed pairs.
+    _SCORING_OPTIONS: dict = {
+        "stim_vals (-w)": [("stim_vals", "neg")],
+        "stim_vals (|w|)": [("stim_vals", "abs")],
+        "at_choice (|w|)": [("at_choice", "abs")],
+        "wsls (|w|)": [("wsls", "abs")],
+        "bias (|w|)": [("bias", "abs")],
+    }
+    scoring_key: str = "stim_vals (-w)"
+
     # ── data preparation ────────────────────────────────────────────────────
 
     def subject_filter(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -96,35 +113,69 @@ class TwoAFCAdapter(TaskAdapter):
         K: int,
         subjects: list,
     ) -> tuple:
-        """2AFC engagement: state with highest |stim weight| is 'Engaged'."""
+        """2AFC engagement scoring.
+
+        K=2: Engaged = argmax(-stim_vals raw), Disengaged = the other.
+        K=3: Engaged = argmax(-stim_vals raw); the remaining two are split
+             by bias weight: min(displayed bias) = "Biased L",
+             max(displayed bias) = "Biased R".
+        K>3: remaining states labelled "Disengaged 1", "Disengaged 2", ...
+             ordered by descending -stim_vals score.
+        """
         import numpy as np
-        _STIM_NAMES = {"stim_vals", "stim_d", "ild_norm", "ILD", "ild",
-                       "stimulus", "net_ild", "stim_strength"}
+
         base_feat = list(names.get("X_cols", []))
         state_labels: dict = {}
         state_order: dict  = {}
+
         for subj in subjects:
             W = arrays_store[subj].get("emission_weights") if subj in arrays_store else None
             if W is None:
                 state_labels[subj] = {k: f"State {k+1}" for k in range(K)}
                 state_order[subj]  = list(range(K))
                 continue
-            feat     = list(arrays_store[subj].get("X_cols", base_feat))
-            W        = np.asarray(W)  # (K, 1, M)
-            stim_idx = next((i for i, n in enumerate(feat) if n in _STIM_NAMES), None)
-            if stim_idx is not None:
-                scores = np.abs(W[:, 0, stim_idx])
+
+            feat    = list(arrays_store[subj].get("X_cols", base_feat))
+            W       = np.asarray(W)   # (K, 1, M)
+            name2fi = {n: i for i, n in enumerate(feat)}
+
+            # displayed weight = -raw; argmax(-raw) = most stimulus-following
+            stim_fi = name2fi.get("stim_vals")
+            if stim_fi is not None:
+                stim_scores = -W[:, 0, stim_fi]
             else:
-                scores = np.abs(W[:, 0, :]).mean(axis=1)  # fallback
-            ranking = list(np.argsort(scores)[::-1])       # highest |stim w| = Engaged
-            labels: dict = {}
-            dis = 1
-            for rank, k in enumerate(ranking):
-                if rank == 0:
-                    labels[int(k)] = "Engaged"
+                stim_scores = -W[:, 0, :].mean(axis=1)  # fallback
+
+            engaged_k = int(np.argmax(stim_scores))
+            others    = [k for k in range(K) if k != engaged_k]
+
+            labels: dict = {engaged_k: "Engaged"}
+
+            if K == 2:
+                labels[others[0]] = "Disengaged"
+                order = [engaged_k, others[0]]
+
+            elif K == 3:
+                bias_fi = name2fi.get("bias")
+                if bias_fi is not None:
+                    # displayed bias = -raw; lower displayed = more left-biased
+                    bias_disp = -W[others, 0, bias_fi]
+                    biased_l = others[int(np.argmin(bias_disp))]
+                    biased_r = others[int(np.argmax(bias_disp))]
                 else:
-                    labels[int(k)] = "Disengaged" if K == 2 else f"Disengaged {dis}"
-                    dis += 1
+                    biased_l, biased_r = others[0], others[1]
+                labels[biased_l] = "Biased L"
+                labels[biased_r] = "Biased R"
+                order = [engaged_k, biased_l, biased_r]
+
+            else:
+                # K>3: rank remaining by stim score descending
+                others_sorted = sorted(others, key=lambda k: stim_scores[k], reverse=True)
+                for dis, k in enumerate(others_sorted, start=1):
+                    labels[k] = f"Disengaged {dis}"
+                order = [engaged_k] + others_sorted
+
             state_labels[subj] = labels
-            state_order[subj]  = [int(k) for k in ranking]
+            state_order[subj]  = order
+
         return state_labels, state_order
