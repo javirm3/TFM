@@ -33,7 +33,7 @@ def _():
 
     ui_task = mo.ui.dropdown(
         options=["2AFC", "MCDR"],
-        value="2AFC",
+        value="MCDR",
         label="Task:",
 
     )
@@ -477,15 +477,12 @@ def _(mo):
 
 @app.cell
 def _(
-    K,
     THRESH_ui,
     adapter,
     arrays_store,
-    df_all,
     is_2afc,
     mo,
     plots,
-    state_labels,
     trial_df,
     ui_subjects,
     views,
@@ -509,15 +506,14 @@ def _(
         )
     else:
         _fig_acc, _tbl = plots.plot_state_accuracy(
-            arrays_store=arrays_store,
-            state_labels=state_labels,
-            df_all=df_all,
-            K=K,
-            subjects=_selected_acc,
+            views={s: views[s] for s in _selected_acc},
+            trial_df=trial_df,
             thresh=THRESH_ui.amount,
             session_col=adapter.session_col,
             sort_col=adapter.sort_col,
+        
         )
+    
     mo.vstack([
         mo.md("### Accuracy by state"),
         _fig_acc,
@@ -621,6 +617,8 @@ def _(
             "> **Right**: histogram of inferred state changes per session."
         ),
     ], align="center")
+
+    trial_df
     return
 
 

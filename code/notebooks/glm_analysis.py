@@ -57,22 +57,20 @@ def _(get_adapter, paths, pl, ui_task):
 
 
 @app.cell
-def _(ModelManagerWidget, adapter, df_all, mo, ui_task):
-    is_2afc = adapter.num_classes == 2
+def _(ModelManagerWidget, df_all, mo, ui_task):
+
     _subjects = [str(s) for s in df_all["subject"].unique().to_list()]
 
     mm_widget = ModelManagerWidget(
         model_type="glm",
         task=ui_task.value,
-        is_2afc=is_2afc,
         subjects=_subjects,
         tau=5,
         lapse=False,
         lapse_max=0.2,
     )
     ui_model_manager = mo.ui.anywidget(mm_widget)
-    ui_model_manager
-    return ui_model_manager
+    return (ui_model_manager,)
 
 
 @app.cell
@@ -126,7 +124,7 @@ def _(df_all, pl, plt, sns):
 
 
 @app.cell
-def _(adapter, mo, ui_model_manager, ui_task):
+def _(adapter, ui_model_manager, ui_task):
     class _V:
         def __init__(self, value):
             self.value = value
@@ -142,7 +140,6 @@ def _(adapter, mo, ui_model_manager, ui_task):
     ui_lapse = _V(_val.get("lapse", False))
     ui_lapse_max = _V(_val.get("lapse_max", 0.2))
     ui_emission_cols = _V(_val.get("emission_cols", []))
-
     return (
         is_2afc,
         task_name,
@@ -159,16 +156,11 @@ def _(adapter, mo, ui_model_manager, ui_task):
 @app.cell
 def _(
     generate_model_id,
-    is_2afc,
     mo,
     task_name,
-    ui_alias,
     ui_emission_cols,
-    ui_existing,
     ui_lapse,
-    ui_lapse_max,
     ui_model_manager,
-    ui_subjects,
     ui_tau,
 ):
     current_hash = generate_model_id(task_name, ui_tau.value, ui_emission_cols.value, lapse=ui_lapse.value)
@@ -178,7 +170,7 @@ def _(
         ui_model_manager,
         mo.md(f"**Current params hash:** `{current_hash}`"),
     ])
-    return current_hash
+    return (current_hash,)
 
 
 @app.cell
@@ -188,13 +180,13 @@ def _():
 
 @app.cell
 def _(
-    ui_model_manager,
     fit_main,
     mo,
     ui_alias,
     ui_emission_cols,
     ui_lapse,
     ui_lapse_max,
+    ui_model_manager,
     ui_subjects,
     ui_task,
     ui_tau,
@@ -279,30 +271,84 @@ def _(
             arrays_store[_subj] = _d
 
     mo.md(f"Loaded {len(arrays_store)} subjects from `{selected_model_id}`")
-    return arrays_store, selected
+    return (arrays_store,)
 
 
 @app.cell
-def _(arrays_store, mo, paths, plots, selected):
+def _(adapter, arrays_store, mo, ui_subjects):
+    # ── Build SubjectFitViews + derive state_labels / state_order for backward compat ──
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+    from glmhmmt.views import build_views
+    from glmhmmt.postprocess import build_trial_df, build_emission_weights_df
+    K = 1
+    views = build_views(arrays_store, adapter, K, _selected)
+
+    state_labels = {s: v.state_name_by_idx for s, v in views.items()}
+    state_order  = {s: v.state_idx_order   for s, v in views.items()}
+    return K, build_emission_weights_df, build_trial_df, views
+
+
+@app.cell
+def _(
+    adapter,
+    build_emission_weights_df,
+    build_trial_df,
+    df_all,
+    mo,
+    pl,
+    views,
+):
+    # ── Build canonical trial-level DataFrame ────────────────────────────────────────────────────────
+    # One row per trial per subject.  Columns include:
+    #   p_state_k         → HMM posterior (direct copy of smoothed_probs[:, k])
+    #   state_idx/rank/label → MAP state assignment
+    #   pL / pC / pR      → marginal class probabilities from p_pred
+    #   p_model_correct   → MAP-state emission P(correct class)
+    #   p_model_correct_marginal → marginal P(correct class)
+    #   correct_bool      → bool(performance)
+    # All task-specific behavioral columns (stimd_n, ttype_n, …) are preserved.
+    _sort_col = adapter.sort_col
+    _ses_col  = adapter.session_col
+    _bcols    = adapter.behavioral_cols
+    print(_bcols["stimulus"])
+    _trial_frames = []
+    for _subj, _view in views.items():
+        _df_sub = (
+            df_all
+            .filter(pl.col("subject") == _subj)
+            .sort(_sort_col)
+            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
+        )
+        print(_df_sub.columns)
+        if _df_sub.height != _view.T:
+            print(f"⚠️  {_subj}: row mismatch ({_df_sub.height} vs {_view.T}), skipping")
+            continue
+        _trial_frames.append(build_trial_df(_view, _df_sub, _bcols))
+
+    mo.stop(not _trial_frames, mo.md("No subjects with matching data lengths."))
+    trial_df = pl.concat(_trial_frames)
+
+    # Emit emission-weights long DF for downstream use
+    weights_df = build_emission_weights_df(views)
+    return (trial_df,)
+
+
+@app.cell
+def _(K, arrays_store, mo, paths, plots, ui_subjects, views):
     # Plot Weights (Folded / Agonist)
     # GLM is essentially K=1.
-    K = 1
-
     # State Labels Trivial
-    state_labels = {s: {0: "GLM"} for s in selected}
 
     if not arrays_store:
         mo.stop(True, mo.md("No results loaded."))
-
-    fig_ag, fig_cls = plots.plot_emission_weights(
-        arrays_store=arrays_store,
-        state_labels=state_labels,
-        names=arrays_store[selected[0]] if selected else {},
-        K=K,
-        subjects=selected,
-        save_path=paths.RESULTS / "plots/GLM/emissions_coefs.png"
+    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _save_path = paths.RESULTS / "plots/GLMHMM/emissions_coefs.png"
+    _fig_ag, _fig_cls = plots.plot_emission_weights(
+        views={s: views[s] for s in _selected}, K=K, save_path=_save_path,
     )
-    return fig_ag, fig_cls
+    mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
+    return
 
 
 @app.cell
@@ -312,87 +358,24 @@ def _(arrays_store):
 
 
 @app.cell
-def _(
-    adapter,
-    arrays_store,
-    df_all,
-    fig_ag,
-    fig_cls,
-    is_2afc,
-    mo,
-    np,
-    pl,
-    plots,
-    selected,
-    ui_tau,
-):
-    from scripts.alexis_functions import filter_behavior
-    from scipy.special import log_softmax, softmax
-    # Psychometrics
-    if not arrays_store:
-        mo.stop(True)
+def _(K, is_2afc, mo, pl, plots, trial_df, ui_subjects, views):
+    _selected = [s for s in ui_subjects.value if s in views]
+    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
-    _sort_col = adapter.sort_col
-    _frames = []
+    _views_sel = {s: views[s] for s in _selected}
+    _trial_df_sel = trial_df.filter(pl.col("subject").is_in(_selected))
 
+    mo.stop(_trial_df_sel.height == 0, mo.md("No subjects with matching data lengths."))
 
-
-
-    for _subj in selected:
-        if _subj not in arrays_store: continue
-
-        _p_pred = arrays_store[_subj]["p_pred"]
-        _n_classes = _p_pred.shape[1]
-
-        _df_sub = (
-            df_all.filter(pl.col("subject") == _subj)
-            .sort(_sort_col)
-        )
-
-
-        # Ensure length match
-        if len(_df_sub) != len(_p_pred):
-            # This happens if fit logic filtered differently (e.g. min session length)
-            # fit_glm filters min length implicitly if build_sequence checks it?
-            # Or fit_glmhmm filters explicitly.
-            # My fit_glm didn't filter explicitly for length inside fit_subject except 0 checks.
-            # So df_sub matches full filter.
-            # Warning: build_sequence_from_df doesn't drop short sessions by default?
-            # Adjust if needed.
-            pass
-
-        _cols = [pl.Series("pred_choice", np.argmax(_p_pred, axis=1).astype(int))]
-        if _n_classes == 2:
-            _cols += [pl.Series("pL", _p_pred[:, 0]), pl.Series("pR", _p_pred[:, 1])]
-        else:
-             _cols += [pl.Series("pL", _p_pred[:, 0]), pl.Series("pC", _p_pred[:, 1]), pl.Series("pR", _p_pred[:, 2])]
-
-        if len(_df_sub) == len(_p_pred):
-            _df_sub = _df_sub.with_columns(_cols)
-            _frames.append(_df_sub)
-
-    _df_all_pred = pl.concat(_frames)
-    _plot_df = plots.prepare_predictions_df(_df_all_pred)
-    # arrays_store kwarg only exists in plots_alexis (2AFC); MCDR version doesn't accept it
-    _perf_kwargs = {"arrays_store": arrays_store} if is_2afc else {}
+    _plot_df_all = plots.prepare_predictions_df(_trial_df_sel)
+    _perf_kwargs = {"views": _views_sel} if is_2afc else {}
     _fig_all, _ = plots.plot_categorical_performance_all(
-        _plot_df,
-        f"GLM (tau={ui_tau.value})",
+        _plot_df_all,
+        f"glmhmm K={K}",
         **_perf_kwargs,
     )
-
-    if not is_2afc:
-        _fig_strat, _ = plots.plot_categorical_strat_by_side(_plot_df, subject="All", model_name="GLM")
-    else:
-        _fig_strat = None
-
-    _row = [_fig_all] + ([_fig_strat] if _fig_strat is not None else [])
-    mo.vstack([
-        mo.md("### Model Performance"),
-        mo.hstack(_row),
-        fig_ag, fig_cls
-    ])
-    return (softmax,)
+    _fig_all
+    return
 
 
 @app.cell

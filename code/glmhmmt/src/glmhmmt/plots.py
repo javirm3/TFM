@@ -11,6 +11,7 @@ from scipy.stats import t
 from scipy.special import softmax as _softmax
 import tomllib
 from matplotlib import cm, colors
+from typing import Tuple
 sns.set_style("white")
 
 with paths.CONFIG.open("rb") as f:
@@ -1089,79 +1090,73 @@ def plot_posterior_probs(
     return fig
 
 
+from matplotlib.collections import PathCollection
+def strip_darken(ax, factor=0.7, lw=1.5):
+    for coll in ax.collections:
+        if isinstance(coll, PathCollection):
+            fc = coll.get_facecolors()
+            if len(fc) == 0:
+                continue
+
+            new_ec = fc.copy()
+            new_ec[:, :3] *= factor
+
+            coll.set_edgecolors(new_ec)
+            coll.set_linewidth(lw)
+
 def plot_state_accuracy(
-    arrays_store: dict,
-    state_labels: dict,
-    df_all,
-    K: int,
-    subjects: list,
+    views: dict,
+    trial_df,
     thresh: float = 0.5,
-    session_col: str = "session",
-    sort_col: str = "trial_idx",
-    stimd_col: str = "stimd_n",
-    perf_col: str = "performance",
-):
-    """
-    Per-state accuracy bar chart (Ashwood et al. 2022 method).
+    session_col: str = "Session",
+    sort_col: str = "Trial",
+    performance_col: str = "correct_bool",
+    **kwargs,
+) -> Tuple[plt.Figure, pd.DataFrame]:
+    """Per-state accuracy bar chart.
+
+    Mirrors plots.plot_state_accuracy.
+    Accuracy = fraction of correct trials assigned to each state
+    with posterior probability ≥ thresh, on ILD≠0 trials only.
 
     Parameters
     ----------
-    session_col : column name for session identifier (default ``"session"``)
-    sort_col    : column name for global trial ordering (default ``"trial_idx"``)
-    stimd_col   : column whose nonzero values indicate informative trials
-                  (default ``"stimd_n"`` for MCDR)
-    perf_col    : column containing 0/1 trial outcome (default ``"performance"``)
+    trial_df : output of build_trial_df; must contain ``correct_bool`` and
+               ``ILD`` columns.
 
     Returns
     -------
-    fig, summary_df (pandas DataFrame with mean_acc (%) and total_trials)
+    fig, summary_df
     """
+    subjects = list(views.keys())
+    K = next(iter(views.values())).K if views else 2
     _label_order = (
         ["Engaged", "Disengaged"] if K == 2
         else ["Engaged"] + [f"Disengaged {i}" for i in range(1, K)]
     )
-    _cmap     = {"All": "#999999"}
-    for _ri, _lbl in enumerate(_label_order):
-        _cmap[_lbl] = _STATE_HEX[_ri % len(_STATE_HEX)]
+    _cmap = {"All": "#999999"}
+    for ri, lbl in enumerate(_label_order):
+        _cmap[lbl] = _state_color(lbl, ri)
     _x_labels = ["All"] + _label_order
 
     _acc_records = []
-    for _subj in subjects:
-        if _subj not in arrays_store:
-            continue
-        _gamma = arrays_store[_subj].get("smoothed_probs")
-        if _gamma is None:
-            continue
-        _df_sub = (
-            df_all
-            .filter(pl.col("subject") == _subj)
-            .sort(sort_col)
-            .with_row_index("_abs_row")
-            .filter(pl.col(session_col).count().over(session_col) >= 2)
-            .select(["_abs_row", stimd_col, perf_col])
-        )
-        _abs_idx = _df_sub["_abs_row"].to_numpy()
-        _valid_r = _abs_idx < _gamma.shape[0]
-        _abs_idx = _abs_idx[_valid_r]
-        _stim    = _df_sub[stimd_col].to_numpy()[_valid_r]
-        _perf    = _df_sub[perf_col].to_numpy()[_valid_r]
-        _gamma_t = _gamma[_abs_idx]
-        _nz      = _stim != 0
-        if _nz.sum() == 0:
-            continue
-        _acc_records.append({
-            "subject": _subj, "label": "All",
-            "acc": float(_perf[_nz].mean() * 100), "n": int(_nz.sum()),
-        })
-        for _k in range(K):
-            _lbl_k  = state_labels[_subj][_k]
-            _mask_k = _nz & (_gamma_t[:, _k] >= thresh)
-            _n_k    = int(_mask_k.sum())
-            _acc_records.append({
-                "subject": _subj, "label": _lbl_k,
-                "acc": float(_perf[_mask_k].mean() * 100) if _n_k > 0 else float("nan"),
-                "n": _n_k,
-            })
+    for subj in subjects:
+        df_sub = trial_df.filter(pl.col("subject") == subj)
+        P = np.asarray(views[subj].smoothed_probs)  # (T, K)
+
+        _acc_records.append({"subject": subj, "label": "All", "acc": df_sub[performance_col].to_numpy().astype(float).mean() * 100, "n": len(df_sub[performance_col])})
+
+        slbls = views[subj].state_name_by_idx
+        for k in range(K):
+            lbl  = slbls.get(k, f"State {k}")
+            mask = (P[:, k] >= thresh) 
+            if mask.sum() > 0:
+                _acc_records.append({"subject": subj, "label": lbl, "acc": df_sub[performance_col].filter(mask).to_numpy().astype(float).mean() * 100, "n": mask.sum()})
+
+    if not _acc_records:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig, pd.DataFrame()
 
     _df_acc = pd.DataFrame(_acc_records)
     _tbl = (
@@ -1171,36 +1166,24 @@ def plot_state_accuracy(
         .rename(columns={"acc": "mean_acc (%)", "n": "total_trials"})
         .round(1)
     )
-    _state_rows = _tbl.loc[_label_order].dropna()
-    _total_n    = _state_rows["total_trials"].sum()
-    if _total_n > 0:
-        _wavg = (_state_rows["mean_acc (%)"] * _state_rows["total_trials"]).sum() / _total_n
-        _tbl.loc["States (E+D)"] = [round(float(_wavg), 1), int(_total_n)]
 
     fig, ax = plt.subplots(figsize=(2 + len(_x_labels) * 0.9, 4))
-    _rng = np.random.default_rng(42)
-    for _li, _lbl in enumerate(_x_labels):
-        _vals = _df_acc[_df_acc["label"] == _lbl]["acc"].dropna().values
-        if len(_vals) == 0:
+    for li, lbl in enumerate(_x_labels):
+        rows = _df_acc[_df_acc["label"] == lbl]["acc"].dropna().values
+        if len(rows) == 0:
             continue
-        _mean = float(_vals.mean())
-        _sem  = float(_vals.std(ddof=1) / np.sqrt(len(_vals))) if len(_vals) > 1 else 0.0
-        ax.bar(_li, _mean, color=_cmap.get(_lbl, "#999999"),
-               yerr=_sem, error_kw={"linewidth": 1.2, "capsize": 4},
-               width=0.6, alpha=0.9, zorder=2)
-        ax.text(_li, _mean + _sem + 1.2, f"{_mean:.0f}",
-                ha="center", va="bottom", fontsize=10, fontweight="bold")
-        _jitter = _rng.uniform(-0.15, 0.15, size=len(_vals))
-        ax.scatter(_li + _jitter, _vals, color="black", s=20, zorder=5, alpha=0.6)
+        sns.scatter( np.full(len(rows), li), rows, color=_cmap.get(lbl, "k"), alpha=0.6, s=30, zorder=3, ax = ax)
+        sns.boxplot( x=np.full(len(rows), li), y=rows, color=_cmap.get(lbl, "k"), width=0.5, ax=ax, zorder=2)
 
-    ax.axhline(100 / 3, color="black", linestyle="--",
-               linewidth=0.9, alpha=0.5, label="Chance (33%)")
+    strip_darken(ax)
+    ax.axhline(50, color="black", linestyle="--", linewidth=0.9, alpha=0.5,
+               label="Chance (50%)")
     ax.set_xticks(range(len(_x_labels)))
     ax.set_xticklabels(_x_labels, rotation=20, ha="right")
     ax.set_xlabel("State")
     ax.set_ylabel("Accuracy (%)")
-    ax.set_ylim(30, 105)
-    ax.set_title(f"Per-state accuracy  (K={K},  posterior ≥ {thresh},  non-zero stim)")
+    ax.set_ylim(40, 105)
+    ax.set_title(f"Per-state accuracy  (K={K},  posterior ≥ {thresh},  ILD≠0)")
     ax.legend(frameon=False, fontsize=8)
     fig.tight_layout()
     sns.despine(fig=fig)

@@ -1022,17 +1022,11 @@ def prepare_predictions_df(df_pred):
 
         df = df.with_columns(
             pl.col("pR").alias("p_pred"),
-            pl.when(pl.col("Side") == 0)
+            pl.when(pl.col("stimulus") == 0)
               .then(pl.col("pL"))
               .otherwise(pl.col("pR"))
               .alias("p_model_correct"),
         )
-
-        if "stimulus" not in df.columns:
-            if "Side" in df.columns:
-                df = df.with_columns(pl.col("Side").cast(pl.Int32).alias("stimulus"))
-            else:
-                raise ValueError("No 'Side' column to derive 'stimulus' from.")
 
         return df
 
