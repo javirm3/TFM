@@ -31,26 +31,16 @@ def get_plot_path(subfolder: str, fname: str, model_name: str) -> Path:
     return out_dir / fname
 
 def prepare_predictions_df(df_pred: pl.DataFrame) -> pl.DataFrame:
-    """
-    Prepares the predictions DataFrame for plotting.
-      - subject
-      - response (0/1/2)
-      - pL, pC, pR
-      - performance (0/1)
-      - stimd_c y ttype_c
-
-    returns a Dataframe:
-      - correct_bool
-      - p_model_correct
-    """
     df = df_pred.clone()
 
     if "correct_bool" not in df.columns:
         if "performance" in df.columns:
-            df = df.with_columns(pl.col("performance").cast(pl.Boolean).alias("correct_bool"))
+            df = df.with_columns(
+                pl.col("performance").cast(pl.Boolean).alias("correct_bool")
+            )
         else:
             raise ValueError("No encuentro 'performance' ni 'correct_bool' en df.")
-        
+
     for col in ["pL", "pC", "pR"]:
         if col not in df.columns:
             raise ValueError(f"Falta la columna '{col}' en df (predicciones por trial).")
@@ -58,28 +48,36 @@ def prepare_predictions_df(df_pred: pl.DataFrame) -> pl.DataFrame:
     if "response" not in df.columns:
         raise ValueError("Falta la columna 'response' (0/1/2) en df.")
 
-    df = df.with_columns(
-        pl.when(pl.col("stimulus") == 0).then(pl.col("pL"))
-        .when(pl.col("stimulus") == 1).then(pl.col("pC"))
-        .when(pl.col("stimulus") == 2).then(pl.col("pR"))
-        .otherwise(None)
-        .alias("p_model_correct")
-    )
+    if "p_model_correct" not in df.columns:
+        df = df.with_columns(
+            pl.when(pl.col("stimulus") == 0).then(pl.col("pL"))
+            .when(pl.col("stimulus") == 1).then(pl.col("pC"))
+            .when(pl.col("stimulus") == 2).then(pl.col("pR"))
+            .otherwise(None)
+            .alias("p_model_correct")
+        )
 
     if "stimd_c" not in df.columns:
         if "stimd_n" in df.columns:
-            df = df.with_columns(pl.col("stimd_n").replace(cfg["encoding"]["stimd"], default=None).alias("stimd_c"))
+            df = df.with_columns(
+                pl.col("stimd_n")
+                .replace(cfg["encoding"]["stimd"], default=None)
+                .alias("stimd_c")
+            )
         else:
             raise ValueError("Falta 'stimd_c' y no existe 'stimd_n' para mapear.")
 
     if "ttype_c" not in df.columns:
         if "ttype_n" in df.columns:
-            df = df.with_columns(pl.col("ttype_n").replace(cfg["encoding"]["ttype"], default=None).alias("ttype_c"))
+            df = df.with_columns(
+                pl.col("ttype_n")
+                .replace(cfg["encoding"]["ttype"], default=None)
+                .alias("ttype_c")
+            )
         else:
             raise ValueError("Falta 'ttype_c' y no existe 'ttype_n' para mapear.")
 
     return df
-
 
 def plot_cat_panel(ax, df, group_col, order, title, xlabel, ylabel=None, palette=None, labels=None):
     
@@ -222,11 +220,9 @@ def _plot_state_panel(ax, df_state, group_col, order, color, label):
 
 
 def plot_categorical_performance_by_state(
-    df: pl.DataFrame,
-    smoothed_probs,
-    state_labels: dict,
+    df,
+    views: dict,
     model_name: str,
-    state_assign=None,
 ):
     """
     Plot per-state categorical performance: dots + line per state,  no pooled
@@ -244,24 +240,29 @@ def plot_categorical_performance_by_state(
                     ranks (0=Engaged, 1=Disengaged, …).  If provided,
                     smoothed_probs is ignored.
     """
-    if state_assign is not None:
-        _arr = np.asarray(state_assign, dtype=int)
-        T    = len(_arr)
-        K    = int(_arr.max()) + 1
-    else:
-        T, K = smoothed_probs.shape
-        _arr = np.argmax(smoothed_probs, axis=1).astype(int)
+    if not isinstance(df, pl.DataFrame):
+        df = pl.from_pandas(df)
 
-    assert df.height == T, (
-        f"df has {df.height} rows but state assignment has T={T}"
-    )
-    df = df.with_columns(pl.Series("_state_k", _arr))
+    if "state_rank" not in df.columns:
+        raise ValueError("df must contain 'state_rank' (from build_trial_df).")
+
+    # resolve K
+    K = next(iter(views.values())).K if views else int(df["state_rank"].max()) + 1
+
+    # resolve labels by rank
+    state_labels = {}
+    for v in views.values():
+        for raw_idx, lbl in v.state_name_by_idx.items():
+            rank = v.state_rank_by_idx[int(raw_idx)]
+            state_labels.setdefault(rank, lbl)
+
+    df = df.with_columns(pl.col("state_rank").cast(pl.Int64).alias("_state_k"))
 
     _state_colors = {
         k: _state_color(state_labels.get(k, f"State {k}"), k)
         for k in range(K)
     }
-
+    
     fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=True)
     ax1, ax2, ax3 = axes
 

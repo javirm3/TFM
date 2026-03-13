@@ -19,9 +19,11 @@ def _():
     import paths
     from scripts.fit_glm import main as fit_main, generate_model_id
     from tasks import get_adapter
+    from widgets import ModelManagerWidget
 
     sns.set_style("white")
     return (
+        ModelManagerWidget,
         fit_main,
         generate_model_id,
         get_adapter,
@@ -55,39 +57,22 @@ def _(get_adapter, paths, pl, ui_task):
 
 
 @app.cell
-def _(mo, paths, ui_task):
-    import json as _json
-    fits_path = paths.RESULTS / "fits" / ui_task.value / "glm"
-    _existing_opts = []
-    if fits_path.exists():
-        _existing_opts = sorted([
-            d.name for d in fits_path.iterdir()
-            if d.is_dir() and (d / "config.json").exists()
-        ])
-    ui_existing = mo.ui.dropdown(
-        options=_existing_opts,
-        value=None,
-        label="Load existing model (overrides params below)",
-    )
-    ui_alias = mo.ui.text(
-        value="",
-        label="Custom alias (optional)",
-        placeholder="e.g. my_best_fit",
-    )
-    return ui_alias, ui_existing
+def _(ModelManagerWidget, adapter, df_all, mo, ui_task):
+    is_2afc = adapter.num_classes == 2
+    _subjects = [str(s) for s in df_all["subject"].unique().to_list()]
 
-
-@app.cell
-def _(paths, ui_existing, ui_task):
-    import json as _json
-    loaded_cfg: dict = {}
-    if ui_existing.value:
-        _cfg_path = (
-            paths.RESULTS / "fits" / ui_task.value/ "glm" / ui_existing.value / "config.json"
-        )
-        if _cfg_path.exists():
-            loaded_cfg = _json.loads(_cfg_path.read_text())
-    return (loaded_cfg,)
+    mm_widget = ModelManagerWidget(
+        model_type="glm",
+        task=ui_task.value,
+        is_2afc=is_2afc,
+        subjects=_subjects,
+        tau=5,
+        lapse=False,
+        lapse_max=0.2,
+    )
+    ui_model_manager = mo.ui.anywidget(mm_widget)
+    ui_model_manager
+    return ui_model_manager
 
 
 @app.cell
@@ -141,49 +126,29 @@ def _(df_all, pl, plt, sns):
 
 
 @app.cell
-def _(adapter, df_all, loaded_cfg: dict, mo, ui_task):
+def _(adapter, mo, ui_model_manager, ui_task):
+    class _V:
+        def __init__(self, value):
+            self.value = value
+
+    _val = ui_model_manager.value
     is_2afc = adapter.num_classes == 2
     task_name = ui_task.value
 
-    emission_cols_opts = (
-        adapter.default_emission_cols() + adapter.sf_cols(df_all)
-        if is_2afc
-        else adapter.default_emission_cols()
-    )
+    ui_existing = _V(None if _val.get("existing_model") in ("", "__default__") else _val.get("existing_model"))
+    ui_alias = _V(_val.get("alias", ""))
+    ui_subjects = _V(_val.get("subjects", []))
+    ui_tau = _V(_val.get("tau", 5))
+    ui_lapse = _V(_val.get("lapse", False))
+    ui_lapse_max = _V(_val.get("lapse_max", 0.2))
+    ui_emission_cols = _V(_val.get("emission_cols", []))
 
-    # Seed initial widget values from loaded config (if a model was selected)
-    _tau_val   = loaded_cfg.get("tau", 5)
-    _lapse_val = loaded_cfg.get("lapse", False)
-    _lapse_max_val = loaded_cfg.get("lapse_max", 0.2)
-    _ecols_saved = loaded_cfg.get("emission_cols", [])
-    _ecols_valid = [c for c in _ecols_saved if c in emission_cols_opts]
-    _ecols_val = _ecols_valid if _ecols_valid else emission_cols_opts[:10]
-
-    ui_subjects = mo.ui.multiselect(
-        value=df_all["subject"].unique().to_list(),
-        options=df_all["subject"].unique().to_list(),
-        label="Subjects",
-    )
-
-    ui_tau = mo.ui.slider(
-        start=1, stop=100, value=_tau_val, step=1, label="τ (History)"
-    )
-
-    ui_lapse = mo.ui.checkbox(value=_lapse_val, label="Fit lapse rates γ_L, γ_R")
-
-    ui_lapse_max = mo.ui.slider(
-        start=0.01, stop=0.5, value=_lapse_max_val, step=0.01, label="Max lapse"
-    )
-
-    ui_emission_cols = mo.ui.multiselect(
-        options=emission_cols_opts,
-        value=_ecols_val,
-        label="Regressors (X)",
-    )
     return (
         is_2afc,
         task_name,
+        ui_alias,
         ui_emission_cols,
+        ui_existing,
         ui_lapse,
         ui_lapse_max,
         ui_subjects,
@@ -202,23 +167,18 @@ def _(
     ui_existing,
     ui_lapse,
     ui_lapse_max,
+    ui_model_manager,
     ui_subjects,
     ui_tau,
 ):
     current_hash = generate_model_id(task_name, ui_tau.value, ui_emission_cols.value, lapse=ui_lapse.value)
 
-    fit_button = mo.ui.run_button(label="Run GLM Fit")
-
     mo.vstack([
         mo.md("### GLM Configuration"),
-        mo.hstack([ui_existing, ui_alias]),
-        mo.hstack([ui_subjects, ui_tau]),
-        (mo.hstack([ui_lapse, ui_lapse_max]) if is_2afc else mo.md("")),
-        ui_emission_cols,
+        ui_model_manager,
         mo.md(f"**Current params hash:** `{current_hash}`"),
-        fit_button,
     ])
-    return current_hash, fit_button
+    return current_hash
 
 
 @app.cell
@@ -228,7 +188,7 @@ def _():
 
 @app.cell
 def _(
-    fit_button,
+    ui_model_manager,
     fit_main,
     mo,
     ui_alias,
@@ -239,7 +199,8 @@ def _(
     ui_task,
     ui_tau,
 ):
-    mo.stop(not fit_button.value, mo.md("Configure parameters and press **Run GLM Fit**."))
+    _clicks = ui_model_manager.value.get("run_fit_clicks", 0)
+    mo.stop(_clicks == 0, mo.md("Configure parameters and press **Run GLM Fit**."))
 
     with mo.status.spinner(title=f"Fitting GLM for {len(ui_subjects.value)} subjects..."):
         fit_main(

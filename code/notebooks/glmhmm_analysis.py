@@ -27,6 +27,7 @@ def _():
     from tasks import get_adapter
     from glmhmmt.views import build_views
     from glmhmmt.postprocess import build_trial_df, build_emission_weights_df
+    from widgets import ModelManagerWidget
 
     sns.set_style("white")
 
@@ -38,6 +39,7 @@ def _():
     )
     ui_task
     return (
+        ModelManagerWidget,
         build_emission_weights_df,
         build_trial_df,
         build_views,
@@ -63,109 +65,58 @@ def _(get_adapter, paths, pl, ui_task):
 
 
 @app.cell
-def _(mo, paths, ui_task):
-    import json as _json
-    _fits_path = paths.RESULTS / "fits" / ui_task.value / "glmhmm"
-    _existing_opts = []
-    if _fits_path.exists():
-        _existing_opts = sorted([
-            d.name for d in _fits_path.iterdir()
-            if d.is_dir() and (d / "config.json").exists()
-        ])
-    ui_existing = mo.ui.dropdown(
-        options=_existing_opts,
-        value=None,
-        label="Load existing model (overrides params below)",
-    )
-    ui_existing
-    return (ui_existing,)
-
-
-@app.cell
-def _(paths, ui_existing, ui_task):
-    import json as _json
-    loaded_cfg: dict = {}
-    if ui_existing.value:
-        _cfg_path = (
-            paths.RESULTS / "fits" / ui_task.value / "glmhmm" / ui_existing.value / "config.json"
-        )
-        if _cfg_path.exists():
-            loaded_cfg = _json.loads(_cfg_path.read_text())
-    # loaded_cfg
-    return (loaded_cfg,)
-
-
-@app.cell
-def _(adapter, df_all, loaded_cfg: dict, mo):
-    # ── controls ───────────────────────────────────────────────────────────────
+def _(ModelManagerWidget, adapter, df_all, mo, ui_task):
     is_2afc = adapter.num_classes == 2
-    emission_cols_opts = (
-        adapter.default_emission_cols() + adapter.sf_cols(df_all)
-        if is_2afc
-        else adapter.default_emission_cols()
-    )
+    _subjects = [str(s) for s in df_all["subject"].unique().to_list()]
 
-    # Seed from loaded config if a model was selected
-    _K_val = loaded_cfg.get("K_list", [2])[0] if loaded_cfg.get("K_list") else 2
-    _tau_val = loaded_cfg.get("tau", 50)
-    _ecols_saved = loaded_cfg.get("emission_cols", [])
-    _ecols_valid = [c for c in _ecols_saved if c in emission_cols_opts]
-    _ecols_val = _ecols_valid if _ecols_valid else emission_cols_opts
-    _model_id_val = loaded_cfg.get("model_id", "glmhmm_2")
-
-    ui_K = mo.ui.slider(start=2, stop=6, value=_K_val, label="K")
-    ui_subjects = mo.ui.multiselect(
-        value=df_all["subject"].unique(),
-        options=df_all["subject"].unique().sort(),
-        label="Subjects",
+    mm_widget = ModelManagerWidget(
+        model_type="glmhmm",
+        task=ui_task.value,
+        is_2afc=is_2afc,
+        subjects=_subjects,
+        K=2,
+        tau=50,
     )
-    ui_tau = mo.ui.slider(
-        start=1,
-        stop=200,
-        value=_tau_val,
-        step=1,
-        label="τ action trace half-life",
-    )
-    ui_emission_cols = mo.ui.multiselect(
-        options=emission_cols_opts,
-        value=_ecols_val,
-        label="Emission regressors (X)",
-    )
-
-    ui_alias = mo.ui.text(
-        value="",
-        label="Custom alias (optional)",
-        placeholder="e.g. my_best_fit",
-    )
-    return is_2afc, ui_K, ui_alias, ui_emission_cols, ui_subjects, ui_tau
+    ui_model_manager = mo.ui.anywidget(mm_widget)
+    return is_2afc, ui_model_manager
 
 
 @app.cell
-def _(
-    mo,
-    ui_K,
-    ui_alias,
-    ui_emission_cols,
-    ui_existing,
-    ui_subjects,
-    ui_task,
-    ui_tau,
-):
-    from scripts.fit_glmhmmt import generate_model_id as _gen_id
-    current_hash = _gen_id(ui_task.value, ui_K.value, ui_tau.value, ui_emission_cols.value)
+def _(mo, ui_model_manager, ui_task):
+    from scripts.fit_glmhmm import generate_model_id as _gen_id
 
-    fit_button = mo.ui.run_button(label="Run fit")
+    class _V:
+        def __init__(self, value):
+            self.value = value
+
+    _val = ui_model_manager.value
+    current_hash = _gen_id(ui_task.value, _val["K"], _val["tau"], _val["emission_cols"])
+    ui_existing = _V(None if _val.get("existing_model") in ("", "__default__") else _val.get("existing_model"))
+    ui_alias = _V(_val.get("alias", ""))
+    ui_K = _V(_val["K"])
+    ui_subjects = _V(_val["subjects"])
+    ui_tau = _V(_val["tau"])
+    ui_emission_cols = _V(_val["emission_cols"])
+    fit_button = _V(_val.get("run_fit_clicks", 0))
+
     mo.vstack(
         [
             mo.md("### Configuration"),
-            mo.hstack([ui_existing, ui_alias]),
-            mo.hstack([ui_K, ui_tau, ui_subjects, ui_emission_cols]),
+            ui_model_manager,
             mo.md(f"**Current params hash:** `{current_hash}`"),
-            mo.hstack([fit_button]), 
         ],
         align="center",
     )
-    return current_hash, fit_button
+    return (
+        current_hash,
+        fit_button,
+        ui_K,
+        ui_alias,
+        ui_emission_cols,
+        ui_existing,
+        ui_subjects,
+        ui_tau,
+    )
 
 
 @app.cell
@@ -233,7 +184,9 @@ def _(
 
     arrays_store = {}
     for _subj in ui_subjects.value:
-        _f = OUT / f"{_subj}_K{K}_glmhmm_arrays.npz"
+        _f = OUT / f"{_subj}_glmhmm_arrays.npz"
+        if not _f.exists():
+            _f = OUT / f"{_subj}_K{K}_glmhmm_arrays.npz"
         if _f.exists():
             _d = dict(np.load(_f, allow_pickle=True))
             # decode column names saved as string arrays; fall back to adapter output
@@ -472,140 +425,29 @@ def _(
 
 
 @app.cell
-def _(
-    K,
-    adapter,
-    arrays_store,
-    df_all,
-    is_2afc,
-    mo,
-    np,
-    pl,
-    plots,
-    ui_subjects,
-    views,
-):
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+def _(K, is_2afc, mo, pl, plots, trial_df, ui_subjects, views):
+    _selected = [s for s in ui_subjects.value if s in views]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
-    _sort_col = adapter.sort_col
-    _ses_col = adapter.session_col
+    _views_sel = {s: views[s] for s in _selected}
+    _trial_df_sel = trial_df.filter(pl.col("subject").is_in(_selected))
 
-    _frames = []
-    for _subj in _selected:
-        _p_pred = arrays_store[_subj]["p_pred"]
-        _n_classes = _p_pred.shape[1]
-        _df_sub = (
-            df_all.filter(pl.col("subject") == _subj)
-            .sort(_sort_col)
-            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
-        )
-        _cols = [pl.Series("pred_choice", np.argmax(_p_pred, axis=1).astype(int))]
-        if _n_classes == 2:
-            _cols += [pl.Series("pL", _p_pred[:, 0]), pl.Series("pR", _p_pred[:, 1])]
-        else:
-            _cols += [
-                pl.Series("pL", _p_pred[:, 0]),
-                pl.Series("pC", _p_pred[:, 1]),
-                pl.Series("pR", _p_pred[:, 2]),
-            ]
-        if len(_df_sub) == len(_p_pred):
-            _frames.append(_df_sub.with_columns(_cols))
-        else:
-            print(f"\u26a0\ufe0f  {_subj}: length mismatch ({len(_df_sub)} vs {len(_p_pred)}), skipping")
+    mo.stop(_trial_df_sel.height == 0, mo.md("No subjects with matching data lengths."))
 
-    mo.stop(not _frames, mo.md("No subjects with matching data lengths."))
-    _df_all_pred = pl.concat(_frames)
-    _plot_df = plots.prepare_predictions_df(_df_all_pred)
-    _perf_kwargs = {"views": views} if is_2afc else {}
-    _fig_all, _ = plots.plot_categorical_performance_all(_plot_df, f"glmhmm K={K}", **_perf_kwargs)
+    _plot_df_all = plots.prepare_predictions_df(_trial_df_sel)
+    _perf_kwargs = {"views": _views_sel} if is_2afc else {}
+    _fig_all, _ = plots.plot_categorical_performance_all(
+        _plot_df_all,
+        f"glmhmm K={K}",
+        **_perf_kwargs,
+    )
 
-    # ── per-state pool with normalised rank indices ───────────────────────────
-    _lrank_map = {"Engaged": 0, "Disengaged": 1, **{f"Disengaged {i}": i for i in range(1, K)}}
-    _pool_dfs = []
-    _pool_assigns = []
-    for _subj in _selected:
-        _p_pred_s = arrays_store[_subj]["p_pred"]
-        _nc_s = _p_pred_s.shape[1]
-        _pred_cols_s = [pl.Series("pred_choice", np.argmax(_p_pred_s, axis=1).astype(int))]
-        if _nc_s == 2:
-            _pred_cols_s += [pl.Series("pL", _p_pred_s[:, 0]), pl.Series("pR", _p_pred_s[:, 1])]
-        else:
-            _pred_cols_s += [
-                pl.Series("pL", _p_pred_s[:, 0]),
-                pl.Series("pC", _p_pred_s[:, 1]),
-                pl.Series("pR", _p_pred_s[:, 2]),
-            ]
-        _df_s = (
-            df_all.filter(pl.col("subject") == _subj)
-            .sort(_sort_col)
-            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
-            .with_columns(_pred_cols_s)
-        )
-        if len(_df_s) != _p_pred_s.shape[0]:
-            continue
-        _plot_df_s = plots.prepare_predictions_df(_df_s)
-        _gamma_s = arrays_store[_subj]["smoothed_probs"]
-        _T_s = _gamma_s.shape[0]
-        _map_k = np.argmax(_gamma_s, axis=1).astype(int)
-
-        # ── per-state emission: replace marginal p_pred with state-specific P ──
-        _W = np.asarray(arrays_store[_subj]["emission_weights"])  # (K, C-1, M)
-        _X_s = np.asarray(arrays_store[_subj]["X"])               # (T, M)
-        if is_2afc:
-            # Binary: W[k,0,:] = logit for P(LEFT); P(right|k,t) = sigmoid(-logit)
-            _logit_left = np.einsum("km,tm->tk", _W[:, 0, :], _X_s)  # (T, K)
-            _p_right_per_state = 1.0 / (1.0 + np.exp(_logit_left))    # (T, K) P(right|state)
-            _p_state_pR = _p_right_per_state[np.arange(_T_s), _map_k]  # (T,)
-            _p_state_pL = 1.0 - _p_state_pR
-            _plot_df_s = _plot_df_s.with_columns([
-                pl.Series("pR", _p_state_pR.astype(np.float64)),
-                pl.Series("pL", _p_state_pL.astype(np.float64)),
-                pl.Series("p_pred", _p_state_pR.astype(np.float64)),
-            ])
-        else:
-            _logits = np.einsum("kci,ti->tkc", _W, _X_s)
-            _nc_logits = _logits.shape[2] + 1
-            if _nc_logits == 2:
-                _logits_full = np.concatenate([_logits, np.zeros((_T_s, K, 1))], axis=2)
-            else:
-                _logits_full = np.concatenate(
-                    [_logits, np.zeros((_T_s, K, 1))],
-                    axis=2,
-                )
-            _lse = _logits_full.max(axis=2, keepdims=True)
-            _exp = np.exp(_logits_full - _lse)
-            _p_state = _exp / _exp.sum(axis=2, keepdims=True)
-            _stim = _plot_df_s["stimulus"].to_numpy().astype(int)
-            _p_state_correct = _p_state[np.arange(_T_s), _map_k, _stim]
-            _plot_df_s = _plot_df_s.with_columns(
-                pl.Series("p_model_correct", _p_state_correct.astype(np.float64))
-            )
-
-        rank_by_idx = views[_subj].state_rank_by_idx
-        _norm = np.array([rank_by_idx[int(k)] for k in _map_k], dtype=int)
-        _pool_dfs.append(_plot_df_s.with_columns(pl.Series("state_rank", _norm)))
-        _pool_assigns.append(_norm)
-
-    _df_state_pool = pl.concat(_pool_dfs)
-    _assign_pool = np.concatenate(_pool_assigns)
-    _state_lbl_global = {0: "Engaged", 1: "Disengaged", **{i: f"Disengaged {i}" for i in range(2, K)}}
-
-    if is_2afc:
-        _fig_state, _ = plots.plot_categorical_performance_by_state(
-            df=_df_state_pool,
-            views={s: views[s] for s in _selected},
-            model_name=f"glmhmm K={K} \u2014 per state",
-        )
-    else:
-        _gamma_pool = np.concatenate([arrays_store[s]["smoothed_probs"] for s in _selected], axis=0)
-        _fig_state, _ = plots.plot_categorical_performance_by_state(
-            df=_df_state_pool,
-            smoothed_probs=_gamma_pool,
-            state_labels=_state_lbl_global,
-            model_name=f"glmhmm K={K} \u2014 per state",
-            state_assign=_assign_pool,
-        )
+    _plot_df_state = plots.prepare_predictions_df(_trial_df_sel)
+    _fig_state, _ = plots.plot_categorical_performance_by_state(
+        df=_plot_df_state,
+        views=_views_sel,
+        model_name=f"glmhmm K={K} — per state",
+    )
 
     mo.vstack(
         [

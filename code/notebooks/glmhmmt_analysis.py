@@ -18,6 +18,7 @@ def _():
     import seaborn as sns
     import pandas as pd
     from tasks import get_adapter
+    from widgets import ModelManagerWidget
     sns.set_style("white")
 
     ui_task = mo.ui.dropdown(
@@ -26,7 +27,7 @@ def _():
         label="Task:",
     )
     ui_task
-    return get_adapter, mo, np, paths, pl, plt, sns, ui_task
+    return ModelManagerWidget, get_adapter, mo, np, paths, pl, plt, sns, ui_task
 
 
 @app.cell
@@ -39,97 +40,48 @@ def _(get_adapter, paths, pl, ui_task):
 
 
 @app.cell
-def _(mo, paths, ui_task):
-    import json as _json
-    _fits_path = paths.RESULTS / "fits" / ui_task.value / "glmhmmt"
-    _existing_opts = []
-    if _fits_path.exists():
-        _existing_opts = sorted([
-            d.name for d in _fits_path.iterdir()
-            if d.is_dir() and (d / "config.json").exists()
-        ])
-    ui_existing = mo.ui.dropdown(
-        options=_existing_opts,
-        value=None,
-        label="Load existing model (overrides params below)",
-    )
-    ui_existing
-    return (ui_existing,)
-
-
-@app.cell
-def _(paths, ui_existing, ui_task):
-    import json as _json
-    loaded_cfg: dict = {}
-    if ui_existing.value:
-        _cfg_path = (
-            paths.RESULTS / "fits" / ui_task.value / "glmhmmt" / ui_existing.value / "config.json"
-        )
-        if _cfg_path.exists():
-            loaded_cfg = _json.loads(_cfg_path.read_text())
-    loaded_cfg
-    return (loaded_cfg,)
-
-
-@app.cell
-def _(adapter, df_all, loaded_cfg: dict, mo):
-
-    # ── controls ──────────────────────────────────────────────────────────────
+def _(ModelManagerWidget, adapter, df_all, mo, ui_task):
     is_2afc = adapter.num_classes == 2
-    _ecols_opts = (
-        adapter.default_emission_cols() + adapter.sf_cols(df_all)
-        if is_2afc else adapter.default_emission_cols()
-    )
-    _tcols_opts = adapter.default_transition_cols()
+    _subjects = [str(s) for s in df_all["subject"].unique().to_list()]
 
-    # Seed from loaded config if a model was selected
-    _K_val     = loaded_cfg.get("K_list", [2])[0] if loaded_cfg.get("K_list") else 2
-    _tau_val   = loaded_cfg.get("tau", 50)
-    _ecols_saved = loaded_cfg.get("emission_cols", [])
-    _ecols_valid = [c for c in _ecols_saved if c in _ecols_opts]
-    _ecols_val = _ecols_valid if _ecols_valid else _ecols_opts
-    _tcols_saved = loaded_cfg.get("transition_cols", [])
-    _tcols_valid = [c for c in _tcols_saved if c in _tcols_opts]
-    _tcols_val = _tcols_valid if _tcols_valid else _tcols_opts
-    _model_id_val = loaded_cfg.get("model_id", "glmhmmt_2")
+    mm_widget = ModelManagerWidget(
+        model_type="glmhmmt",
+        task=ui_task.value,
+        is_2afc=is_2afc,
+        subjects=_subjects,
+        K=2,
+        tau=50,
+    )
+    ui_model_manager = mo.ui.anywidget(mm_widget)
+    ui_model_manager
+    return (ui_model_manager,)
 
-    ui_K = mo.ui.slider(start=2, stop=6, value=_K_val, label="K")
-    ui_subjects = mo.ui.multiselect(
-        value=df_all["subject"].unique(),
-        options=df_all["subject"].unique(),
-        label="Subjects",
-    )
 
-    ui_alias = mo.ui.text(
-        value=_model_id_val if _model_id_val != "glmhmmt_2" else "",
-        label="Custom alias (optional)",
-        placeholder="e.g. my_best_fit",
-    )
-    ui_emission_cols = mo.ui.multiselect(
-        options=_ecols_opts,
-        value=_ecols_val,
-        label="Emission regressors (X)",
-    )
+@app.cell
+def _(mo, ui_model_manager, ui_task):
+    from scripts.fit_glmhmmt import generate_model_id as _gen_id
 
-    ui_transition_cols = mo.ui.multiselect(
-        options=_tcols_opts,
-        value=_tcols_val,
-        label="Transition regressors (U)",
-    )
+    class _V:
+        def __init__(self, value):
+            self.value = value
 
-    ui_tau = mo.ui.slider(
-        start=1, stop=200, value=_tau_val, step=1,
-        label="τ action trace half-life",
-    )
+    _val = ui_model_manager.value
+    current_hash = _gen_id(ui_task.value, _val["K"], _val["tau"], _val["emission_cols"])
+    ui_existing = _V(None if _val.get("existing_model") in ("", "__default__") else _val.get("existing_model"))
+    ui_alias = _V(_val.get("alias", ""))
+    ui_K = _V(_val["K"])
+    ui_subjects = _V(_val["subjects"])
+    ui_tau = _V(_val["tau"])
+    ui_emission_cols = _V(_val["emission_cols"])
+    ui_transition_cols = _V(_val["transition_cols"])
+    fit_button = _V(_val.get("run_fit_clicks", 0))
 
-    return (
-        ui_K,
-        ui_alias,
-        ui_emission_cols,
-        ui_subjects,
-        ui_tau,
-        ui_transition_cols,
-    )
+    mo.vstack([
+        mo.md("### Model Configuration"),
+        ui_model_manager,
+        mo.md(f"**Hash:** `{current_hash}`"),
+    ])
+    return current_hash, fit_button, ui_K, ui_alias, ui_emission_cols, ui_existing, ui_subjects, ui_tau, ui_transition_cols
 
 
 @app.cell
@@ -223,7 +175,9 @@ def _(
 
     arrays_store = {}
     for _subj in ui_subjects.value:
-        _f = OUT / f"{_subj}_K{K}_glmhmmt_arrays.npz"
+        _f = OUT / f"{_subj}_glmhmmt_arrays.npz"
+        if not _f.exists():
+            _f = OUT / f"{_subj}_K{K}_glmhmmt_arrays.npz"
         if _f.exists():
             _d = dict(np.load(_f, allow_pickle=True))
             # decode column names saved as string arrays; fall back to build output

@@ -133,7 +133,6 @@ def build_trial_df(
         pl.Series(f"p_state_{k}", view.smoothed_probs[:, k].astype(np.float64))
         for k in range(view.K)
     ]
-
     # ── MAP state assignment ───────────────────────────────────────────────────
     map_k            = view.map_states()                              # (T,) int
     state_rank_arr   = np.array(
