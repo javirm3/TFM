@@ -25,7 +25,9 @@ class TwoAFCAdapter(TaskAdapter):
 
     num_classes: int = 2
     data_file: str   = "alexis_combined.parquet"
-    sort_col: str    = "Trial"
+    # Session-local trial numbers must be sorted within session to match the
+    # per-session concatenation order used during fitting.
+    sort_col         = ["Session", "Trial"]
     session_col: str = "Session"
 
     # ── state-scoring options ────────────────────────────────────────────────
@@ -85,6 +87,23 @@ class TwoAFCAdapter(TaskAdapter):
         """Return any stimulus-frame (sf_*) columns present in *df*."""
         return [c for c in df.columns if c.startswith(_SF_COL_PREFIX)]
 
+    @property
+    def choice_labels(self) -> list[str]:
+        return ["Left", "Right"]
+
+    @property
+    def probability_columns(self) -> list[str]:
+        return ["pL", "pR"]
+    
+    def get_correct_class(self, df: pl.DataFrame) -> np.ndarray:
+        stim = df["stimulus"].to_numpy().astype(float)
+        unique = set(np.unique(stim[~np.isnan(stim)]).tolist())
+        if unique.issubset({0.0, 1.0}):
+            return stim.astype(int)
+        if unique.issubset({-1.0, 1.0}):
+            return np.where(stim > 0, 1, 0).astype(int)
+        return np.where(stim > 0, 1, np.where(stim < 0, 0, -1)).astype(int)
+
     # ── column mapping ───────────────────────────────────────────────────────
 
     @property
@@ -95,8 +114,8 @@ class TwoAFCAdapter(TaskAdapter):
             "trial":       "Trial",
             "session":     "Session",
             "stimulus":    "Side",
-            "response":    "response",
-            "performance": "performance",
+            "response":    "Choice",
+            "performance": "Hit",
         }
 
     # ── plots ────────────────────────────────────────────────────────────────

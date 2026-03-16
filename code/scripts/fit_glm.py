@@ -180,6 +180,8 @@ def save_results(result: dict, out_dir: Path, tau: float):
     _lapse = result.get("lapse_rates", np.zeros(2))
     _n_lapse_params = int(np.any(_lapse > 0)) * 2
     acc = float(np.mean(np.argmax(result["p_pred"], axis=1) == result["y"])) if result["T"] > 0 else 0.0
+    raw_ll = -float(result["nll"]) if result["T"] > 0 else np.nan
+    ll_per_trial = raw_ll / result["T"] if result["T"] > 0 else np.nan
     k = (result["W"].shape[0] - 1) * result["W"].shape[1] + _n_lapse_params
     bic = k * np.log(result["T"]) + 2 * result["nll"] if result["T"] > 0 else np.nan
     
@@ -188,6 +190,8 @@ def save_results(result: dict, out_dir: Path, tau: float):
         "model_kind": ["glm"],
         "tau": [tau],
         "nll": [result["nll"]],
+        "raw_ll": [raw_ll],
+        "ll_per_trial": [ll_per_trial],
         "bic": [bic],
         "acc": [acc],
         "k": [k],

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import numpy as np
 import polars as pl
+from tasks import TaskAdapter
 
 from glmhmmt.views import SubjectFitView, _LABEL_RANK
 
@@ -70,6 +71,7 @@ def _stable_softmax(logits: np.ndarray) -> np.ndarray:
 
 def build_trial_df(
     view: SubjectFitView,
+    adapter: TaskAdapter,
     df_behavioral: pl.DataFrame,
     behavioral_cols: dict[str, str],
 ) -> pl.DataFrame:
@@ -120,13 +122,30 @@ def build_trial_df(
 
     # ── rename standard behavioral columns to canonical names ─────────────────
     rename_map: dict[str, str] = {}
+    primary_name_by_actual: dict[str, str] = {}
+    alias_pairs: list[tuple[str, str]] = []
     for canonical, actual in behavioral_cols.items():
-        if actual in df_behavioral.columns and actual != canonical:
-            rename_map[actual] = canonical
+        if actual not in df_behavioral.columns:
+            continue
+        if actual not in primary_name_by_actual:
+            primary = canonical if actual != canonical else actual
+            primary_name_by_actual[actual] = primary
+            if actual != canonical:
+                rename_map[actual] = canonical
+        else:
+            alias_pairs.append((canonical, primary_name_by_actual[actual]))
     if rename_map:
         df_out = df_behavioral.rename(rename_map)
     else:
         df_out = df_behavioral.clone()
+    if alias_pairs:
+        df_out = df_out.with_columns(
+            [
+                pl.col(src).alias(alias)
+                for alias, src in alias_pairs
+                if src in df_out.columns and alias not in df_out.columns and alias != src
+            ]
+        )
 
     # ── p_state_k  — HMM posterior, direct copy (NEVER recomputed) ───────────
     posterior_series = [
@@ -146,29 +165,27 @@ def build_trial_df(
     C = view.num_classes
     p_map = _emission_probs(view.emission_weights, view.X, map_k, C)  # (T, C)
 
-    stim_col = behavioral_cols.get("stimulus", "stimulus")
-    print(f"Stimulus column for subject {view.subject!r}: {stim_col!r}")
-    if stim_col in df_out.columns:
-        print(f"Using stimulus column {stim_col!r} for subject {view.subject!r}")
-        stimulus_vals = df_out[stim_col].to_numpy().astype(int)
-    else:
-        # fallback: use the canonical name (after rename)
-        stimulus_vals = df_out["stimulus"].to_numpy().astype(int)
-    p_model_correct_map = p_map[np.arange(T), stimulus_vals]
+    correct_class = adapter.get_correct_class(df_out)
+    if np.any((correct_class < 0) | (correct_class >= C)):
+        bad = np.unique(correct_class[(correct_class < 0) | (correct_class >= C)])
+        raise ValueError(
+            f"Subject {view.subject!r}: adapter returned invalid correct_class "
+            f"indices {bad.tolist()} for C={C}."
+        )
+
+    p_model_correct_map = p_map[np.arange(T), correct_class]    
 
     # ── marginal class probabilities (from view.p_pred if available) ──────────
-    if view.p_pred is not None:
-        p_marginal = np.asarray(view.p_pred)   # (T, C)
-    else:
-        # Recompute marginal via weighted sum: Σ_k γ(z_t=k) * p(y_t | z_t=k, x_t)
-        W, X = view.emission_weights, view.X
-        logits_all_ce = np.einsum("kcf,tf->tkc", W, X)       # (T, K, C-1)
-        Tk = T * view.K
-        logits_flat = _insert_reference(logits_all_ce.reshape(Tk, C - 1), C)
-        p_per_k = _stable_softmax(logits_flat).reshape(T, view.K, C)  # (T, K, C)
-        p_marginal = np.einsum("tk,tkc->tc", view.smoothed_probs, p_per_k)
+    if view.p_pred is None:
+        raise ValueError(
+            f"Subject {view.subject!r}: missing p_pred. "
+            "Predictions must be precomputed upstream and stored in the fit arrays."
+        )
 
-    p_marginal_correct = p_marginal[np.arange(T), stimulus_vals]
+    p_marginal = np.asarray(view.p_pred, dtype=np.float64)
+    C = p_marginal.shape[1]
+
+    p_marginal_correct = p_marginal[np.arange(T), correct_class]
 
     # ── assemble all new columns ───────────────────────────────────────────────
     new_cols = [

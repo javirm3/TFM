@@ -87,10 +87,13 @@ function renderSelectAll(subjectsList, currentSubjects) {
 
 function render({ model, el }) {
   const containerId = "mm-" + Math.random().toString(36).substring(7);
+  let aliasDraft = model.get("alias") || "";
+  let aliasDirty = false;
 
   const updateUI = () => {
     const existingVal      = model.get("existing_model");
     const is2afc           = model.get("is_2afc");
+    const isRunning        = model.get("is_running");
     const modelType        = model.get("model_type");
     const currentTask      = model.get("task");
     const mode             = model.get("ui_mode");
@@ -104,9 +107,23 @@ function render({ model, el }) {
     const currentLapse     = model.get("lapse");
     const currentLapseMax  = model.get("lapse_max");
     const currentAlias     = model.get("alias");
+    const aliasError       = model.get("alias_error");
+    const aliasStatus      = model.get("alias_status");
+    const savedModelName   = model.get("saved_model_name");
     const existingInfo     = model.get("existing_models_info");
     const emissionGroups   = model.get("emission_groups");
     const transitionGroups = model.get("transition_groups");
+
+    if (!aliasDirty) {
+      aliasDraft = currentAlias;
+    }
+
+    const aliasMessage = aliasDirty
+      ? ""
+      : (aliasError || aliasStatus || (savedModelName ? `Current saved model: ${savedModelName}` : ""));
+    const aliasMessageClass = aliasError
+      ? "error"
+      : (aliasStatus ? "status" : "hint");
 
     // ── Shell ───────────────────────────────────────────────────────────────
     let html = `
@@ -141,6 +158,7 @@ function render({ model, el }) {
                   <th>K</th>
                   <th>Regressors</th>
                   <th>Tau</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,6 +176,9 @@ function render({ model, el }) {
                       <td>${info.K}</td>
                       <td class="mm-wrap">${info.regressors}</td>
                       <td>${info.tau}</td>
+                      <td class="mm-actions-cell">
+                        ${isDefault ? "" : `<button class="mm-btn-delete-row" data-delete-model="${info.id}">Delete</button>`}
+                      </td>
                     </tr>`;
                 }).join("")}
               </tbody>
@@ -270,17 +291,26 @@ function render({ model, el }) {
         <div class="mm-footer">
           <div class="mm-alias-wrap">
             <label class="mm-label inline">Custom Alias:</label>
-            <input type="text" id="inp-alias" class="mm-input"
-                   placeholder="e.g. my_best_fit" value="${currentAlias}">
-            <button class="mm-btn-secondary" id="btn-save-alias">Save</button>
+            <div class="mm-alias-controls">
+              <input type="text" id="inp-alias" class="mm-input ${(!aliasDirty && aliasError) ? "error" : ""}"
+                     placeholder="e.g. my_best_fit">
+              <button class="mm-btn-secondary" id="btn-save-alias" ${isRunning ? "disabled" : ""}>Save</button>
+            </div>
+            <div class="mm-alias-message ${aliasMessageClass}">${aliasMessage}</div>
           </div>
-          <button class="mm-btn-run" id="btn-run">RUN FIT</button>
+          <button class="mm-btn-run" id="btn-run" ${isRunning ? "disabled" : ""}>
+            ${isRunning ? "FITTING..." : "RUN FIT"}
+          </button>
         </div>
       </div>
     </div>
     `;
 
     el.innerHTML = html;
+    const aliasInput = el.querySelector("#inp-alias");
+    if (aliasInput) {
+      aliasInput.value = aliasDraft;
+    }
 
     // ── Event wiring helpers ────────────────────────────────────────────────
     const bind    = (sel, ev, fn) => { const n = el.querySelector(sel);    if (n) n.addEventListener(ev, fn); };
@@ -294,11 +324,23 @@ function render({ model, el }) {
 
     // Load table row click — sets existing_model; Python observer does the heavy lifting
     bindAll(".mm-tr", "click", (e) => {
+      if (e.target.closest(".mm-btn-delete-row")) return;
       const row = e.target.closest(".mm-tr");
       if (!row) return;
       el.querySelectorAll(".mm-tr").forEach(r => r.classList.remove("selected"));
       row.classList.add("selected");
       model.set("existing_model", row.dataset.model);
+      model.save_changes();
+    });
+
+    bindAll(".mm-btn-delete-row", "click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const name = e.target.dataset.deleteModel;
+      if (!name) return;
+      if (!window.confirm(`Delete model "${name}" and its folder?`)) return;
+      model.set("delete_model_name", name);
+      model.set("delete_model_clicks", model.get("delete_model_clicks") + 1);
       model.save_changes();
     });
 
@@ -388,29 +430,40 @@ function render({ model, el }) {
     });
 
     // Alias field + save button
+    const commitAlias = ({ saveClick = false } = {}) => {
+      model.set("alias", aliasDraft);
+      if (saveClick) {
+        model.set("save_alias_clicks", model.get("save_alias_clicks") + 1);
+      }
+      model.save_changes();
+      aliasDirty = false;
+    };
+
     bind("#inp-alias", "input", (e) => {
-      model.set("alias", e.target.value);
-      model.save_changes();
+      aliasDraft = e.target.value;
+      aliasDirty = true;
     });
-    bind("#btn-save-alias", "click", (e) => {
-      model.set("save_alias_clicks", model.get("save_alias_clicks") + 1);
-      model.save_changes();
-      const btn = e.target;
-      const orig = btn.innerText;
-      btn.innerText = "Saved!";
-      btn.classList.add("saved");
-      setTimeout(() => { btn.innerText = orig; btn.classList.remove("saved"); }, 1000);
+    bind("#inp-alias", "change", (e) => {
+      aliasDraft = e.target.value;
+      commitAlias();
+    });
+    bind("#inp-alias", "keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      aliasDraft = e.target.value;
+      commitAlias({ saveClick: true });
+    });
+    bind("#btn-save-alias", "click", () => {
+      commitAlias({ saveClick: true });
     });
 
     // Run button
-    bind("#btn-run", "click", (e) => {
+    bind("#btn-run", "click", () => {
+      if (model.get("is_running")) {
+        return;
+      }
       model.set("run_fit_clicks", model.get("run_fit_clicks") + 1);
       model.save_changes();
-      const btn = e.target;
-      const orig = btn.innerText;
-      btn.innerText = "FITTING...";
-      btn.classList.add("running");
-      setTimeout(() => { btn.innerText = orig; btn.classList.remove("running"); }, 800);
     });
   };
 

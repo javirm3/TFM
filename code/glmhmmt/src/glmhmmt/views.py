@@ -109,7 +109,7 @@ class SubjectFitView:
     state_name_by_idx: dict[int, str]
     state_idx_order: list[int]
     state_rank_by_idx: dict[int, int]
-
+    lapse_rates: Optional[np.ndarray] = None
     # optional
     p_pred: Optional[np.ndarray] = None             # (T, C)
     transition_weights: Optional[np.ndarray] = None  # (K, K, D)
@@ -210,6 +210,7 @@ def build_views(
             state_name_by_idx={int(k): v for k, v in slbls.items()},
             state_idx_order=[int(k) for k in sorder],
             state_rank_by_idx={int(k): v for k, v in srank.items()},
+            lapse_rates=np.asarray(d["lapse_rates"]) if "lapse_rates" in d else None,
             p_pred=np.asarray(d["p_pred"]) if "p_pred" in d else None,
             transition_weights=(
                 np.asarray(d["transition_weights"])

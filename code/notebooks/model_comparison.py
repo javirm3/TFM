@@ -33,9 +33,10 @@ def _():
     sys.path.insert(1, str(paths.CODE_DIR / "glmhmmt" / "src"))
 
     from tasks import get_adapter
+    from glmhmmt.views import build_views
 
     sns.set_style("white")
-    return get_adapter, mo, np, paths, pl, plt, sns
+    return build_views, get_adapter, mo, np, paths, pl, plt, sns
 
 
 @app.cell
@@ -311,6 +312,52 @@ def _(agg, plt, sns):
 
 
 @app.cell
+def _(build_views, get_adapter, np, paths):
+    def load_fit_bundle(task_name, model_kind, alias, K, subjects):
+        adapter = get_adapter(task_name)
+        fit_dir = paths.RESULTS / "fits" / task_name / model_kind / alias
+        suffix = {"glm": "glm", "glmhmm": "glmhmm", "glmhmmt": "glmhmmt"}[model_kind]
+
+        arrays_store = {}
+        for _subj in subjects:
+            candidates = []
+            if model_kind == "glm":
+                candidates.append(fit_dir / f"{_subj}_glm_arrays.npz")
+            else:
+                candidates.extend(
+                    [
+                        fit_dir / f"{_subj}_{suffix}_arrays.npz",
+                        fit_dir / f"{_subj}_K{K}_{suffix}_arrays.npz",
+                    ]
+                )
+            for _path in candidates:
+                if not _path.exists():
+                    continue
+                _data = dict(np.load(_path, allow_pickle=True))
+                if "X_cols" in _data:
+                    _data["X_cols"] = list(_data["X_cols"])
+                if "U_cols" in _data:
+                    _data["U_cols"] = list(_data["U_cols"])
+                arrays_store[_subj] = _data
+                break
+
+        if not arrays_store:
+            return adapter, {}, {}, {}
+
+        _first = next(iter(arrays_store.values()))
+        names = {}
+        if "X_cols" in _first:
+            names["X_cols"] = list(_first["X_cols"])
+        if "U_cols" in _first:
+            names["U_cols"] = list(_first["U_cols"])
+
+        views = build_views(arrays_store, adapter, K, list(arrays_store.keys()))
+        return adapter, arrays_store, names, views
+
+    return (load_fit_bundle,)
+
+
+@app.cell
 def _(mo, paths, ui_task):
     def _model_aliases_viz(task: str, kind: str) -> list:
         p = paths.RESULTS / "fits" / task / kind
@@ -339,11 +386,8 @@ def _(mo, paths, ui_task):
 
 @app.cell
 def _(
-    adapter,
+    load_fit_bundle,
     mo,
-    np,
-    paths,
-    pl,
     ui_subjects,
     ui_task,
     ui_viz_K,
@@ -356,51 +400,46 @@ def _(
     )
 
     _kind = ui_viz_model.value
-    _viz_dir = paths.RESULTS / "fits" / ui_task.value / _kind / ui_viz_alias.value
     _K = ui_viz_K.value
-    _suffix = {"glm": "glm", "glmhmm": "glmhmm", "glmhmmt": "glmhmmt"}[_kind]
-
-    _arrays_store = {}
-    for _s in ui_subjects.value:
-        _f = _viz_dir / f"{_s}_K{_K}_{_suffix}_arrays.npz"
-        if not _f.exists() and _kind == "glm":
-            _f = _viz_dir / f"{_s}_glm_arrays.npz"
-        if _f.exists():
-            _arrays_store[_s] = dict(np.load(_f, allow_pickle=True))
+    _adapter_viz, _arrays_store, _names, _views = load_fit_bundle(
+        ui_task.value,
+        _kind,
+        ui_viz_alias.value,
+        _K,
+        ui_subjects.value,
+    )
 
     mo.stop(
         not _arrays_store,
         mo.md(
-            f"No `*_{_suffix}_arrays.npz` files found for K={_K} "
-            f"in `{ui_viz_alias.value}`."
+            f"No cached arrays were found for `{ui_viz_alias.value}` at K={_K}."
         ),
     )
 
-    # Feature names from adapter
-    _df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
-    _df_all = adapter.subject_filter(_df_all)
-    _subj0 = next(iter(_arrays_store))
-    _df_sub = _df_all.filter(pl.col("subject") == _subj0).sort(adapter.sort_col)
-    _, _, _, _names = adapter.load_subject(_df_sub, tau=0.3, emission_cols=adapter.default_emission_cols())
-
-    _plots = adapter.get_plots()
-    _state_labels = {s: {k: f"State {k+1}" for k in range(_K)} for s in _arrays_store}
+    _plots = _adapter_viz.get_plots()
 
     try:
-        _fig_ag, _fig_cls = _plots.plot_emission_weights(
-            arrays_store=_arrays_store,
-            state_labels=_state_labels,
-            names=_names,
-            K=_K,
-            subjects=list(_arrays_store.keys()),
-        )
-        mo.vstack([
+        if _adapter_viz.num_classes == 2:
+            _fig_ag, _fig_cls = _plots.plot_emission_weights(
+                views=_views,
+                K=_K,
+            )
+        else:
+            _fig_ag, _fig_cls = _plots.plot_emission_weights(
+                arrays_store=_arrays_store,
+                state_labels={s: v.state_name_by_idx for s, v in _views.items()},
+                names=_names,
+                K=_K,
+                subjects=list(_views.keys()),
+            )
+        _viz_output = mo.vstack([
             mo.md(f"**{_kind}  K={_K}**  —  {ui_viz_alias.value}"),
             _fig_ag,
             _fig_cls,
         ])
     except Exception as _e:
-        mo.md(f"⚠️  Could not render weight plot: `{_e}`")
+        _viz_output = mo.md(f"⚠️  Could not render weight plot: `{_e}`")
+    _viz_output
     return
 
 

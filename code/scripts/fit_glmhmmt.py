@@ -6,10 +6,13 @@ import jax.numpy as jnp
 import jax.random as jr
 import sys
 from pathlib import Path
+from typing import Any, Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
 from glmhmmt.model import SoftmaxGLMHMM
 from tasks import get_adapter
+
+ProgressCallback = Callable[[dict[str, Any]], None]
 
 
 def generate_model_id(task: str, K: int, tau: float, emission_cols: list | None = None) -> str:
@@ -38,6 +41,8 @@ def fit_subject(
     transition_cols: list[str] | None = None,
     tau: float = 50.0,
     task: str = "MCDR",
+    verbose: bool = True,
+    progress_callback: ProgressCallback | None = None,
 ) -> dict:
     adapter = get_adapter(task)
     df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
@@ -66,6 +71,16 @@ def fit_subject(
 
     best_lp, best_params = -np.inf, None
     for r in range(n_restarts):
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "event": "restart_start",
+                    "subject": subject,
+                    "K": K,
+                    "restart_index": r + 1,
+                    "restart_total": n_restarts,
+                }
+            )
         key = jr.PRNGKey(base_seed + r)
         params, props = model.initialize(key=key)
         fp, lps = model.fit_em_multisession(
@@ -73,8 +88,19 @@ def fit_subject(
             emissions=y, inputs=inputs_all,
             session_ids=session_ids,
             num_iters=num_iters,
-            verbose=True,
+            verbose=verbose,
         )
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "event": "restart_complete",
+                    "subject": subject,
+                    "K": K,
+                    "restart_index": r + 1,
+                    "restart_total": n_restarts,
+                    "log_prob": float(lps[-1]),
+                }
+            )
         if float(lps[-1]) > best_lp:
             best_lp = float(lps[-1])
             best_params = fp
@@ -154,6 +180,8 @@ def main(
     transition_cols: list[str] | None = None,
     tau: float = 50.0,
     task: str = "MCDR",
+    verbose: bool = True,
+    progress_callback: ProgressCallback | None = None,
 ):
     import json
     adapter = get_adapter(task)
@@ -164,6 +192,7 @@ def main(
         json.dump({
             "task": task,
             "tau": tau,
+            "subjects": subjects,
             "emission_cols": emission_cols or adapter.default_emission_cols(),
             "transition_cols": transition_cols or adapter.default_transition_cols(),
             "K_list": K_list,
@@ -174,9 +203,23 @@ def main(
         df = adapter.subject_filter(df)
         subjects = df["subject"].unique().sort().to_list()
 
-    for subj in subjects:
-        for K in K_list:
-            print(f"Fitting glmhmm-t | subject={subj} K={K} task={task} ...")
+    for subj_idx, subj in enumerate(subjects, start=1):
+        for k_idx, K in enumerate(K_list, start=1):
+            if verbose:
+                print(f"Fitting glmhmm-t | subject={subj} K={K} task={task} ...")
+            def _progress(info: dict[str, Any]) -> None:
+                if progress_callback is None:
+                    return
+                progress_callback(
+                    {
+                        **info,
+                        "subject_index": subj_idx,
+                        "subject_total": len(subjects),
+                        "k_index": k_idx,
+                        "k_total": len(K_list),
+                    }
+                )
+
             result = fit_subject(
                 subj, K,
                 num_iters=num_iters,
@@ -186,9 +229,12 @@ def main(
                 transition_cols=transition_cols,
                 tau=tau,
                 task=task,
+                verbose=verbose,
+                progress_callback=_progress if progress_callback is not None else None,
             )
             save_results(result, out_dir)
-            print(f"  ✓ saved to {out_dir}")
+            if verbose:
+                print(f"  ✓ saved to {out_dir}")
 
 
 if __name__ == "__main__":

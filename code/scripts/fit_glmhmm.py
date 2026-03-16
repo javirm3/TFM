@@ -1,4 +1,3 @@
-# filepath: /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/scripts/fit_glmhmm.py
 import hashlib
 import json
 import numpy as np
@@ -7,10 +6,21 @@ import jax.numpy as jnp
 import jax.random as jr
 import sys
 from pathlib import Path
+from typing import Any, Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
 from glmhmmt.model import SoftmaxGLMHMM
 from tasks import get_adapter
+
+ProgressCallback = Callable[[dict[str, Any]], None]
+
+
+def _raw_loglik_multisession(model: SoftmaxGLMHMM, params, emissions, inputs, session_ids) -> float:
+    """Return the summed data log-likelihood without any parameter prior."""
+    sessions = model._split_by_session(emissions, inputs, session_ids)
+    e_pad, i_pad, _ = model._pad_sessions(sessions)
+    _batch_stats, ll_batch = model._batched_e_step_jit(params, e_pad, i_pad)
+    return float(jnp.sum(ll_batch))
 
 
 def generate_model_id(task: str, K: int, tau: float, emission_cols: list | None = None) -> str:
@@ -38,6 +48,8 @@ def fit_subject(
     stickiness: float = 10.0,
     tau: float = 50.0,
     task: str = "MCDR",
+    verbose: bool = True,
+    progress_callback: ProgressCallback | None = None,
 ) -> dict:
     adapter = get_adapter(task)
     df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
@@ -51,7 +63,6 @@ def fit_subject(
     mask = _valid_trial_mask(session_ids)
     y, X = y[mask], X[mask]
     session_ids = session_ids[mask]
-
     model = SoftmaxGLMHMM(
         num_states=K,
         num_classes=num_classes,  # from adapter
@@ -63,6 +74,16 @@ def fit_subject(
 
     best_lp, best_params = -np.inf, None
     for r in range(n_restarts):
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "event": "restart_start",
+                    "subject": subject,
+                    "K": K,
+                    "restart_index": r + 1,
+                    "restart_total": n_restarts,
+                }
+            )
         key = jr.PRNGKey(base_seed + r)
         params, props = model.initialize(key=key)
         fp, lps = model.fit_em_multisession(
@@ -70,8 +91,19 @@ def fit_subject(
             emissions=y, inputs=X,
             session_ids=session_ids,
             num_iters=num_iters,
-            verbose=True,
+            verbose=verbose,
         )
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "event": "restart_complete",
+                    "subject": subject,
+                    "K": K,
+                    "restart_index": r + 1,
+                    "restart_total": n_restarts,
+                    "log_prob": float(lps[-1]),
+                }
+            )
         if float(lps[-1]) > best_lp:
             best_lp = float(lps[-1])
             best_params = fp
@@ -79,6 +111,7 @@ def fit_subject(
 
     smoothed_probs = model.smoother_multisession(params=best_params, emissions=y, inputs=X, session_ids=session_ids)
     p_pred = model.predict_choice_probs_multisession(best_params, y, X, session_ids=session_ids)
+    raw_ll = _raw_loglik_multisession(model, best_params, y, X, session_ids)
     T = int(y.shape[0])
 
     return {
@@ -90,6 +123,8 @@ def fit_subject(
         "lps": best_lps,
         "smoothed_probs": smoothed_probs,
         "p_pred": p_pred,
+        "raw_ll": raw_ll,
+        "objective_lp": float(best_lps[-1]),
         "T": T,
         "names": names,
         "y": np.asarray(y),
@@ -107,15 +142,20 @@ def save_results(result: dict, out_dir: Path) -> None:
     T = result["T"]
     p_pred = result["p_pred"]
     acc = float(np.mean(np.argmax(p_pred, axis=1) == result["y"]))
-    ll_per_trial = float(result["lps"][-1]) / T
+    raw_ll = float(result["raw_ll"])
+    ll_per_trial = raw_ll / T
     num_classes = result["num_classes"]
     n_params = result["K"] * (result["K"] - 1) + \
         result["K"] * (num_classes - 1) * result["X"].shape[1]
-    bic = -2 * float(result["lps"][-1]) + n_params * np.log(T)
+    bic = -2 * raw_ll + n_params * np.log(T)
 
     pl.DataFrame({
         "subject": [subj], "K": [K], "model_kind": ["glmhmm"],
-        "ll_per_trial": [ll_per_trial], "bic": [bic], "acc": [acc],
+        "ll_per_trial": [ll_per_trial],
+        "raw_ll": [raw_ll],
+        "objective_lp": [float(result["objective_lp"])],
+        "bic": [bic],
+        "acc": [acc],
     }).write_parquet(str(prefix) + "_metrics.parquet")
 
     # arrays as npz
@@ -151,6 +191,8 @@ def main(
     emission_cols: list[str] | None = None,
     tau: float = 50.0,
     task: str = "MCDR",
+    verbose: bool = True,
+    progress_callback: ProgressCallback | None = None,
 ):
     import json
     adapter = get_adapter(task)
@@ -161,6 +203,7 @@ def main(
         json.dump({
             "task": task,
             "tau": tau,
+            "subjects": subjects,
             "emission_cols": emission_cols or adapter.default_emission_cols(),
             "K_list": K_list,
             "model_id": out_dir.name,
@@ -170,16 +213,33 @@ def main(
         df = adapter.subject_filter(df)
         subjects = df["subject"].unique().sort().to_list()
 
-    for subj in subjects:
-        for K in K_list:
-            print(f"Fitting glmhmm | subject={subj} K={K} tau={tau} task={task} ...")
+    for subj_idx, subj in enumerate(subjects, start=1):
+        for k_idx, K in enumerate(K_list, start=1):
+            if verbose:
+                print(f"Fitting glmhmm | subject={subj} K={K} tau={tau} task={task} ...")
+            def _progress(info: dict[str, Any]) -> None:
+                if progress_callback is None:
+                    return
+                progress_callback(
+                    {
+                        **info,
+                        "subject_index": subj_idx,
+                        "subject_total": len(subjects),
+                        "k_index": k_idx,
+                        "k_total": len(K_list),
+                    }
+                )
+
             result = fit_subject(subj, K, num_iters=num_iters,
                                  n_restarts=n_restarts, base_seed=base_seed,
                                  tau=tau, emission_cols=emission_cols,
-                                 task=task)
-            print("Fitted, waiting to save")
+                                 task=task, verbose=verbose,
+                                 progress_callback=_progress if progress_callback is not None else None)
+            if verbose:
+                print("Fitted, waiting to save")
             save_results(result, out_dir)
-            print(f"  ✓ saved to {out_dir}")
+            if verbose:
+                print(f"  ✓ saved to {out_dir}")
 
 
 if __name__ == "__main__":

@@ -67,6 +67,16 @@ class TaskAdapter(ABC):
     def get_plots(self) -> types.ModuleType:
         """Return the task-specific plots module."""
 
+    @property
+    def choice_labels(self) -> list[str]:
+        """Ordered human-readable labels for choice classes."""
+        return [f"Choice {idx}" for idx in range(self.num_classes)]
+
+    @property
+    def probability_columns(self) -> list[str]:
+        """Trial-level probability column names aligned with choice_labels."""
+        return [f"p_{idx}" for idx in range(self.num_classes)]
+
     # ── column mapping  ──────────────────────────────────────────────────────
 
     @property
@@ -99,6 +109,13 @@ class TaskAdapter(ABC):
         state_order  : {subj: [state_idx, ...]}  sorted by engagement rank desc
         """
         ...
+
+    def get_correct_class(self, df: pl.DataFrame) -> np.ndarray:
+        """Return correct class index per trial as int array of shape (T,).
+
+        Must return values in {0, ..., C-1}. Invalid/ambiguous trials may be -1.
+        """
+        raise NotImplementedError
 
 
 # ── registry & factory ─────────────────────────────────────────────────────

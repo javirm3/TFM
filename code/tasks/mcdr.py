@@ -5,6 +5,7 @@ import types
 from typing import List, Tuple, Dict, Any
 
 import jax.numpy as jnp
+import numpy as np
 import polars as pl
 
 from tasks import TaskAdapter, _register
@@ -69,6 +70,36 @@ class MCDRAdapter(TaskAdapter):
     def default_transition_cols(self) -> List[str]:
         return list(_ALL_TRANSITION_COLS)
 
+    @property
+    def choice_labels(self) -> list[str]:
+        return ["Left", "Center", "Right"]
+
+    @property
+    def probability_columns(self) -> list[str]:
+        return ["pL", "pC", "pR"]
+
+    def get_correct_class(self, df: pl.DataFrame) -> np.ndarray:
+        if "stimulus" in df.columns:
+            vals = df["stimulus"].to_numpy().astype(int)
+            unique = set(np.unique(vals).tolist())
+            if unique.issubset({0, 1, 2}):
+                return vals.astype(int)
+            if unique.issubset({1, 2, 3}):
+                return (vals - 1).astype(int)
+
+        if "x_c" in df.columns:
+            vals = df["x_c"].to_numpy()
+            mapping = {"L": 0, "C": 1, "R": 2}
+            out = np.array([mapping.get(str(v), -1) for v in vals], dtype=int)
+            if np.any(out < 0):
+                bad = sorted({str(v) for v, idx in zip(vals, out) if idx < 0})
+                raise ValueError(f"Unexpected MCDR x_c values: {bad}")
+            return out
+
+        raise ValueError(
+            "Could not derive MCDR correct class. Expected stimulus coded as "
+            "0/1/2 or 1/2/3, or x_c coded as L/C/R."
+        )
     # ── column mapping ───────────────────────────────────────────────────────
 
     @property

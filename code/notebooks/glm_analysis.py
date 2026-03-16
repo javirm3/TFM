@@ -20,10 +20,18 @@ def _():
     from scripts.fit_glm import main as fit_main, generate_model_id
     from tasks import get_adapter
     from widgets import ModelManagerWidget
+    from coefficient_editor_widget import CoefficientEditorWidget
+    from coefficient_editor_utils import (
+        apply_state_tweak_to_trial_df,
+        build_editor_payload,
+    )
 
     sns.set_style("white")
     return (
+        CoefficientEditorWidget,
         ModelManagerWidget,
+        apply_state_tweak_to_trial_df,
+        build_editor_payload,
         fit_main,
         generate_model_id,
         get_adapter,
@@ -172,12 +180,6 @@ def _(
     ])
     return (current_hash,)
 
-
-@app.cell
-def _():
-    return
-
-
 @app.cell
 def _(
     fit_main,
@@ -226,8 +228,6 @@ def _(
     ui_task,
     ui_tau,
 ):
-    selected = ui_subjects.value
-
     if ui_existing.value:
         selected_model_id = ui_existing.value
     elif ui_alias.value:
@@ -248,9 +248,8 @@ def _(
         names = {"X_cols": [], "U_cols": []}
 
     arrays_store = {}
-    for _subj in selected:
-        # Match filename format from fit_glm.py: {subj}_glm_arrays.npz
-        _f = OUT / f"{_subj}_glm_arrays.npz"
+    for _f in sorted(OUT.glob("*_glm_arrays.npz")):
+        _subj = _f.name.removesuffix("_glm_arrays.npz")
         if _f.exists():
             _d = dict(np.load(_f, allow_pickle=True))
             # decode column names saved as string arrays; fall back to build output
@@ -290,6 +289,12 @@ def _(adapter, arrays_store, mo, ui_subjects):
 
 
 @app.cell
+def _(adapter, arrays_store, build_views):
+    editor_views = build_views(arrays_store, adapter, 1, list(arrays_store.keys()))
+    return (editor_views,)
+
+
+@app.cell
 def _(
     adapter,
     build_emission_weights_df,
@@ -324,7 +329,7 @@ def _(
         if _df_sub.height != _view.T:
             print(f"⚠️  {_subj}: row mismatch ({_df_sub.height} vs {_view.T}), skipping")
             continue
-        _trial_frames.append(build_trial_df(_view, _df_sub, _bcols))
+        _trial_frames.append(build_trial_df(_view, adapter, _df_sub, _bcols))
 
     mo.stop(not _trial_frames, mo.md("No subjects with matching data lengths."))
     trial_df = pl.concat(_trial_frames)
@@ -379,140 +384,192 @@ def _(K, is_2afc, mo, pl, plots, trial_df, ui_subjects, views):
 
 
 @app.cell
-def _(mo):
-    reset_button = mo.ui.run_button(label="Reset to A92 values")
-    reset_button
-    return (reset_button,)
+def _(editor_views, mo):
+    _subjects = list(editor_views.keys())
+    mo.stop(not _subjects, mo.md("No fitted subjects available for coefficient editing."))
+    ui_editor_subject = mo.ui.dropdown(
+        options=_subjects,
+        value=_subjects[0],
+        label="Coefficient editor subject",
+    )
+    return (ui_editor_subject,)
 
 
 @app.cell
-def _(arrays_store, mo, reset_button):
-    _ = reset_button.value  # re-run this cell (resetting sliders) when button is clicked
-    _params = arrays_store["A95"]
-    _X_cols = _params["X_cols"]
-    _W = _params["emission_weights"][0]  # shape (2, M): W_L at [0], W_R at [1]
-
-    tweak_sliders_L = mo.ui.dictionary({
-        col: mo.ui.slider(
-            start=-10, stop=10, step=0.05,
-            value=round(float(_W[0, i]), 2),
-            label=col,
-        )
-        for i, col in enumerate(_X_cols)
-    })
-    tweak_sliders_R = mo.ui.dictionary({
-        col: mo.ui.slider(
-            start=-10, stop=10, step=0.05,
-            value=round(float(_W[1, i]), 2),
-            label=col,
-        )
-        for i, col in enumerate(_X_cols)
-    })
-
-    mo.vstack([
-        mo.md("### Tweak weights for A92"),
-        mo.md("**W_L (Left)**"),
-        mo.hstack(list(tweak_sliders_L.elements.values()), wrap=True),
-        mo.md("**W_R (Right)**"),
-        mo.hstack(list(tweak_sliders_R.elements.values()), wrap=True),
-    ])
-    return tweak_sliders_L, tweak_sliders_R
+def _(editor_views, mo, ui_editor_subject):
+    _view = editor_views[ui_editor_subject.value]
+    _state_options = [
+        f"{_k} — {_view.state_name_by_idx.get(_k, f'State {_k}')}"
+        for _k in _view.state_idx_order
+    ]
+    ui_editor_state = mo.ui.dropdown(
+        options=_state_options,
+        value=_state_options[0],
+        label="Editable state",
+    )
+    return (ui_editor_state,)
 
 
 @app.cell
 def _(
     adapter,
-    arrays_store,
-    df_all,
-    is_2afc,
+    CoefficientEditorWidget,
+    build_editor_payload,
+    editor_views,
     mo,
     np,
-    pl,
-    plots,
-    plt,
-    softmax,
-    tweak_sliders_L,
-    tweak_sliders_R,
-    ui_tau,
+    ui_editor_state,
+    ui_editor_subject,
 ):
+    _subj = ui_editor_subject.value
+    _view = editor_views[_subj]
+    coef_state_idx = int(ui_editor_state.value.split(" — ", 1)[0])
+    coef_state_label = _view.state_name_by_idx.get(
+        coef_state_idx, f"State {coef_state_idx}"
+    )
+    _stored_weights = np.asarray(_view.emission_weights[coef_state_idx], dtype=float)
+    _stored_class_indices = [0] if _view.num_classes == 2 else [0, 2]
+    _reference_class_idx = 1 if _view.num_classes > 2 else (_view.num_classes - 1)
+    _payload = build_editor_payload(
+        _stored_weights,
+        choice_labels=list(adapter.choice_labels),
+        stored_class_indices=_stored_class_indices,
+        reference_class_idx=_reference_class_idx,
+    )
+
+    coef_editor = mo.ui.anywidget(
+        CoefficientEditorWidget(
+            title=f"{_subj} · {coef_state_label}",
+            subtitle=_payload["subtitle"],
+            features=list(_view.feat_names),
+            channel_labels=_payload["channel_labels"],
+            weights=_payload["weights"].tolist(),
+            original_weights=_payload["weights"].tolist(),
+            slider_min=-6.0,
+            slider_max=6.0,
+            slider_step=0.05,
+        )
+    )
+
+    mo.vstack(
+        [
+            mo.md("### Interactive coefficient editor"),
+            mo.md(
+                "The edited state is recomputed live and the categorical plots "
+                "below use the updated probabilities."
+            ),
+            mo.hstack([ui_editor_subject, ui_editor_state]),
+            coef_editor,
+        ],
+        align="center",
+    )
+    coef_editor_explicit_class_indices = _payload["explicit_class_indices"]
+    coef_editor_reference_class_idx = _payload["reference_class_idx"]
+    return (
+        coef_editor,
+        coef_editor_explicit_class_indices,
+        coef_editor_reference_class_idx,
+        coef_state_idx,
+        coef_state_label,
+    )
+
+
+@app.cell
+def _(
+    adapter,
+    build_trial_df,
+    df_all,
+    editor_views,
+    mo,
+    pl,
+    ui_editor_subject,
+):
+    _subj = ui_editor_subject.value
+    _view = editor_views[_subj]
     _sort_col = adapter.sort_col
-    _frames = []
-
-    _params_a92 = arrays_store["A95"]
-    _X_cols = _params_a92["X_cols"]
-
-    # Build weight vectors directly from slider values
-    _W_L = np.array([tweak_sliders_L.value[col] for col in _X_cols])
-    _W_R = np.array([tweak_sliders_R.value[col] for col in _X_cols])
-
+    _ses_col = adapter.session_col
+    _bcols = adapter.behavioral_cols
     _df_sub = (
-        df_all.filter(pl.col("subject") == "A95")
+        df_all
+        .filter(pl.col("subject") == _subj)
         .sort(_sort_col)
+        .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
     )
-    y, X, _, _ = adapter.load_subject(_df_sub, tau=ui_tau.value, emission_cols=_X_cols)
-    T, M = X.shape
-    X_np = np.asarray(X, dtype=float)
-    logits = np.stack([X_np @ _W_L, np.zeros(T), X_np @ _W_R], axis=1)
-    p_pred = softmax(logits, axis=1)
-
-    _df_sub = (
-        df_all.filter(pl.col("subject") == "A95")
-        .sort(_sort_col)
-    )
-    if not is_2afc:
-        _df_sub = _df_sub.filter(pl.col("session").count().over("session") >= 2)
-
-    _cols = [pl.Series("pred_choice", np.argmax(p_pred, axis=1).astype(int))]
-    _cols += [pl.Series("pL", p_pred[:, 0]), pl.Series("pC", p_pred[:, 1]), pl.Series("pR", p_pred[:, 2])]
-
-    _df_sub = _df_sub.with_columns(_cols)
-    _frames.append(_df_sub)
-
-    _df_all_pred = pl.concat(_frames)
-    _plot_df = plots.prepare_predictions_df(_df_all_pred)
-    _perf_kwargs = {"arrays_store": arrays_store} if is_2afc else {}
-    _fig_all, _ = plots.plot_categorical_performance_all(
-        _plot_df,
-        f"GLM tweaked (tau={ui_tau.value})",
-        **_perf_kwargs,
-    )
-    _fig_all_cat, _ = plots.plot_categorical_strat_by_side(
-        _plot_df,
-        f"GLM tweaked (tau={ui_tau.value})",
-        **_perf_kwargs, model_name = ""
-    )
-
-    # --- Coefficient bar chart ---
-    _fig_coef, _ax = plt.subplots(figsize=(max(6, len(_X_cols) * 0.55), 3))
-    _x = np.arange(len(_X_cols))
-    _width = 0.35
-    _ax.bar(_x - _width / 2, _W_L, _width, label="W_L", color="steelblue")
-    _ax.bar(_x + _width / 2, _W_R, _width, label="W_R", color="tomato")
-    _ax.axhline(0, color="k", linewidth=0.8, linestyle="--")
-    _ax.set_xticks(_x)
-    _ax.set_xticklabels(_X_cols, rotation=45, ha="right", fontsize=8)
-    _ax.set_ylabel("Weight")
-    _ax.set_title("Current weights")
-    _ax.legend(frameon=False)
-    import seaborn as _sns; _sns.despine(ax=_ax)
-    plt.tight_layout()
-
-    mo.vstack([
-        mo.hstack([_fig_all, _fig_all_cat]),
-        _fig_coef,
-    ])
-    return
+    mo.stop(_df_sub.height != _view.T, mo.md(f"Subject {_subj} does not match the loaded fit arrays."))
+    editor_trial_df = build_trial_df(_view, adapter, _df_sub, _bcols)
+    editor_view = _view
+    return editor_trial_df, editor_view
 
 
 @app.cell
-def _():
+def _(
+    adapter,
+    apply_state_tweak_to_trial_df,
+    coef_editor,
+    coef_editor_explicit_class_indices,
+    coef_editor_reference_class_idx,
+    coef_state_idx,
+    coef_state_label,
+    editor_trial_df,
+    editor_view,
+    mo,
+    np,
+    plots,
+    ui_editor_subject,
+):
+    _subj = ui_editor_subject.value
+    _view = editor_view
+    _trial_df_sub = editor_trial_df
+
+    _trial_df_tweaked = apply_state_tweak_to_trial_df(
+        _trial_df_sub,
+        adapter=adapter,
+        view=_view,
+        state_idx=coef_state_idx,
+        edited_weights=np.asarray(coef_editor.value["weights"], dtype=float),
+        original_weights=np.asarray(coef_editor.value["original_weights"], dtype=float),
+        explicit_class_indices=list(coef_editor_explicit_class_indices),
+        reference_class_idx=int(coef_editor_reference_class_idx),
+    )
+    _plot_df_tweaked = plots.prepare_predictions_df(_trial_df_tweaked)
+
+    _title = f"{_subj} — tweaked {coef_state_label}"
+    _fig_all_tweaked, _ = plots.plot_categorical_performance_all(
+        _plot_df_tweaked,
+        _title,
+    )
+    _fig_state_tweaked, _ = plots.plot_categorical_performance_by_state(
+        df=_plot_df_tweaked,
+        views={_subj: _view},
+        model_name=f"{_title} — per state",
+    )
+    _side_plot_fn = getattr(plots, "plot_categorical_strat_by_side", None)
+    if _side_plot_fn is None:
+        _side_section = mo.md("This task does not expose a side-stratified categorical plot.")
+    else:
+        _fig_side_tweaked, _ = plots.plot_categorical_strat_by_side(
+            _plot_df_tweaked,
+            subject=_subj,
+            model_name=f"{_subj}_tweaked_{coef_state_idx}",
+        )
+        _side_section = mo.vstack(
+            [
+                mo.md("### Tweaked categorical performance by stimulus side"),
+                _fig_side_tweaked,
+            ]
+        )
+
+    mo.vstack(
+        [
+            mo.md("### Tweaked categorical plots"),
+            _fig_all_tweaked,
+            mo.md("### Tweaked per-state categorical performance"),
+            _fig_state_tweaked,
+            _side_section,
+        ],
+        align="center",
+    )
     return
-
-
-@app.cell
-def _():
-    return
-
 
 if __name__ == "__main__":
     app.run()

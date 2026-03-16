@@ -8,7 +8,6 @@ app = marimo.App(width="full")
 def _():
     import marimo as mo
     import sys, os
-    from pathlib import Path
 
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     sys.path.append(os.path.join(os.path.dirname(__file__), "..", "glmhmmt", "src"))
@@ -28,18 +27,18 @@ def _():
     from glmhmmt.views import build_views
     from glmhmmt.postprocess import build_trial_df, build_emission_weights_df
     from widgets import ModelManagerWidget
+    from coefficient_editor_widget import CoefficientEditorWidget
+    from coefficient_editor_utils import (
+        apply_state_tweak_to_trial_df,
+        build_editor_payload,
+    )
 
     sns.set_style("white")
-
-    ui_task = mo.ui.dropdown(
-        options=["2AFC", "MCDR"],
-        value="MCDR",
-        label="Task:",
-
-    )
-    ui_task
     return (
+        CoefficientEditorWidget,
         ModelManagerWidget,
+        apply_state_tweak_to_trial_df,
+        build_editor_payload,
         build_emission_weights_df,
         build_trial_df,
         build_views,
@@ -51,38 +50,40 @@ def _():
         pl,
         plt,
         sns,
-        ui_task,
     )
 
 
 @app.cell
-def _(get_adapter, paths, pl, ui_task):
-    adapter = get_adapter(ui_task.value)
+def _(get_adapter, paths, pl, ui_model_manager):
+    task_name = ui_model_manager.value["task"]
+    adapter = get_adapter(task_name)
     df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
     df_all = adapter.subject_filter(df_all)
+    is_2afc = adapter.num_classes == 2
     plots = adapter.get_plots()
-    return adapter, df_all, plots
+    return adapter, df_all, is_2afc, plots, task_name
 
 
 @app.cell
-def _(ModelManagerWidget, adapter, df_all, mo, ui_task):
-    is_2afc = adapter.num_classes == 2
-    _subjects = [str(s) for s in df_all["subject"].unique().to_list()]
-
+def _(ModelManagerWidget, mo):
     mm_widget = ModelManagerWidget(
         model_type="glmhmm",
-        task=ui_task.value,
-        is_2afc=is_2afc,
-        subjects=_subjects,
+        task="MCDR",
         K=2,
         tau=50,
     )
     ui_model_manager = mo.ui.anywidget(mm_widget)
-    return is_2afc, ui_model_manager
+    return mm_widget, ui_model_manager
 
 
 @app.cell
-def _(mo, ui_model_manager, ui_task):
+def _(mo):
+    get_last_fit_click, set_last_fit_click = mo.state(0)
+    return get_last_fit_click, set_last_fit_click
+
+
+@app.cell
+def _(mo, task_name, ui_model_manager):
     from scripts.fit_glmhmm import generate_model_id as _gen_id
 
     class _V:
@@ -90,14 +91,14 @@ def _(mo, ui_model_manager, ui_task):
             self.value = value
 
     _val = ui_model_manager.value
-    current_hash = _gen_id(ui_task.value, _val["K"], _val["tau"], _val["emission_cols"])
+    current_hash = _gen_id(task_name, _val["K"], _val["tau"], _val["emission_cols"])
     ui_existing = _V(None if _val.get("existing_model") in ("", "__default__") else _val.get("existing_model"))
     ui_alias = _V(_val.get("alias", ""))
     ui_K = _V(_val["K"])
     ui_subjects = _V(_val["subjects"])
     ui_tau = _V(_val["tau"])
     ui_emission_cols = _V(_val["emission_cols"])
-    fit_button = _V(_val.get("run_fit_clicks", 0))
+    fit_clicks = _val.get("run_fit_clicks", 0)
 
     mo.vstack(
         [
@@ -109,7 +110,7 @@ def _(mo, ui_model_manager, ui_task):
     )
     return (
         current_hash,
-        fit_button,
+        fit_clicks,
         ui_K,
         ui_alias,
         ui_emission_cols,
@@ -122,37 +123,90 @@ def _(mo, ui_model_manager, ui_task):
 @app.cell
 def _(
     current_hash,
-    fit_button,
+    fit_clicks,
     fit_main,
+    get_last_fit_click,
+    mm_widget,
     mo,
     paths,
+    set_last_fit_click,
+    task_name,
     ui_K,
     ui_alias,
     ui_emission_cols,
     ui_existing,
     ui_subjects,
-    ui_task,
     ui_tau,
 ):
-
+    _last_fit_click = get_last_fit_click()
     mo.stop(
-        not fit_button.value, mo.md("Configure parameters and press **Run fit**.")
+        fit_clicks <= _last_fit_click,
+        mo.md("Configure parameters and press **Run fit**."),
     )
+    set_last_fit_click(fit_clicks)
+
+    _n_restarts = 5
 
     _selected_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
-    _OUT = paths.RESULTS / "fits" / ui_task.value / "glmhmm" / _selected_id
-    with mo.status.spinner(
-        title=f"Fitting GLM-HMM K={ui_K.value} τ={ui_tau.value} for {ui_subjects.value}..."
-    ):
-        fit_main(
+    _OUT = paths.RESULTS / "fits" / task_name / "glmhmm" / _selected_id
+
+    def _progress_title(info: dict) -> str:
+        return (
+            f"Fitting GLM-HMM K={info['K']} "
+            f"subject {info['subject_index']}/{info['subject_total']}: {info['subject']}"
+        )
+
+    def _progress_subtitle(info: dict) -> str:
+        _base = f"Restart {info['restart_index']}/{info['restart_total']}"
+        if info.get("event") == "restart_complete":
+            return f"{_base} complete"
+        return _base
+
+    _total_progress = max(1, len(ui_subjects.value) * _n_restarts)
+    mm_widget.is_running = True
+    try:
+        with mo.status.progress_bar(
+            total=_total_progress,
+            title=f"Fitting GLM-HMM K={ui_K.value}",
+            subtitle=f"{len(ui_subjects.value)} subjects × {_n_restarts} restart(s)",
+            completion_title="Fit complete",
+            completion_subtitle=f"Saved under {_selected_id}",
+        ) as _bar:
+            def _on_progress(info: dict) -> None:
+                if info.get("event") == "restart_start":
+                    _bar.update(
+                        increment=0,
+                        title=_progress_title(info),
+                        subtitle=_progress_subtitle(info),
+                    )
+                    return
+                if info.get("event") == "restart_complete":
+                    _bar.update(
+                        title=_progress_title(info),
+                        subtitle=_progress_subtitle(info),
+                    )
+
+            fit_main(
                 subjects=ui_subjects.value,
                 K_list=[ui_K.value],
                 out_dir=_OUT,
                 tau=ui_tau.value,
                 emission_cols=ui_emission_cols.value,
-                task=ui_task.value,
-                n_restarts=1,
+                task=task_name,
+                n_restarts=_n_restarts,
+                verbose=False,
+                progress_callback=_on_progress,
             )
+        mm_widget.saved_model_name = _selected_id
+        mm_widget.alias_error = ""
+        mm_widget.alias_status = ""
+        if not ui_alias.value:
+            mm_widget.alias = _selected_id
+        mm_widget._update_options()
+        if _selected_id in mm_widget.existing_models:
+            mm_widget.existing_model = _selected_id
+    finally:
+        mm_widget.is_running = False
     mo.md("✅ Fit complete — plots below update automatically.")
     return
 
@@ -165,35 +219,33 @@ def _(
     np,
     paths,
     pl,
+    task_name,
     ui_K,
     ui_alias,
     ui_emission_cols,
     ui_existing,
     ui_subjects,
-    ui_task,
     ui_tau,
 ):
     K = ui_K.value
 
-    selected = ui_subjects.value
     selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
-    OUT = paths.RESULTS / "fits" / ui_task.value / "glmhmm" / selected_model_id
+    OUT = paths.RESULTS / "fits" / task_name / "glmhmm" / selected_model_id
     # load feature names via adapter
     _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(adapter.sort_col)
     _, _, _, names = adapter.load_subject(_df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value)
 
     arrays_store = {}
-    for _subj in ui_subjects.value:
-        _f = OUT / f"{_subj}_glmhmm_arrays.npz"
-        if not _f.exists():
-            _f = OUT / f"{_subj}_K{K}_glmhmm_arrays.npz"
-        if _f.exists():
-            _d = dict(np.load(_f, allow_pickle=True))
-            # decode column names saved as string arrays; fall back to adapter output
-            _d["X_cols"] = (
-                list(_d["X_cols"]) if "X_cols" in _d else names["X_cols"]
-            )
-            arrays_store[_subj] = _d
+    _files = list(sorted(OUT.glob("*_glmhmm_arrays.npz")))
+    _files += [f for f in sorted(OUT.glob(f"*_K{K}_glmhmm_arrays.npz")) if f not in _files]
+    for _f in _files:
+        _subj = _f.name.removesuffix("_glmhmm_arrays.npz").removesuffix(f"_K{K}")
+        _d = dict(np.load(_f, allow_pickle=True))
+        # decode column names saved as string arrays; fall back to adapter output
+        _d["X_cols"] = (
+            list(_d["X_cols"]) if "X_cols" in _d else names["X_cols"]
+        )
+        arrays_store[_subj] = _d
 
     # arrays_store
     return K, arrays_store, names
@@ -226,7 +278,15 @@ def _(K, adapter, arrays_store, build_views, mo, ui_scoring_key, ui_subjects):
     views = build_views(arrays_store, adapter, K, _selected)
     state_labels = {s: v.state_name_by_idx for s, v in views.items()}
     state_order  = {s: v.state_idx_order   for s, v in views.items()}
-    return state_labels, state_order, views
+    return state_labels, views
+
+
+@app.cell
+def _(K, adapter, arrays_store, build_views, ui_scoring_key):
+    if hasattr(adapter, "scoring_key"):
+        adapter.scoring_key = ui_scoring_key.value
+    editor_views = build_views(arrays_store, adapter, K, list(arrays_store.keys()))
+    return (editor_views,)
 
 
 @app.cell
@@ -251,7 +311,6 @@ def _(
     _sort_col = adapter.sort_col
     _ses_col  = adapter.session_col
     _bcols    = adapter.behavioral_cols
-    print(_bcols["stimulus"])
     _trial_frames = []
     for _subj, _view in views.items():
         _df_sub = (
@@ -260,11 +319,10 @@ def _(
             .sort(_sort_col)
             .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
         )
-        print(_df_sub.columns)
         if _df_sub.height != _view.T:
             print(f"⚠️  {_subj}: row mismatch ({_df_sub.height} vs {_view.T}), skipping")
             continue
-        _trial_frames.append(build_trial_df(_view, _df_sub, _bcols))
+        _trial_frames.append(build_trial_df(_view, adapter, _df_sub, _bcols))
 
     mo.stop(not _trial_frames, mo.md("No subjects with matching data lengths."))
     trial_df = pl.concat(_trial_frames)
@@ -313,7 +371,6 @@ def _(
             K=K, subjects=_selected, save_path=_save_path,
         )
     mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
-    mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
     return
 
 
@@ -349,29 +406,19 @@ def _(K, arrays_store, mo, plt, sns, state_labels, ui_subjects):
 
 
 @app.cell
-def _(arrays_store, mo, ui_subjects):
+def _(mo, ui_subjects, views):
     # ── trial-window slider (shared across all posterior plots) ──────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    _T_max = ( max(arrays_store[s]["smoothed_probs"].shape[0] for s in _selected) if _selected else 200 )
+    _selected = [s for s in ui_subjects.value if s in views]
+    _T_max = max((views[s].T for s in _selected), default=200)
     ui_trial_range = mo.ui.range_slider( start=0, stop=_T_max - 1, value=[0, min(_T_max - 1, 199)], label="Trial window", step=1,)
     mo.vstack([mo.md("### Trial window"), ui_trial_range])
     return (ui_trial_range,)
 
 
 @app.cell
-def _(
-    K,
-    arrays_store,
-    mo,
-    np,
-    plt,
-    sns,
-    state_labels,
-    ui_subjects,
-    ui_trial_range,
-):
+def _(K, mo, np, plt, sns, ui_subjects, ui_trial_range, views):
     # ── posterior state probabilities ─────────────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _selected = [s for s in ui_subjects.value if s in views]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
     _t0, _t1 = ui_trial_range.value
@@ -380,22 +427,22 @@ def _(
 
     for _i, _subj in enumerate(_selected):
         _ax = _axes_p[_i, 0]
-        _probs = arrays_store[_subj]["smoothed_probs"][_t0 : _t1 + 1]  # (window, K)
-        _y = arrays_store[_subj]["y"].astype(int)[_t0 : _t1 + 1]  # (window,)
+        _view = views[_subj]
+        _probs = np.asarray(_view.smoothed_probs)[_t0 : _t1 + 1]
+        _y = np.asarray(_view.y).astype(int)[_t0 : _t1 + 1]
         _T_w = _probs.shape[0]
         _x = np.arange(_t0, _t0 + _T_w)
 
         # stacked area — color by label rank so Engaged is always palette[0]
-        _colors = sns.color_palette("tab10", n_colors=K)
-        _colors = ["tab:green", "tab:grey"]
-        _label_rank = { "Engaged": 0, "Disengaged": 1, **{f"Disengaged {i}": i for i in range(1, K)},}
+        _colors = ["tab:green", "tab:grey", *sns.color_palette("tab10", n_colors=max(0, K - 2))]
         _bottom = np.zeros(_T_w)
-        _slbl = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
-        sorted_states = sorted(range(K), key=lambda k: _label_rank.get(_slbl.get(k, f"State {k}"), k))
+        _slbl = _view.state_name_by_idx
+        sorted_states = list(_view.state_idx_order)
 
         for _k in sorted_states:
-            _rank = _label_rank.get(_slbl.get(_k, ""), _k)
-            _ax.fill_between( _x, _bottom, _bottom + _probs[:, _k], alpha=0.7, color=_colors[_rank], label=_slbl.get(_k, f"State {_k}"),)
+            _rank = _view.state_rank_by_idx.get(int(_k), int(_k))
+            _col = _colors[_rank] if _rank < len(_colors) else sns.color_palette("tab10", n_colors=K)[_rank % K]
+            _ax.fill_between( _x, _bottom, _bottom + _probs[:, _k], alpha=0.7, color=_col, label=_slbl.get(_k, f"State {_k}"),)
             _bottom += _probs[:, _k]
 
         # choice markers on top
@@ -462,6 +509,199 @@ def _(K, is_2afc, mo, pl, plots, trial_df, ui_subjects, views):
 
 
 @app.cell
+def _(editor_views, mo):
+    _subjects = list(editor_views.keys())
+    mo.stop(not _subjects, mo.md("No fitted subjects available for coefficient editing."))
+    ui_editor_subject = mo.ui.dropdown(
+        options=_subjects,
+        value=_subjects[0],
+        label="Coefficient editor subject",
+    )
+    ui_editor_subject
+    return (ui_editor_subject,)
+
+
+@app.cell
+def _(editor_views, mo, ui_editor_subject):
+    _view = editor_views[ui_editor_subject.value]
+    _state_options = [
+        f"{_k} — {_view.state_name_by_idx.get(_k, f'State {_k}')}"
+        for _k in _view.state_idx_order
+    ]
+    ui_editor_state = mo.ui.dropdown(
+        options=_state_options,
+        value=_state_options[0],
+        label="Editable state",
+    )
+    return (ui_editor_state,)
+
+
+@app.cell
+def _(
+    CoefficientEditorWidget,
+    adapter,
+    build_editor_payload,
+    editor_views,
+    mo,
+    np,
+    ui_editor_state,
+    ui_editor_subject,
+):
+    _subj = ui_editor_subject.value
+    _view = editor_views[_subj]
+    coef_state_idx = int(ui_editor_state.value.split(" — ", 1)[0])
+    coef_state_label = _view.state_name_by_idx.get(
+        coef_state_idx, f"State {coef_state_idx}"
+    )
+    _stored_weights = np.asarray(_view.emission_weights[coef_state_idx], dtype=float)
+    _stored_class_indices = list(range(_view.num_classes - 1))
+    _reference_class_idx = _view.num_classes - 1
+    _display_reference_class_idx = 1 if _view.num_classes == 3 else _reference_class_idx
+    _payload = build_editor_payload(
+        _stored_weights,
+        choice_labels=list(adapter.choice_labels),
+        stored_class_indices=_stored_class_indices,
+        reference_class_idx=_reference_class_idx,
+        display_reference_class_idx=_display_reference_class_idx,
+    )
+
+    coef_editor = mo.ui.anywidget(
+        CoefficientEditorWidget(
+            title=f"{_subj} · {coef_state_label}",
+            subtitle=_payload["subtitle"],
+            features=list(_view.feat_names),
+            channel_labels=_payload["channel_labels"],
+            weights=_payload["weights"].tolist(),
+            original_weights=_payload["weights"].tolist(),
+            slider_min=-6.0,
+            slider_max=6.0,
+            slider_step=0.05,
+        )
+    )
+
+    mo.vstack(
+        [
+            mo.md("### Interactive coefficient editor"),
+            mo.md(
+                "Only the selected state's emission coefficients are edited. "
+                "The overall and per-state categorical plots update using the edited state."
+            ),
+            mo.hstack([ui_editor_subject, ui_editor_state]),
+            coef_editor,
+        ],
+        align="center",
+    )
+    coef_editor_explicit_class_indices = _payload["explicit_class_indices"]
+    coef_editor_reference_class_idx = _payload["reference_class_idx"]
+    return (
+        coef_editor,
+        coef_editor_explicit_class_indices,
+        coef_editor_reference_class_idx,
+        coef_state_idx,
+        coef_state_label,
+    )
+
+
+@app.cell
+def _(
+    adapter,
+    build_trial_df,
+    df_all,
+    editor_views,
+    mo,
+    pl,
+    ui_editor_subject,
+):
+    _subj = ui_editor_subject.value
+    _view = editor_views[_subj]
+    _sort_col = adapter.sort_col
+    _ses_col = adapter.session_col
+    _bcols = adapter.behavioral_cols
+    _df_sub = (
+        df_all
+        .filter(pl.col("subject") == _subj)
+        .sort(_sort_col)
+        .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
+    )
+    mo.stop(_df_sub.height != _view.T, mo.md(f"Subject {_subj} does not match the loaded fit arrays."))
+    editor_trial_df = build_trial_df(_view, adapter, _df_sub, _bcols)
+    editor_view = _view
+    return editor_trial_df, editor_view
+
+
+@app.cell
+def _(
+    adapter,
+    apply_state_tweak_to_trial_df,
+    coef_editor,
+    coef_editor_explicit_class_indices,
+    coef_editor_reference_class_idx,
+    coef_state_idx,
+    coef_state_label,
+    editor_trial_df,
+    editor_view,
+    mo,
+    np,
+    plots,
+    ui_editor_subject,
+):
+    _subj = ui_editor_subject.value
+    _view = editor_view
+    _trial_df_sub = editor_trial_df
+
+    _trial_df_tweaked = apply_state_tweak_to_trial_df(
+        _trial_df_sub,
+        adapter=adapter,
+        view=_view,
+        state_idx=coef_state_idx,
+        edited_weights=np.asarray(coef_editor.value["weights"], dtype=float),
+        original_weights=np.asarray(coef_editor.value["original_weights"], dtype=float),
+        explicit_class_indices=list(coef_editor_explicit_class_indices),
+        reference_class_idx=int(coef_editor_reference_class_idx),
+    )
+    _plot_df_tweaked = plots.prepare_predictions_df(_trial_df_tweaked)
+
+    _title = f"{_subj} — tweaked {coef_state_label}"
+    _fig_all_tweaked, _ = plots.plot_categorical_performance_all(
+        _plot_df_tweaked,
+        _title,
+    )
+    _fig_state_tweaked, _ = plots.plot_categorical_performance_by_state(
+        df=_plot_df_tweaked,
+        views={_subj: _view},
+        model_name=f"{_title} — per state",
+    )
+    _side_plot_fn = getattr(plots, "plot_categorical_strat_by_side", None)
+    if _side_plot_fn is None:
+        _side_section = mo.md("This task does not expose a side-stratified categorical plot.")
+    else:
+        _fig_side_tweaked, _ = plots.plot_categorical_strat_by_side(
+            _plot_df_tweaked,
+            subject=_subj,
+            model_name=f"{_subj}_tweaked_{coef_state_idx}",
+        )
+        _side_section = mo.vstack(
+            [
+                mo.md("### Tweaked categorical performance by stimulus side"),
+                _fig_side_tweaked,
+            ]
+        )
+
+    mo.vstack(
+        [
+            mo.md("### Tweaked categorical plots"),
+            _fig_all_tweaked,
+            mo.md("### Tweaked per-state categorical performance"),
+            _fig_state_tweaked,
+            _side_section,
+            coef_editor
+        ],
+        align="center",
+    )
+    return
+
+
+@app.cell
 def _(mo):
     from wigglystuff import TangleSlider
     THRESH_ui = mo.ui.anywidget(
@@ -511,9 +751,9 @@ def _(
             thresh=THRESH_ui.amount,
             session_col=adapter.session_col,
             sort_col=adapter.sort_col,
-        
+
         )
-    
+
     mo.vstack([
         mo.md("### Accuracy by state"),
         _fig_acc,
@@ -536,38 +776,15 @@ def _(df_all, mo):
 
 
 @app.cell
-def _(
-    K,
-    adapter,
-    arrays_store,
-    df_all,
-    is_2afc,
-    mo,
-    plots,
-    state_labels,
-    trial_df,
-    ui_subjects_traj,
-    views,
-):
-    selected_traj = [s for s in ui_subjects_traj.value if s in arrays_store]
+def _(K, mo, plots, trial_df, ui_subjects_traj, views):
+    selected_traj = [s for s in ui_subjects_traj.value if s in views]
     mo.stop(not selected_traj, mo.md("Select subjects above to view session trajectories."))
-    if is_2afc:
-        _fig_traj = plots.plot_session_trajectories(
-            views={s: views[s] for s in selected_traj},
-            trial_df=trial_df,
-            session_col=adapter.session_col,
-            sort_col=adapter.sort_col,
-        )
-    else:
-        _fig_traj = plots.plot_session_trajectories(
-            arrays_store=arrays_store,
-            state_labels=state_labels,
-            df_all=df_all,
-            K=K,
-            subjects=selected_traj,
-            session_col=adapter.session_col,
-            sort_col=adapter.sort_col,
-        )
+    _fig_traj = plots.plot_session_trajectories(
+        views={s: views[s] for s in selected_traj},
+        trial_df=trial_df,
+        session_col="session",
+        sort_col="trial_idx",
+    )
     mo.vstack([
         mo.md(f"### c. Average state-probability trajectories within a session  (K={K})"),
         _fig_traj,
@@ -577,43 +794,21 @@ def _(
 
 
 @app.cell
-def _(
-    K,
-    adapter,
-    arrays_store,
-    df_all,
-    is_2afc,
-    mo,
-    plots,
-    state_labels,
-    trial_df,
-    ui_subjects_traj,
-    views,
-):
-    selected_occ = [s for s in ui_subjects_traj.value if s in arrays_store]
+def _(K, mo, plots, trial_df, ui_subjects_traj, views):
+    selected_occ = [s for s in ui_subjects_traj.value if s in views]
     mo.stop(not selected_occ, mo.md("Select subjects above."))
-    if is_2afc:
-        _fig_occ = plots.plot_state_occupancy(
-            views={s: views[s] for s in selected_occ},
-            trial_df=trial_df,
-            session_col=adapter.session_col,
-            sort_col=adapter.sort_col,
-        )
-    else:
-        _fig_occ = plots.plot_state_occupancy(
-            arrays_store=arrays_store,
-            state_labels=state_labels,
-            df_all=df_all,
-            K=K,
-            subjects=selected_occ,
-            session_col=adapter.session_col,
-            sort_col=adapter.sort_col,
-        )
+    _fig_occ = plots.plot_state_occupancy(
+        views={s: views[s] for s in selected_occ},
+        trial_df=trial_df,
+        session_col="session",
+        sort_col="trial_idx",
+    )
     mo.vstack([
         mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
         _fig_occ,
         mo.md(
             "> **Left**: fraction of all trials assigned to each state (argmax of posterior).  \n"
+            "> **Middle**: per-session occupancy boxplots for each state.  \n"
             "> **Right**: histogram of inferred state changes per session."
         ),
     ], align="center")
@@ -623,9 +818,9 @@ def _(
 
 
 @app.cell
-def _(arrays_store, mo, ui_subjects):
+def _(mo, ui_subjects, views):
     # ── Session deep-dive controls ─────────────────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+    _selected = [s for s in ui_subjects.value if s in views]
     _subj_opts = _selected if _selected else ["(no fitted subjects)"]
 
     ui_session_subj = mo.ui.dropdown(
@@ -637,18 +832,17 @@ def _(arrays_store, mo, ui_subjects):
 
 
 @app.cell
-def _(adapter, arrays_store, df_all, mo, pl, ui_session_subj):
-    _ses_col = adapter.session_col
+def _(mo, pl, trial_df, ui_session_subj, views):
     _sess_opts = (
         sorted(
-            df_all.filter(pl.col("subject") == ui_session_subj.value)
-            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)[_ses_col]
+            trial_df.filter(pl.col("subject") == ui_session_subj.value)["session"]
             .unique()
             .to_list()
         )
-        if ui_session_subj.value in arrays_store
+        if ui_session_subj.value in views
         else [0]
     )
+    _sess_opts = _sess_opts or [0]
     ui_session_id = mo.ui.dropdown(
         options=[str(s) for s in _sess_opts],
         value=str(_sess_opts[0]),
@@ -664,58 +858,27 @@ def _(adapter, arrays_store, df_all, mo, pl, ui_session_subj):
 
 
 @app.cell
-def _(
-    K,
-    adapter,
-    arrays_store,
-    df_all,
-    is_2afc,
-    mo,
-    plots,
-    state_labels,
-    trial_df,
-    ui_session_id,
-    ui_session_subj,
-    views,
-):
+def _(K, mo, plots, trial_df, ui_session_id, ui_session_subj, views):
     _subj = ui_session_subj.value
     mo.stop(
-        _subj not in arrays_store,
+        _subj not in views,
         mo.md("No fitted arrays for this subject — run the fit first."),
     )
 
     _sess = ui_session_id.value
-    if is_2afc:
-        _fig = plots.plot_session_deepdive(
-            views={_subj: views[_subj]},
-            trial_df=trial_df,
-            subj=_subj,
-            sess=_sess,
-            session_col="session",
-            sort_col="trial",
-        )
-    else:
-        _fig = plots.plot_session_deepdive(
-            arrays_store=arrays_store,
-            state_labels=state_labels,
-            df_all=df_all,
-            names=arrays_store[_subj],
-            K=K,
-            subj=_subj,
-            sess=_sess,
-            session_col=adapter.session_col,
-            sort_col=adapter.sort_col,
-        )
+    _fig = plots.plot_session_deepdive(
+        views={_subj: views[_subj]},
+        trial_df=trial_df,
+        subj=_subj,
+        sess=_sess,
+        session_col="session",
+        sort_col="trial",
+    )
     mo.vstack([
         mo.md(f"### Session statistics  (K={K})"),
         mo.hstack([ui_session_subj, ui_session_id]),
         _fig,
     ], align="center")
-    return
-
-
-@app.cell
-def _():
     return
 
 
@@ -845,11 +1008,11 @@ def _(K, df_all, mo, np, paths, pl, plt, sns, ui_subjects):
 
 
 @app.cell
-def _(mo, ui_task):
+def _(mo, task_name):
 
     # ── SSM GLM-HMM safety check (2AFC only) ──────────────────────────────────
     mo.stop(
-        ui_task.value != "2AFC",
+        task_name != "2AFC",
         mo.md("ℹ️ **SSM safety check is only available for the 2AFC task.** Switch task to 2AFC above."),
     )
     ssm_run_btn = mo.ui.run_button(label="▶ Run SSM safety check")
@@ -870,19 +1033,16 @@ def _(mo, ui_task):
 def _(
     K,
     adapter,
-    arrays_store,
     df_all,
     mo,
-    names,
     np,
     pl,
     plt,
     sns,
     ssm_run_btn,
-    state_labels,
-    state_order,
     ui_subjects,
     ui_trial_range,
+    views,
 ):
 
     # ── SSM fit + posterior plot ───────────────────────────────────────────────
@@ -894,15 +1054,16 @@ def _(
     _STIM_NAMES_SSM = {"stim_vals", "stim_d", "ild_norm", "ILD", "ild",
                        "stimulus", "net_ild", "stim_strength"}
 
-    _ssm_subjects = [s for s in ui_subjects.value if s in arrays_store]
+    _ssm_subjects = [s for s in ui_subjects.value if s in views]
     mo.stop(not _ssm_subjects, mo.md("No fitted arrays found — run the custom fit first."))
 
     _ssm_results = {}
 
     with mo.status.spinner(title="Fitting SSM GLM-HMM…"):
         for _subj in _ssm_subjects:
-            _X   = arrays_store[_subj]["X"]   # (T, n_feat) — already session-filtered
-            _y   = arrays_store[_subj]["y"]   # (T,)
+            _view = views[_subj]
+            _X   = np.asarray(_view.X)   # (T, n_feat) — already session-filtered
+            _y   = np.asarray(_view.y)   # (T,)
 
             # Reconstruct session ids with same mask as fit_subject()
             _df_s    = df_all.filter(pl.col("subject") == _subj).sort(adapter.sort_col)
@@ -942,7 +1103,7 @@ def _(
             ])  # (T, K)
 
             # Identify "Engaged" state: highest |stim weight| (W[:, 0, stim_idx])
-            _feat_names_s = list(arrays_store[_subj].get("X_cols", names.get("X_cols", [])))
+            _feat_names_s = list(_view.feat_names)
             _stim_idx_s   = next(
                 (i for i, n in enumerate(_feat_names_s) if n in _STIM_NAMES_SSM), None
             )
@@ -976,12 +1137,9 @@ def _(
         _p_ssm_eng = _g_ssm[:, _ek]
 
         # Custom model's Engaged state for this subject
-        _slbl  = state_labels.get(_subj, {})
-        _ek_custom = next(
-            (k for k, lbl in _slbl.items() if lbl == "Engaged"),
-            state_order.get(_subj, [0])[0],
-        )
-        _g_custom = arrays_store[_subj]["smoothed_probs"][_t0_s:_t1_s + 1]  # (window, K)
+        _view = views[_subj]
+        _ek_custom = _view.engaged_k()
+        _g_custom = np.asarray(_view.smoothed_probs)[_t0_s:_t1_s + 1]
         _p_custom_eng = _g_custom[:, _ek_custom]
 
         _x_w = np.arange(_t0_s, _t0_s + len(_p_ssm_eng))
@@ -990,7 +1148,7 @@ def _(
         _ax.plot(_x_w, _p_ssm_eng,    color="darkorange", lw=1.2, alpha=0.85, linestyle="--", label="SSM (standard)")
 
         # Choice rug
-        _y_w = arrays_store[_subj]["y"][_t0_s:_t1_s + 1].astype(int)
+        _y_w = np.asarray(_view.y)[_t0_s:_t1_s + 1].astype(int)
         for _resp, _col, _lbl in [(0, "royalblue", "L"), (1, "gold", "R")]:
             _m = _y_w == _resp
             _ax.scatter(
@@ -1021,125 +1179,6 @@ def _(
         ),
         _fig_ssm,
     ], align="center")
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _(K, arrays_store, df_all, mo, np, pl, plots, state_labels, ui_subjects):
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
-
-    _frames = []
-    for _subj in _selected:
-        _p_pred = arrays_store[_subj]["p_pred"]  # (T, 3): pL, pC, pR
-        _p_pred_aux = _p_pred.copy()
-        _df_sub = (
-            df_all.filter(pl.col("subject") == _subj)
-            .sort("Trial")
-            .filter(pl.col("session").count().over("session") >= 2)
-            .with_columns(
-                [
-                    pl.Series("pL", _p_pred[:, 0]),
-                    pl.Series("pC", _p_pred[:, 1]),
-                    pl.Series("pR", _p_pred[:, 2]),
-                    pl.Series(
-                        "pred_choice", np.argmax(_p_pred, axis=1).astype(int)
-                    ),
-                ]
-            )
-        )
-        _frames.append(_df_sub)
-
-    _df_all_pred = pl.concat(_frames)
-    _plot_df = plots.prepare_predictions_df(_df_all_pred)
-    _fig_all, _ = plots.plot_categorical_performance_all(_plot_df, f"glmhmm K={K}")
-
-    # ── per-state overlay — pool all subjects with normalised state ranks ─────
-    # Normalise: 0 = Engaged, 1 = Disengaged, … per-subject regardless of raw idx
-    _lrank_map = { "Engaged": 0, "Disengaged": 1, **{f"Disengaged {i}": i for i in range(1, K)},}
-    _pool_dfs = []
-    _pool_assigns = []
-    for _subj in _selected:
-        _p_pred_s = arrays_store[_subj]["p_pred"]
-        _df_s = (
-            df_all.filter(pl.col("subject") == _subj)
-            .sort("Trial")
-            .filter(pl.col("Session").count().over("Session") >= 2)
-            .with_columns(
-                [
-                    pl.Series("pL", _p_pred_s[:, 0]),
-                    pl.Series("pC", _p_pred_s[:, 1]),
-                    pl.Series("pR", _p_pred_s[:, 2]),
-                    pl.Series(
-                        "pred_choice", np.argmax(_p_pred_s, axis=1).astype(int)
-                    ),
-                ]
-            )
-        )
-        _plot_df_s = plots.prepare_predictions_df(_df_s)
-        _gamma_s = arrays_store[_subj]["smoothed_probs"]
-        # Both must have the same length — if not, session filtering diverged
-        # between the fit script and this notebook.
-        _T_s = _gamma_s.shape[0]
-
-        # ── per-state emission prediction: softmax(W_k × x) for MAP state k ───────
-        # Using the marginal p_pred (blended over all states) makes every
-        # state's model line look the same.  Instead look up the emission of
-        # the MAP-assigned state directly from the saved weights.
-        _W = np.asarray(
-            arrays_store[_subj]["emission_weights"]
-        )  # (K, C-1, n_feat)
-        _X_s = np.asarray(arrays_store[_subj]["X"])  # (T, n_feat)
-        _logits = np.einsum("kci,ti->tkc", _W, _X_s)  # (T, K, C-1)  → [L, R]
-        _logits_full = np.concatenate(
-            [_logits[:, :, :1], np.zeros((_T_s, K, 1)), _logits[:, :, 1:]],
-            axis=2,  # (T, K, C) → [L, 0, R]
-        )
-        _lse = _logits_full.max(axis=2, keepdims=True)
-        _exp = np.exp(_logits_full - _lse)
-        _p_state = _exp / _exp.sum(axis=2, keepdims=True)  # (T, K, C)
-        _map_k = np.argmax(_gamma_s, axis=1).astype(int)  # (T,)
-        _stim = _plot_df_s["stimulus"].to_numpy().astype(int)  # (T,)
-        _p_state_correct = _p_state[np.arange(_T_s), _map_k, _stim]  # (T,)
-        # build per-state df with state-k emission replacing the marginal
-        _plot_df_state_s = _plot_df_s.with_columns(
-            pl.Series("p_model_correct", _p_state_correct.astype(np.float64))
-        )
-        _pool_dfs.append(_plot_df_state_s)
-        _slbls = state_labels[_subj]
-        _raw = _map_k  # reuse already-computed MAP assignment
-        _norm = np.array([_lrank_map.get(_slbls.get(int(k), ""), k) for k in _raw])
-        _pool_assigns.append(_norm)
-
-    _df_state_pool = pl.concat(_pool_dfs)
-    _assign_pool = np.concatenate(_pool_assigns)
-    _state_lbl_global = {
-        0: "Engaged",
-        1: "Disengaged",
-        **{i: f"Disengaged {i}" for i in range(2, K)},
-    }
-    _fig_state, _ = plots.plot_categorical_performance_by_state(df=_df_state_pool,smoothed_probs=None,state_assign=_assign_pool,
-                                                                state_labels=_state_lbl_global,model_name=f"glmhmm K={K} — per state",)
-
-    mo.vstack(
-        [
-            mo.md("### Categorical plots for accuracy"),
-            _fig_all,
-            mo.md("### Per-state categorical performance"),
-            _fig_state,
-        ],
-        align="center",
-    )
-    return
-
-
-@app.cell
-def _():
     return
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -65,7 +66,7 @@ _MCDR_TRANSITION_GROUPS: list[dict] = [
 # ── Private helpers ───────────────────────────────────────────────────────────
 
 _HASH_RE   = re.compile(r"^[0-9a-f]{8}$")
-_ARRAYS_RE = re.compile(r"^(.+?)_(glm|glmhmm|glmhmmt)_arrays\.npz$")
+_ARRAYS_RE = re.compile(r"^(.+?)(?:_K\d+)?_(glm|glmhmm|glmhmmt)_arrays\.npz$")
 
 
 def _build_regressor_groups(available_cols: list[str], registry: list[dict]) -> list[dict]:
@@ -155,6 +156,9 @@ class ModelManagerWidget(anywidget.AnyWidget):
     existing_model       = traitlets.Unicode("").tag(sync=True)
 
     alias = traitlets.Unicode("").tag(sync=True)
+    alias_error = traitlets.Unicode("").tag(sync=True)
+    alias_status = traitlets.Unicode("").tag(sync=True)
+    saved_model_name = traitlets.Unicode("").tag(sync=True)
 
     subjects_list = traitlets.List(traitlets.Unicode()).tag(sync=True)
     subjects      = traitlets.List(traitlets.Unicode()).tag(sync=True)
@@ -175,8 +179,12 @@ class ModelManagerWidget(anywidget.AnyWidget):
     transition_cols         = traitlets.List(traitlets.Unicode()).tag(sync=True)
     transition_groups       = traitlets.List(traitlets.Dict()).tag(sync=True)
 
+    is_running = traitlets.Bool(False).tag(sync=True)
+
     run_fit_clicks   = traitlets.Int(0).tag(sync=True)
     save_alias_clicks = traitlets.Int(0).tag(sync=True)
+    delete_model_name = traitlets.Unicode("").tag(sync=True)
+    delete_model_clicks = traitlets.Int(0).tag(sync=True)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -188,15 +196,32 @@ class ModelManagerWidget(anywidget.AnyWidget):
 
     @traitlets.observe("task")
     def _on_task_change(self, change):
-        # Different task → different column set; clear selections so defaults repopulate
+        # Different task → reset all task-dependent selections to the new defaults.
+        self.existing_model = ""
+        self.subjects = []
         self.emission_cols = []
         self.transition_cols = []
+        self.alias_error = ""
+        self.alias_status = ""
+        self.saved_model_name = ""
+        self.alias = ""
+        self._apply_default_state()
         self._update_options()
 
     @traitlets.observe("model_type")
     def _on_model_type_change(self, change):
         # Same task, different model type; regressors are shared but refresh groups
+        self.alias_error = ""
+        self.alias_status = ""
+        self.saved_model_name = ""
+        self.alias = ""
         self._update_options()
+
+    @traitlets.observe("alias")
+    def _on_alias_change(self, change):
+        if change["old"] != change["new"]:
+            self.alias_error = ""
+            self.alias_status = ""
 
     @traitlets.observe("existing_model")
     def _on_existing_model_change(self, change):
@@ -206,25 +231,29 @@ class ModelManagerWidget(anywidget.AnyWidget):
         if selected == "__default__":
             self._apply_default_state()
             return
-        # Find the real folder whose display name matches *selected*
-        fits_path = paths.RESULTS / "fits" / self.task / self.model_type
-        if not fits_path.exists():
+        found = self._find_model_dir(selected)
+        if found is None:
             return
-        for d in fits_path.iterdir():
-            if not (d.is_dir() and (d / "config.json").exists()):
-                continue
-            try:
-                cfg = json.loads((d / "config.json").read_text())
-            except Exception:
-                continue
-            if _is_displayable(cfg) and _get_display_name(cfg) == selected:
-                self._apply_config_to_state(cfg)
-                return
+        _, cfg = found
+        self._apply_config_to_state(cfg)
+
+    @traitlets.observe("save_alias_clicks")
+    def _on_save_alias_click(self, change):
+        if change["new"] <= 0:
+            return
+        self._save_named_model()
+
+    @traitlets.observe("delete_model_clicks")
+    def _on_delete_model_click(self, change):
+        if change["new"] <= 0:
+            return
+        self._delete_named_model()
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
     def _apply_config_to_state(self, cfg: dict) -> None:
         """Write a config dict's values into the widget traitlets."""
+        display_name = _get_display_name(cfg)
         if "emission_cols" in cfg:
             self.emission_cols = cfg["emission_cols"]
         if "transition_cols" in cfg:
@@ -240,6 +269,10 @@ class ModelManagerWidget(anywidget.AnyWidget):
             self.lapse = bool(cfg["lapse"])
         if "lapse_max" in cfg:
             self.lapse_max = float(cfg["lapse_max"])
+        self.alias = display_name
+        self.saved_model_name = display_name
+        self.alias_error = ""
+        self.alias_status = ""
         self._refresh_groups()
 
     def _apply_default_state(self) -> None:
@@ -261,9 +294,161 @@ class ModelManagerWidget(anywidget.AnyWidget):
             )
             self.emission_cols  = ecols[:10] if self.model_type == "glm" else ecols
             self.transition_cols = adapter.default_transition_cols()
+            self.alias = ""
+            self.saved_model_name = ""
+            self.alias_error = ""
+            self.alias_status = ""
             self._refresh_groups()
         except Exception as e:
             print(f"Error applying default state for task {self.task}: {e}")
+
+    def _fits_path(self) -> Path:
+        return paths.RESULTS / "fits" / self.task / self.model_type
+
+    def _find_model_dir(self, display_name: str) -> tuple[Path, dict[str, Any]] | None:
+        fits_path = self._fits_path()
+        if not fits_path.exists():
+            return None
+        for d in fits_path.iterdir():
+            if not (d.is_dir() and (d / "config.json").exists()):
+                continue
+            try:
+                cfg = json.loads((d / "config.json").read_text())
+            except Exception:
+                continue
+            if _is_displayable(cfg) and _get_display_name(cfg) == display_name:
+                return d, cfg
+        return None
+
+    def _is_valid_model_name(self, name: str) -> bool:
+        if not name or name == "__default__":
+            return False
+        return Path(name).name == name and "/" not in name and "\\" not in name
+
+    def _build_current_config(self, model_name: str) -> dict[str, Any]:
+        cfg: dict[str, Any] = {
+            "task": self.task,
+            "model_id": model_name,
+            "alias": model_name,
+            "subjects": list(self.subjects),
+            "tau": int(self.tau),
+            "emission_cols": list(self.emission_cols),
+        }
+        if self.model_type == "glm":
+            cfg["lapse"] = bool(self.lapse)
+            cfg["lapse_max"] = float(self.lapse_max)
+        else:
+            cfg["K_list"] = [int(self.K)]
+        if self.model_type == "glmhmmt":
+            cfg["transition_cols"] = list(self.transition_cols)
+        return cfg
+
+    def _saved_config_matches_current(self, model_dir: Path) -> bool:
+        cfg_path = model_dir / "config.json"
+        if not cfg_path.exists():
+            return False
+        try:
+            saved = json.loads(cfg_path.read_text())
+        except Exception:
+            return False
+
+        if saved.get("task") != self.task:
+            return False
+        if saved.get("subjects", []) != list(self.subjects):
+            return False
+        if int(saved.get("tau", -1)) != int(self.tau):
+            return False
+        if saved.get("emission_cols", []) != list(self.emission_cols):
+            return False
+
+        if self.model_type == "glm":
+            return (
+                bool(saved.get("lapse", False)) == bool(self.lapse)
+                and float(saved.get("lapse_max", 0.2)) == float(self.lapse_max)
+            )
+
+        saved_k = _get_K_from_config(saved)
+        if not isinstance(saved_k, int) or saved_k != int(self.K):
+            return False
+
+        if self.model_type == "glmhmmt":
+            return saved.get("transition_cols", []) == list(self.transition_cols)
+
+        return True
+
+    def _save_named_model(self) -> None:
+        target_name = self.alias.strip()
+        self.alias_error = ""
+        self.alias_status = ""
+
+        if not self._is_valid_model_name(target_name):
+            self.alias_error = "Enter a valid model name."
+            return
+
+        fits_path = self._fits_path()
+        fits_path.mkdir(parents=True, exist_ok=True)
+
+        current_name = self.saved_model_name.strip()
+        current_dir = fits_path / current_name if current_name else None
+        target_dir = fits_path / target_name
+
+        if target_name != current_name and target_dir.exists():
+            self.alias_error = "Duplicate name."
+            return
+
+        try:
+            can_rename_current = (
+                current_dir is not None
+                and current_dir.exists()
+                and current_dir != target_dir
+                and self._saved_config_matches_current(current_dir)
+            )
+            if can_rename_current:
+                current_dir.rename(target_dir)
+            else:
+                target_dir.mkdir(parents=True, exist_ok=True)
+
+            cfg = self._build_current_config(target_name)
+            (target_dir / "config.json").write_text(json.dumps(cfg, indent=4))
+        except Exception as e:
+            self.alias_error = f"Could not save model: {e}"
+            return
+
+        self.saved_model_name = target_name
+        self.alias = target_name
+        self._update_options()
+        if target_name in self.existing_models:
+            self.existing_model = target_name
+        self.alias_status = f"Saved as {target_name}"
+
+    def _delete_named_model(self) -> None:
+        target_name = self.delete_model_name.strip()
+        self.alias_error = ""
+        self.alias_status = ""
+
+        if not target_name or target_name == "__default__":
+            self.alias_error = "Default cannot be deleted."
+            return
+
+        found = self._find_model_dir(target_name)
+        if found is None:
+            self.alias_error = f"Model {target_name} was not found."
+            self._update_options()
+            return
+
+        model_dir, _ = found
+        try:
+            shutil.rmtree(model_dir)
+        except Exception as e:
+            self.alias_error = f"Could not delete model: {e}"
+            return
+
+        deleted_current = self.saved_model_name == target_name or self.existing_model == target_name
+        self._update_options()
+        if deleted_current:
+            self._apply_default_state()
+            self.existing_model = ""
+        self.alias_status = f"Deleted {target_name}"
 
     def _refresh_groups(self) -> None:
         """Rebuild emission_groups / transition_groups from current *_options traits."""
