@@ -1,0 +1,4 @@
+interface:
+  display_name: "Math Neuro Thesis"
+  short_description: "Structure and draft a math-neuroscience thesis"
+  default_prompt: "Use $write-math-neuro-thesis to structure and draft my master thesis in mathematics and computational neuroscience."

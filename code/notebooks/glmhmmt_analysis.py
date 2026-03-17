@@ -29,6 +29,7 @@ def _():
     from coefficient_editor_widget import CoefficientEditorWidget
     from coefficient_editor_utils import (
         apply_state_tweak_to_trial_df,
+        apply_state_tweak_to_view,
         build_editor_payload,
     )
     sns.set_style("white")
@@ -36,6 +37,7 @@ def _():
         CoefficientEditorWidget,
         ModelManagerWidget,
         apply_state_tweak_to_trial_df,
+        apply_state_tweak_to_view,
         build_editor_payload,
         build_emission_weights_df,
         build_trial_df,
@@ -499,8 +501,9 @@ def _(editor_views, mo):
     ui_editor_subject = mo.ui.dropdown(
         options=_subjects,
         value=_subjects[0],
-        label="Coefficient editor subject",
+        label="Subject",
     )
+    ui_editor_subject
     return (ui_editor_subject,)
 
 
@@ -514,9 +517,28 @@ def _(editor_views, mo, ui_editor_subject):
     ui_editor_state = mo.ui.dropdown(
         options=_state_options,
         value=_state_options[0],
-        label="Editable state",
+        label="State",
     )
+    ui_editor_state
     return (ui_editor_state,)
+
+
+@app.cell
+def _(
+    adapter,
+    mo,
+):
+    if adapter.num_classes != 2:
+        ui_editor_side = None
+    else:
+        _choices = [str(label) for label in adapter.choice_labels]
+        ui_editor_side = mo.ui.dropdown(
+            options=_choices,
+            value=_choices[0],
+            label="Side",
+        )
+        ui_editor_side
+    return (ui_editor_side,)
 
 
 @app.cell
@@ -527,6 +549,7 @@ def _(
     editor_views,
     mo,
     np,
+    ui_editor_side,
     ui_editor_state,
     ui_editor_subject,
 ):
@@ -537,12 +560,19 @@ def _(
         coef_state_idx, f"State {coef_state_idx}"
     )
     _stored_weights = np.asarray(_view.emission_weights[coef_state_idx], dtype=float)
+    _choice_labels = [str(label) for label in adapter.choice_labels]
     _stored_class_indices = list(range(_view.num_classes - 1))
     _reference_class_idx = _view.num_classes - 1
-    _display_reference_class_idx = 1 if _view.num_classes == 3 else _reference_class_idx
+    if _view.num_classes == 2 and ui_editor_side is not None:
+        _display_class_idx = _choice_labels.index(ui_editor_side.value)
+        _display_reference_class_idx = next(
+            idx for idx in range(_view.num_classes) if idx != _display_class_idx
+        )
+    else:
+        _display_reference_class_idx = 1 if _view.num_classes == 3 else _reference_class_idx
     _payload = build_editor_payload(
         _stored_weights,
-        choice_labels=list(adapter.choice_labels),
+        choice_labels=_choice_labels,
         stored_class_indices=_stored_class_indices,
         reference_class_idx=_reference_class_idx,
         display_reference_class_idx=_display_reference_class_idx,
@@ -550,7 +580,7 @@ def _(
 
     coef_editor = mo.ui.anywidget(
         CoefficientEditorWidget(
-            title=f"{_subj} · {coef_state_label}",
+            title="Coefficient editor",
             subtitle=_payload["subtitle"],
             features=list(_view.feat_names),
             channel_labels=_payload["channel_labels"],
@@ -561,25 +591,34 @@ def _(
             slider_step=0.05,
         )
     )
+    _controls = [ui_editor_subject, ui_editor_state]
+    if ui_editor_side is not None:
+        _controls.append(ui_editor_side)
 
-    mo.vstack(
+    coef_editor_panel = mo.vstack(
         [
             mo.md("### Interactive coefficient editor"),
             mo.md(
                 "Only the selected state's emission coefficients are edited. "
                 "The categorical plots below update with the edited state."
             ),
-            mo.hstack([ui_editor_subject, ui_editor_state]),
+            mo.hstack(_controls),
             coef_editor,
         ],
         align="center",
     )
+    coef_editor_panel
     coef_editor_explicit_class_indices = _payload["explicit_class_indices"]
     coef_editor_reference_class_idx = _payload["reference_class_idx"]
+    coef_editor_stored_class_indices = _payload["stored_class_indices"]
+    coef_editor_stored_reference_class_idx = _payload["stored_reference_class_idx"]
     return (
         coef_editor,
+        coef_editor_panel,
         coef_editor_explicit_class_indices,
         coef_editor_reference_class_idx,
+        coef_editor_stored_class_indices,
+        coef_editor_stored_reference_class_idx,
         coef_state_idx,
         coef_state_label,
     )
@@ -616,9 +655,12 @@ def _(
 def _(
     adapter,
     apply_state_tweak_to_trial_df,
+    apply_state_tweak_to_view,
     coef_editor,
     coef_editor_explicit_class_indices,
     coef_editor_reference_class_idx,
+    coef_editor_stored_class_indices,
+    coef_editor_stored_reference_class_idx,
     coef_state_idx,
     coef_state_label,
     editor_trial_df,
@@ -631,16 +673,26 @@ def _(
     _subj = ui_editor_subject.value
     _view = editor_view
     _trial_df_sub = editor_trial_df
+    _edited_weights = np.asarray(coef_editor.value["weights"], dtype=float)
 
     _trial_df_tweaked = apply_state_tweak_to_trial_df(
         _trial_df_sub,
         adapter=adapter,
         view=_view,
         state_idx=coef_state_idx,
-        edited_weights=np.asarray(coef_editor.value["weights"], dtype=float),
+        edited_weights=_edited_weights,
         original_weights=np.asarray(coef_editor.value["original_weights"], dtype=float),
         explicit_class_indices=list(coef_editor_explicit_class_indices),
         reference_class_idx=int(coef_editor_reference_class_idx),
+    )
+    _view_tweaked = apply_state_tweak_to_view(
+        _view,
+        state_idx=coef_state_idx,
+        edited_weights=_edited_weights,
+        explicit_class_indices=list(coef_editor_explicit_class_indices),
+        reference_class_idx=int(coef_editor_reference_class_idx),
+        stored_class_indices=list(coef_editor_stored_class_indices),
+        stored_reference_class_idx=int(coef_editor_stored_reference_class_idx),
     )
     _plot_df_tweaked = plots.prepare_predictions_df(_trial_df_tweaked)
 
@@ -651,7 +703,7 @@ def _(
     )
     _fig_state_tweaked, _ = plots.plot_categorical_performance_by_state(
         df=_plot_df_tweaked,
-        views={_subj: _view},
+        views={_subj: _view_tweaked},
         model_name=f"{_title} — per state",
     )
     _side_plot_fn = getattr(plots, "plot_categorical_strat_by_side", None)

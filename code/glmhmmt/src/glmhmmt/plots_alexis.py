@@ -683,7 +683,7 @@ def eval_glm_on_ild_grid(
 
     Returns:
         ild_grid : ``(n_grid,)`` ILD values in dB.
-        p_right  : ``(n_grid,)`` model P(rightward) for K=1, or
+        p_right  : ``(n_grid,)`` model P(Right) for K=1, or
                    ``(K, n_grid)`` for K>1.
     """
     W = np.asarray(weights, dtype=float)
@@ -861,6 +861,27 @@ def _resolve_ild_ticks(
     return sorted({float(v) for v in ilds if pd.notna(v)})
 
 
+def _apply_ild_axis_ticks(ax: plt.Axes, xticks: Sequence[float]) -> None:
+    xticks = np.asarray(xticks, dtype=float)
+    ax.set_xticks(xticks, labels=_sparse_ild_labels(list(xticks)))
+    ax.xaxis.set_ticks_position("bottom")
+    ax.tick_params(
+        axis="x",
+        which="major",
+        bottom=True,
+        top=False,
+        direction="out",
+        length=7,
+        width=1.1,
+        color="#111827",
+        labelcolor="#111827",
+        pad=4,
+    )
+    ax.spines["bottom"].set_visible(True)
+    ax.spines["bottom"].set_linewidth(1.1)
+    ax.spines["bottom"].set_color("#111827")
+
+
 def _resolve_plot_col(df: pd.DataFrame, preferred: str, candidates: Sequence[str]) -> str:
     if preferred in df.columns:
         return preferred
@@ -950,8 +971,7 @@ def _psych_panel(
 
     ax.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
     ax.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
-    ax.set_xticks(xticks, labels=_sparse_ild_labels(list(xticks)))
-    ax.tick_params(axis="x", which="major", length=4, width=0.8)
+    _apply_ild_axis_ticks(ax, xticks)
     ax.set_xlim(xticks[0], xticks[-1])
     ax.set_ylim(0, 1)
     ax.set_yticks([0, 0.5, 1])
@@ -1055,8 +1075,7 @@ def _psych_state_panel(
                              label="_nolegend_")
 
     ax.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
-    ax.set_xticks(xticks, labels=_sparse_ild_labels(list(xticks)))
-    ax.tick_params(axis="x", which="major", length=4, width=0.8)
+    _apply_ild_axis_ticks(ax, xticks)
     ax.set_xlim(xticks[0], xticks[-1])
     return data_h, model_h
 
@@ -1469,7 +1488,7 @@ def plot_categorical_performance_all(
         axes[ax_idx], df_pd,
         ild_col=ild_col, choice_col=choice_col, pred_col=pred_col, subj_col=subj_col,
         title="a) Overall psychometric", xlabel="ILD (dB)",
-        ylabel="P(rightward Choice)", color="#2b7bba",
+        ylabel="P(Right)", color="#2b7bba",
         smooth_curve=_smooth_all,
         tick_ilds=ild_ticks,
     )
@@ -1617,39 +1636,20 @@ def plot_categorical_performance_all_by_state(
         else:
             _smooth_by_k[k] = _mean_glm_curve(_as, _all_subjects, X_cols, ild_max=ild_max, state_k=k)
 
-    _weight_cols: dict[int, str] = {}
-    for k in range(K):
-        _col = f"__p_state_rank_{k}"
-        _weight_cols[k] = _col
-        df_pd[_col] = 0.0
-    for _subj, _view in views.items():
-        _rows = df_pd.index[df_pd[subj_col] == _subj].to_numpy()
-        if len(_rows) == 0:
-            continue
-        for _raw_k, _rank in _view.state_rank_by_idx.items():
-            _pcol = f"p_state_{int(_raw_k)}"
-            _wcol = _weight_cols.get(int(_rank))
-            if _wcol is None or _pcol not in df_pd.columns:
-                continue
-            df_pd.loc[_rows, _wcol] = pd.to_numeric(
-                df_pd.loc[_rows, _pcol], errors="coerce"
-            ).fillna(0.0).to_numpy(dtype=float)
-
     _include_overlay = K > 1
     _n_panels = K + int(_include_overlay)
     fig, axes = plt.subplots(1, _n_panels, figsize=(panel_w * _n_panels, 4), sharey=True)
     axes = np.atleast_1d(axes)
-
-    _xpos_all = np.array(ilds, dtype=float)
 
     if _include_overlay:
         _ax_overlay = axes[0]
         for k in range(K):
             lbl = slbls.get(k, f"State {k}")
             color = _state_color(lbl, k)
+            _df_state = df_pd[df_pd["_state_k"] == k]
             _psych_state_panel(
                 _ax_overlay,
-                df_pd,
+                _df_state,
                 ild_col,
                 choice_col,
                 pred_col,
@@ -1658,7 +1658,6 @@ def plot_categorical_performance_all_by_state(
                 label=lbl,
                 smooth_curve=_smooth_by_k[k],
                 show_subject_traces=False,
-                weight_col=_weight_cols[k],
                 tick_ilds=ild_ticks,
             )
         _ax_overlay.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
@@ -1666,16 +1665,17 @@ def plot_categorical_performance_all_by_state(
         _ax_overlay.set_ylim(0, 1)
         _ax_overlay.set_yticks([0, 0.5, 1])
         _ax_overlay.set_xlabel("ILD (dB)")
-        _ax_overlay.set_ylabel("P(rightward Choice)")
+        _ax_overlay.set_ylabel("P(Right)")
         _ax_overlay.set_title("All states")
         _ax_overlay.legend(frameon=False, fontsize=8)
 
     for k, ax in enumerate(axes[int(_include_overlay):]):
         lbl   = slbls.get(k, f"State {k}")
         color = _state_color(lbl, k)
+        _df_state = df_pd[df_pd["_state_k"] == k]
         _psych_state_panel(
             ax,
-            df_pd,
+            _df_state,
             ild_col,
             choice_col,
             pred_col,
@@ -1683,7 +1683,6 @@ def plot_categorical_performance_all_by_state(
             color=color,
             label=lbl,
             smooth_curve=_smooth_by_k[k],
-            weight_col=_weight_cols[k],
             tick_ilds=ild_ticks,
         )
         ax.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
@@ -1692,7 +1691,7 @@ def plot_categorical_performance_all_by_state(
         ax.set_xlabel("ILD (dB)")
         ax.set_title(lbl)
         if k == 0:
-            ax.set_ylabel("P(rightward Choice)")
+            ax.set_ylabel("P(Right)")
         else:
             ax.set_ylabel("")
 
