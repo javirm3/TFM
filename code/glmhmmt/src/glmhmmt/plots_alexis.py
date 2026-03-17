@@ -42,6 +42,12 @@ import pandas as pd
 from pathlib import Path
 from scipy.stats import sem, ttest_1samp
 from typing import Dict, List, Optional, Sequence, Tuple
+from glmhmmt.plots_common import (
+    plot_state_accuracy as _plot_state_accuracy_common,
+    plot_session_trajectories as _plot_session_trajectories_common,
+    plot_state_occupancy as _plot_state_occupancy_common,
+    plot_session_deepdive as _plot_session_deepdive_common,
+)
 
 # ── default state colour palette (matches plots.py config colours) ────────────
 _DEFAULT_COLORS = ["#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02"]
@@ -609,7 +615,34 @@ def plot_model_comparison_diffs(
 # Psychometric helpers  (2AFC equivalent of categorical performance panels)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_LABELED_ILDS = {-70, -8, 8, 70}
+_LABELED_ILDS = {-8, 8}
+
+
+def _resolve_ild_max(
+    df: pd.DataFrame,
+    ild_col: str,
+    ild_max: Optional[float] = None,
+) -> float:
+    """Return an explicit |ILD| max or infer it from the plotted DataFrame."""
+    if ild_max is not None:
+        _ild_max = float(ild_max)
+        if np.isfinite(_ild_max) and _ild_max > 0:
+            return _ild_max
+
+    if ild_col not in df.columns:
+        return 1.0
+
+    ild_vals = pd.to_numeric(df[ild_col], errors="coerce")
+    ild_arr = np.asarray(ild_vals, dtype=float)
+    if ild_arr.size == 0:
+        return 1.0
+
+    finite = ild_arr[np.isfinite(ild_arr)]
+    if finite.size == 0:
+        return 1.0
+
+    inferred = float(np.max(np.abs(finite)))
+    return inferred if inferred > 0 else 1.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -619,7 +652,7 @@ _LABELED_ILDS = {-70, -8, 8, 70}
 def eval_glm_on_ild_grid(
     weights: np.ndarray,
     X_cols: Sequence[str],
-    ild_max: float = 70.0,
+    ild_max: float,
     n_grid: int = 300,
     lapse_rates: Optional[np.ndarray] = None,
     X_data: Optional[np.ndarray] = None,
@@ -642,7 +675,6 @@ def eval_glm_on_ild_grid(
         weights:     ``(K, C-1, M)`` or ``(C-1, M)`` emission weight array.
         X_cols:      Ordered list of M feature names matching the weight columns.
         ild_max:     Maximum |ILD| used for normalisation in ``parse_glmhmm``.
-                     Defaults to 70 dB.
         n_grid:      Number of ILD points in the evaluation grid.
         lapse_rates: ``[gamma_L, gamma_R]`` lapse parameters from fitting.
                      *None* means no lapse correction.
@@ -665,11 +697,6 @@ def eval_glm_on_ild_grid(
     _STIM_NAMES = {"stim_vals", "stim_d", "ild_norm", "ILD", "ild", "stimulus"}
     ild_idx  = next((i for i, n in enumerate(X_cols_list) if n in _STIM_NAMES), None)
     bias_idx = next((i for i, n in enumerate(X_cols_list) if n == "bias"), None)
-
-    print(f"[eval_glm_on_ild_grid] X_cols={X_cols_list}")
-    print(f"  ild_idx={ild_idx}  bias_idx={bias_idx}  K={K}  M={M}  "
-          f"X_data={'yes ('+str(np.asarray(X_data).shape)+')' if X_data is not None else 'NO'}")
-    print(f"  W[0,0,:]={np.asarray(W)[0, 0, :].round(3).tolist()}")
 
     ild_grid = np.linspace(-ild_max, ild_max, n_grid)
     ild_norm = ild_grid / ild_max
@@ -728,7 +755,7 @@ def _mean_glm_curve(
     arrays_store: dict,
     subjects: Sequence[str],
     X_cols: Optional[Sequence[str]],
-    ild_max: float = 70.0,
+    ild_max: float,
     state_k: Optional[int] = None,
 ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
     """Average the per-subject GLM partial-dependence curve over subjects.
@@ -764,7 +791,6 @@ def _mean_glm_curve(
             # Sanity check: column count must match weight columns
             _M_w = np.asarray(W).shape[-1]
             if X_data.shape[1] != _M_w:
-                print(f"[_mean_glm_curve] {subj}: X_data cols {X_data.shape[1]} ≠ W cols {_M_w}, dropping X_data")
                 X_data = None
 
         # When computing the curve for a specific state, restrict partial-
@@ -779,8 +805,6 @@ def _mean_glm_curve(
                     X_data = X_data[_mask]
                 # if the state has no trials, fall through with full X_data
 
-        print(f"[_mean_glm_curve] {subj}: cols={list(cols)}  X_data={'yes ('+str(np.asarray(X_data).shape)+')' if X_data is not None else 'NO'}  state_k={state_k}")
-
         try:
             _lr = arrays_store[subj].get("lapse_rates")
             if _lr is not None:
@@ -790,8 +814,7 @@ def _mean_glm_curve(
             ig, pg = eval_glm_on_ild_grid(
                 W, cols, ild_max=ild_max, lapse_rates=_lr, X_data=X_data
             )
-        except Exception as e:
-            print(f"[_mean_glm_curve] {subj} skipped: {e}")
+        except Exception:
             continue
 
         # pg is (n_grid,) for K=1, or (K, n_grid) for K>1
@@ -827,11 +850,31 @@ def _sparse_ild_labels(ilds: list) -> list:
     return [str(int(v)) if float(v) in labeled else "" for v in ilds]
 
 
+def _resolve_ild_ticks(
+    ilds: Sequence,
+    tick_ilds: Optional[Sequence[float]] = None,
+) -> list[float]:
+    vals = tick_ilds if tick_ilds is not None else ilds
+    ticks = sorted({float(v) for v in vals if pd.notna(v)})
+    if ticks:
+        return ticks
+    return sorted({float(v) for v in ilds if pd.notna(v)})
+
+
+def _resolve_plot_col(df: pd.DataFrame, preferred: str, candidates: Sequence[str]) -> str:
+    if preferred in df.columns:
+        return preferred
+    for cand in candidates:
+        if cand in df.columns:
+            return cand
+    raise KeyError(f"None of the candidate columns exist: {[preferred, *candidates]}")
+
+
 def _psych_panel(
     ax: plt.Axes,
     df: pd.DataFrame,
     ild_col: str = "ILD",
-    choice_col: str = "Choice",
+    choice_col: str = "response",
     pred_col: str = "p_pred",
     subj_col: str = "subject",
     title: str = "",
@@ -839,6 +882,7 @@ def _psych_panel(
     ylabel: Optional[str] = None,
     color: str = "k",
     smooth_curve: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+    tick_ilds: Optional[Sequence[float]] = None,
 ) -> None:
     """Draw a pooled psychometric curve (P(right) vs ILD) on ax.
 
@@ -852,6 +896,8 @@ def _psych_panel(
         ax.set_title(title)
         return
 
+    choice_col = _resolve_plot_col(df, choice_col, ("response", "Choice"))
+
     subj_agg = (
         df.groupby([subj_col, ild_col], observed=True)
           .agg(data_mean=(choice_col, "mean"), model_mean=(pred_col, "mean"))
@@ -860,6 +906,7 @@ def _psych_panel(
 
     ilds = sorted(subj_agg[ild_col].unique())
     xpos = np.array(ilds, dtype=float)
+    xticks = np.array(_resolve_ild_ticks(ilds, tick_ilds), dtype=float)
 
     agg = (
         subj_agg.groupby(ild_col)
@@ -890,7 +937,7 @@ def _psych_panel(
         ild_g, p_g = smooth_curve
         # Clip to the observed ILD range so the curve doesn't extend beyond
         # the data and compress the visible sigmoid into a near-flat line.
-        _x0, _x1 = float(xpos[0]), float(xpos[-1])
+        _x0, _x1 = float(xticks[0]), float(xticks[-1])
         _clip = (ild_g >= _x0) & (ild_g <= _x1)
         ax.plot(ild_g[_clip], p_g[_clip], "-", color="black", lw=2, label="Model", zorder=6)
     else:
@@ -903,9 +950,9 @@ def _psych_panel(
 
     ax.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
     ax.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
-    ax.set_xticks(xpos, labels=_sparse_ild_labels(ilds))
+    ax.set_xticks(xticks, labels=_sparse_ild_labels(list(xticks)))
     ax.tick_params(axis="x", which="major", length=4, width=0.8)
-    ax.set_xlim(xpos[0], xpos[-1])
+    ax.set_xlim(xticks[0], xticks[-1])
     ax.set_ylim(0, 1)
     ax.set_yticks([0, 0.5, 1])
     ax.set_title(title)
@@ -924,18 +971,48 @@ def _psych_state_panel(
     color: str,
     label: str,
     smooth_curve: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+    show_subject_traces: bool = True,
+    weight_col: Optional[str] = None,
+    tick_ilds: Optional[Sequence[float]] = None,
 ) -> Tuple:
     """Draw state-specific psychometric on ax.  Returns (data_h, model_h)."""
     if df_state.empty:
         return None, None
 
-    subj_agg = (
-        df_state.groupby([subj_col, ild_col], observed=True)
-                .agg(data_mean=(choice_col, "mean"), model_mean=(pred_col, "mean"))
-                .reset_index()
-    )
+    choice_col = _resolve_plot_col(df_state, choice_col, ("response", "Choice"))
+    if weight_col is not None and weight_col in df_state.columns:
+        _rows = []
+        for (subj, ild), grp in df_state.groupby([subj_col, ild_col], observed=True):
+            w = pd.to_numeric(grp[weight_col], errors="coerce").to_numpy(dtype=float)
+            y = pd.to_numeric(grp[choice_col], errors="coerce").to_numpy(dtype=float)
+            m = pd.to_numeric(grp[pred_col], errors="coerce").to_numpy(dtype=float)
+            mask = np.isfinite(w) & np.isfinite(y) & np.isfinite(m) & (w > 0)
+            if not np.any(mask):
+                continue
+            w = w[mask]
+            w_sum = float(w.sum())
+            if w_sum <= 0:
+                continue
+            _rows.append(
+                {
+                    subj_col: subj,
+                    ild_col: ild,
+                    "data_mean": float(np.dot(y[mask], w) / w_sum),
+                    "model_mean": float(np.dot(m[mask], w) / w_sum),
+                }
+            )
+        subj_agg = pd.DataFrame(_rows)
+    else:
+        subj_agg = (
+            df_state.groupby([subj_col, ild_col], observed=True)
+                    .agg(data_mean=(choice_col, "mean"), model_mean=(pred_col, "mean"))
+                    .reset_index()
+        )
+    if subj_agg.empty:
+        return None, None
     ilds = sorted(subj_agg[ild_col].unique())
     xpos = np.array(ilds, dtype=float)
+    xticks = np.array(_resolve_ild_ticks(ilds, tick_ilds), dtype=float)
 
     agg = (
         subj_agg.groupby(ild_col)
@@ -953,12 +1030,13 @@ def _psych_state_panel(
     mm    = agg["mm"].values
     sem_d = sd / np.sqrt(nd)
 
-    # per-subject individual traces (low alpha)
-    for subj, grp in subj_agg.groupby(subj_col):
-        grp_ilds = [i for i in ilds if i in grp[ild_col].values]
-        xi = np.array(grp_ilds, dtype=float)
-        yi = grp.set_index(ild_col).reindex(grp_ilds)["data_mean"].values
-        ax.plot(xi, yi, "-o", color=color, alpha=0.15, lw=1, ms=3, zorder=2)
+    if show_subject_traces:
+        # per-subject individual traces (low alpha)
+        for subj, grp in subj_agg.groupby(subj_col):
+            grp_ilds = [i for i in ilds if i in grp[ild_col].values]
+            xi = np.array(grp_ilds, dtype=float)
+            yi = grp.set_index(ild_col).reindex(grp_ilds)["data_mean"].values
+            ax.plot(xi, yi, "-o", color=color, alpha=0.15, lw=1, ms=3, zorder=2)
 
     data_h = ax.errorbar(xpos, md, yerr=sem_d, fmt="o",
                          color=color, ecolor=color, elinewidth=1.2,
@@ -968,7 +1046,7 @@ def _psych_state_panel(
         ild_g, p_g = smooth_curve
         # Clip the dense grid to the observed ILD range so the sigmoid
         # doesn't extend far beyond the data and compress the visible area.
-        _x0, _x1 = float(xpos[0]), float(xpos[-1])
+        _x0, _x1 = float(xticks[0]), float(xticks[-1])
         _clip = (ild_g >= _x0) & (ild_g <= _x1)
         (model_h,) = ax.plot(ild_g[_clip], p_g[_clip], "-", color=color, lw=2.2,
                              zorder=6, label="_nolegend_")
@@ -977,9 +1055,9 @@ def _psych_state_panel(
                              label="_nolegend_")
 
     ax.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
-    ax.set_xticks(xpos, labels=_sparse_ild_labels(ilds))
+    ax.set_xticks(xticks, labels=_sparse_ild_labels(list(xticks)))
     ax.tick_params(axis="x", which="major", length=4, width=0.8)
-    ax.set_xlim(xpos[0], xpos[-1])
+    ax.set_xlim(xticks[0], xticks[-1])
     return data_h, model_h
 
 
@@ -995,18 +1073,19 @@ def prepare_predictions_df(df_pred):
 
     Expected input columns
     ----------------------
-    Side   : int  - correct Side (0 = left, 1 = right)
-    Choice : int  - animal's Choice (0 = left, 1 = right)
-    Hit    : int/bool - Trial correct (1) or incorrect (0)
-    pL     : float - model P(left Choice)
-    pR     : float - model P(right Choice)
+    Side / stimulus : int  - correct side (0 = left, 1 = right)
+    Choice / response : int  - animal's choice (0 = left, 1 = right)
+    Hit / performance : int/bool - trial correct (1) or incorrect (0)
+    pL               : float - model P(left choice)
+    pR               : float - model P(right choice)
 
     Added / ensured output columns
     ------------------------------
     correct_bool    : bool  - Trial accuracy
     p_pred          : float - model P(right)  → psychometric x-axis
     p_model_correct : float - model P(correct Side)
-    stimulus        : int   - alias for ``Side``, used for state indexing
+    stimulus / Side : int   - canonical aliases for correct side
+    response / Choice : int - canonical aliases for animal choice
 
     Returns
     -------
@@ -1020,6 +1099,22 @@ def prepare_predictions_df(df_pred):
 
     if _is_polars:
         df = df_pred.clone()
+
+        if "stimulus" not in df.columns:
+            if "Side" in df.columns:
+                df = df.with_columns(pl.col("Side").cast(pl.Int64).alias("stimulus"))
+            else:
+                raise ValueError("No 'Side' or 'stimulus' column found.")
+        if "Side" not in df.columns:
+            df = df.with_columns(pl.col("stimulus").cast(pl.Int64).alias("Side"))
+
+        if "response" not in df.columns:
+            if "Choice" in df.columns:
+                df = df.with_columns(pl.col("Choice").cast(pl.Int64).alias("response"))
+            else:
+                raise ValueError("No 'Choice' or 'response' column found.")
+        if "Choice" not in df.columns:
+            df = df.with_columns(pl.col("response").cast(pl.Int64).alias("Choice"))
 
         if "correct_bool" not in df.columns:
             if "Hit" in df.columns:
@@ -1046,6 +1141,22 @@ def prepare_predictions_df(df_pred):
         # pandas path
         df = df_pred.copy()
 
+        if "stimulus" not in df.columns:
+            if "Side" in df.columns:
+                df["stimulus"] = df["Side"].astype(int)
+            else:
+                raise ValueError("No 'Side' or 'stimulus' column found.")
+        if "Side" not in df.columns:
+            df["Side"] = df["stimulus"].astype(int)
+
+        if "response" not in df.columns:
+            if "Choice" in df.columns:
+                df["response"] = df["Choice"].astype(int)
+            else:
+                raise ValueError("No 'Choice' or 'response' column found.")
+        if "Choice" not in df.columns:
+            df["Choice"] = df["response"].astype(int)
+
         if "correct_bool" not in df.columns:
             if "Hit" in df.columns:
                 df["correct_bool"] = df["Hit"].astype(bool)
@@ -1059,14 +1170,8 @@ def prepare_predictions_df(df_pred):
 
         df["p_pred"] = df["pR"]
         df["p_model_correct"] = df.apply(
-            lambda row: row["pL"] if row["Side"] == 0 else row["pR"], axis=1
+            lambda row: row["pL"] if row["stimulus"] == 0 else row["pR"], axis=1
         )
-
-        if "stimulus" not in df.columns:
-            if "Side" in df.columns:
-                df["stimulus"] = df["Side"].astype(int)
-            else:
-                raise ValueError("No 'Side' column to derive 'stimulus' from.")
 
         return df
 
@@ -1212,150 +1317,14 @@ def plot_state_accuracy(
     stim_col: str = "ILD",
     **kwargs,
 ) -> Tuple[plt.Figure, pd.DataFrame]:
-    """Per-state accuracy bar chart.
-
-    Mirrors plots.plot_state_accuracy.
-    Accuracy = fraction of correct trials assigned to each state
-    with posterior probability ≥ thresh, on ILD≠0 trials only.
-
-    Parameters
-    ----------
-    trial_df : output of build_trial_df; must contain ``correct_bool`` and
-               ``ILD`` columns.
-
-    Returns
-    -------
-    fig, summary_df
-    """
-    subjects = list(views.keys())
-    K = next(iter(views.values())).K if views else 2
-    if not subjects:
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, "No data", ha="center", va="center")
-        return fig, pd.DataFrame()
-
-    _first_view = views[subjects[0]]
-    _state_labels = [
-        _first_view.state_name_by_idx.get(k, f"State {k}")
-        for k in _first_view.state_idx_order
-    ]
-    _cmap = {"All": "#999999"}
-    for _k in _first_view.state_idx_order:
-        _lbl = _first_view.state_name_by_idx.get(_k, f"State {_k}")
-        _rank = _first_view.state_rank_by_idx.get(int(_k), int(_k))
-        _cmap[_lbl] = _state_color(_lbl, _rank)
-    _x_labels = ["All"] + _state_labels
-
-    _acc_records = []
-    for subj in subjects:
-        P = np.asarray(views[subj].smoothed_probs)  # (T, K)
-
-        try:
-            import polars as pl
-            if hasattr(trial_df, "filter"):
-                df_sub = trial_df.filter(pl.col("subject") == subj)
-            else:
-                raise AttributeError
-        except (ImportError, AttributeError):
-            df_sub = trial_df[trial_df["subject"] == subj]
-        _perf_col = performance_col if performance_col in df_sub.columns else "performance"
-        _stim_col = stim_col
-        for _cand in [stim_col, "stimulus", "ILD"]:
-            if _cand in df_sub.columns:
-                _stim_col = _cand
-                break
-
-        hits = np.asarray(df_sub[_perf_col]).astype(float)
-        ilds = np.asarray(df_sub[_stim_col]).astype(float)
-
-        T = min(len(P), len(hits), len(ilds))
-        P, hits, ilds = P[:T], hits[:T], ilds[:T]
-        stim_mask = np.abs(ilds) > 0
-
-        valid = stim_mask & np.isfinite(hits)
-        if valid.sum() > 0:
-            _acc_records.append({"subject": subj, "label": "All",
-                                  "acc": hits[valid].mean() * 100, "n": valid.sum()})
-
-        slbls = views[subj].state_name_by_idx
-        for k in views[subj].state_idx_order:
-            lbl  = slbls.get(k, f"State {k}")
-            mask = stim_mask & (P[:, k] >= thresh) & np.isfinite(hits)
-            if mask.sum() > 0:
-                _acc_records.append({"subject": subj, "label": lbl,
-                                      "acc": hits[mask].mean() * 100, "n": mask.sum()})
-
-    if not _acc_records:
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, "No data", ha="center", va="center")
-        return fig, pd.DataFrame()
-
-    _df_acc = pd.DataFrame(_acc_records)
-    _tbl = (
-        _df_acc.groupby("label")[["acc", "n"]]
-        .agg({"acc": "mean", "n": "sum"})
-        .reindex(_x_labels)
-        .rename(columns={"acc": "mean_acc (%)", "n": "total_trials"})
-        .round(1)
+    return _plot_state_accuracy_common(
+        views,
+        trial_df,
+        thresh=thresh,
+        performance_candidates=(performance_col, "performance"),
+        stim_candidates=(stim_col, "stimulus", "ILD"),
+        stim_label="ILD≠0",
     )
-
-    fig, ax = plt.subplots(figsize=(2 + len(_x_labels) * 1.0, 4.5))
-    rng = np.random.default_rng(42)
-    for li, lbl in enumerate(_x_labels):
-        rows = _df_acc[_df_acc["label"] == lbl]["acc"].dropna().values
-        if len(rows) == 0:
-            continue
-        _color = _cmap.get(lbl, "k")
-        _box = ax.boxplot(
-            rows,
-            positions=[li],
-            widths=0.5,
-            patch_artist=True,
-            showfliers=False,
-            zorder=1,
-        )
-        for _patch in _box["boxes"]:
-            _patch.set(facecolor=_color, alpha=0.25, edgecolor=_color, linewidth=1.2)
-        for _elem in ["whiskers", "caps", "medians"]:
-            for _artist in _box[_elem]:
-                _artist.set(color=_color, linewidth=1.2)
-        jitter = rng.uniform(-0.12, 0.12, size=len(rows))
-        ax.scatter(
-            np.full(len(rows), li) + jitter,
-            rows,
-            color=_color,
-            alpha=0.65,
-            s=28,
-            zorder=3,
-        )
-        if len(rows) > 1:
-            _sem = rows.std(ddof=1) / np.sqrt(len(rows))
-        else:
-            _sem = 0.0
-        ax.errorbar(
-            li,
-            rows.mean(),
-            yerr=_sem,
-            fmt="o",
-            color=_color,
-            ms=7,
-            capsize=4,
-            lw=1.8,
-            zorder=4,
-        )
-
-    ax.axhline(50, color="black", linestyle="--", linewidth=0.9, alpha=0.5,
-               label="Chance (50%)")
-    ax.set_xticks(range(len(_x_labels)))
-    ax.set_xticklabels(_x_labels, rotation=20, ha="right")
-    ax.set_xlabel("State")
-    ax.set_ylabel("Accuracy (%)")
-    ax.set_ylim(40, 105)
-    ax.set_title(f"Per-state accuracy  (K={K},  posterior ≥ {thresh},  ILD≠0)")
-    ax.legend(frameon=False, fontsize=8)
-    fig.tight_layout()
-    sns.despine(fig=fig)
-    return fig, _tbl
 
 
 def plot_session_trajectories(
@@ -1365,72 +1334,11 @@ def plot_session_trajectories(
     sort_col: str = "Trial",
     **kwargs,
 ) -> plt.Figure:
-    """Average state-probability trajectories within a session (mean ± SEM).
-
-    Mirrors plots.plot_session_trajectories.
-
-    Parameters
-    ----------
-    trial_df : output of build_trial_df.
-
-    Returns
-    -------
-    fig
-    """
-    subjects = list(views.keys())
-    K = next(iter(views.values())).K if views else 2
-    palette = _state_colors(K)
-    fig, axes = plt.subplots(len(subjects), 1,
-                             figsize=(10, 3.5 * len(subjects)), squeeze=False)
-
-    for i, subj in enumerate(subjects):
-        ax = axes[i, 0]
-        P = np.asarray(views[subj].smoothed_probs)
-
-        try:
-            import polars as pl
-            if hasattr(trial_df, "filter"):
-                df_sub = trial_df.filter(pl.col("subject") == subj).sort(sort_col)
-                _sess_arr = df_sub[session_col].to_numpy()
-            else:
-                raise AttributeError
-        except (ImportError, AttributeError):
-            df_sub = trial_df[trial_df["subject"] == subj].sort_values(sort_col)
-            _sess_arr = df_sub[session_col].to_numpy()
-
-        T = min(len(P), len(_sess_arr))
-        P, _sess_arr = P[:T], _sess_arr[:T]
-
-        sess_ids = np.unique(_sess_arr)
-        sess_len = int(np.median([np.sum(_sess_arr == s) for s in sess_ids]))
-        traj = np.full((len(sess_ids), sess_len, K), np.nan)
-        for si, s in enumerate(sess_ids):
-            idx = np.where(_sess_arr == s)[0]
-            n   = min(len(idx), sess_len)
-            traj[si, :n, :] = P[idx[:n], :]
-
-        mean_traj = np.nanmean(traj, axis=0)
-        sem_traj  = sem(traj, axis=0, nan_policy="omit")
-
-        slbls = views[subj].state_name_by_idx
-        for k in range(K):
-            lbl = slbls.get(k, f"S{k}")
-            t   = np.arange(mean_traj.shape[0])
-            ax.plot(t, mean_traj[:, k], color=palette[k], lw=2, label=lbl)
-            ax.fill_between(t,
-                            mean_traj[:, k] - sem_traj[:, k],
-                            mean_traj[:, k] + sem_traj[:, k],
-                            color=palette[k], alpha=0.2)
-
-        ax.set_ylim(-0.05, 1.05)
-        ax.set_xlabel("Trial within session")
-        ax.set_ylabel("P(state)")
-        ax.set_title(f"Subject {subj}")
-        ax.legend(frameon=False, fontsize=8)
-
-    fig.tight_layout()
-    sns.despine(fig=fig)
-    return fig
+    return _plot_session_trajectories_common(
+        views,
+        trial_df,
+        session_col=session_col,
+    )
 
 
 def plot_state_occupancy(
@@ -1440,111 +1348,11 @@ def plot_state_occupancy(
     sort_col: str = "Trial",
     **kwargs,
 ) -> plt.Figure:
-    """Fractional occupancy summaries + state-switch histogram per session.
-
-    Mirrors plots.plot_state_occupancy.
-
-    Parameters
-    ----------
-    trial_df : output of build_trial_df.
-
-    Returns
-    -------
-    fig
-    """
-    subjects = list(views.keys())
-    K = next(iter(views.values())).K if views else 2
-    fig, axes = plt.subplots(
-        len(subjects), 3, figsize=(14, 3.8 * len(subjects)), squeeze=False
+    return _plot_state_occupancy_common(
+        views,
+        trial_df,
+        session_col=session_col,
     )
-    rng = np.random.default_rng(42)
-
-    for i, subj in enumerate(subjects):
-        ax_occ, ax_box, ax_chg = axes[i, 0], axes[i, 1], axes[i, 2]
-        P     = np.asarray(views[subj].smoothed_probs)
-
-        try:
-            import polars as pl
-            if hasattr(trial_df, "filter"):
-                df_sub = trial_df.filter(pl.col("subject") == subj)
-                _sess_arr = df_sub[session_col].to_numpy()
-            else:
-                raise AttributeError
-        except (ImportError, AttributeError):
-            df_sub = trial_df[trial_df["subject"] == subj]
-            _sess_arr = df_sub[session_col].to_numpy()
-
-        T = min(len(P), len(_sess_arr))
-        P = P[:T]
-        _sess_arr = _sess_arr[:T]
-        viterbi = np.argmax(P, axis=1)
-
-        _rank_order = views[subj].state_idx_order
-        _slbls = views[subj].state_name_by_idx
-        labels = [_slbls.get(k, f"State {k}") for k in _rank_order]
-        colors = [
-            _state_color(labels[_j], views[subj].state_rank_by_idx.get(int(_k), int(_k)))
-            for _j, _k in enumerate(_rank_order)
-        ]
-        occ = [float(np.mean(viterbi == _k)) for _k in _rank_order]
-        ax_occ.bar(labels, occ, color=colors, alpha=0.85)
-        ax_occ.set_ylim(0, 1)
-        ax_occ.set_ylabel("Fractional occupancy")
-        ax_occ.set_title(f"Subject {subj} - overall occupancy")
-
-        _sess_occ = {int(_k): [] for _k in _rank_order}
-        changes_per_sess = []
-        for s in np.unique(_sess_arr):
-            v = viterbi[_sess_arr == s]
-            if len(v) == 0:
-                continue
-            changes_per_sess.append(int(np.sum(np.diff(v) != 0)))
-            for _k in _rank_order:
-                _sess_occ[int(_k)].append(float(np.mean(v == _k)))
-
-        for _pos, _k in enumerate(_rank_order):
-            _vals = np.asarray(_sess_occ[int(_k)], dtype=float)
-            if _vals.size == 0:
-                continue
-            _col = colors[_pos]
-            _box = ax_box.boxplot(
-                _vals,
-                positions=[_pos],
-                widths=0.5,
-                patch_artist=True,
-                showfliers=False,
-            )
-            for _patch in _box["boxes"]:
-                _patch.set(facecolor=_col, alpha=0.25, edgecolor=_col, linewidth=1.2)
-            for _elem in ["whiskers", "caps", "medians"]:
-                for _artist in _box[_elem]:
-                    _artist.set(color=_col, linewidth=1.2)
-            _jitter = rng.uniform(-0.12, 0.12, size=_vals.size)
-            ax_box.scatter(
-                np.full(_vals.size, _pos) + _jitter,
-                _vals,
-                color=_col,
-                alpha=0.6,
-                s=24,
-                zorder=3,
-            )
-
-        ax_box.set_xticks(range(len(labels)))
-        ax_box.set_xticklabels(labels, rotation=15, ha="right")
-        ax_box.set_ylim(0, 1)
-        ax_box.set_ylabel("Session occupancy")
-        ax_box.set_title(f"Subject {subj} - occupancy by session")
-
-        max_chg = max(changes_per_sess) if changes_per_sess else 1
-        ax_chg.hist(changes_per_sess, bins=range(0, max_chg + 2),
-                    color="#888888", alpha=0.75, edgecolor="white")
-        ax_chg.set_xlabel("# state switches / session")
-        ax_chg.set_ylabel("# sessions")
-        ax_chg.set_title(f"Subject {subj} - state switches")
-
-    fig.tight_layout()
-    sns.despine(fig=fig)
-    return fig
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1560,193 +1368,16 @@ def plot_session_deepdive(
     sort_col: str = "Trial",
     **kwargs,
 ) -> plt.Figure:
-    """Session deep-dive: P(Engaged) + cumulative accuracy (twin axis) + action traces.
-
-    2AFC equivalent of plots.plot_session_deepdive.
-
-    Action traces are auto-detected from the saved X matrix; looks for
-    columns whose names start with 'A_' (e.g. A_L, A_R, A_plus, A_minus).
-
-    Parameters
-    ----------
-    trial_df : output of build_trial_df; must contain ``correct_bool``,
-               ``ILD``, and ``response`` columns.
-
-    Returns
-    -------
-    fig
-    """
-    K = views[subj].K
-    try:
-        import polars as pl
-        _has_pl = True
-    except ImportError:
-        _has_pl = False
-
-    # Coerce sess to match the column dtype (dropdown widgets return strings)
-    try:
-        sess = int(sess)
-    except (TypeError, ValueError):
-        pass
-
-    # ── filter trial_df to subject, then to session ───────────────────────────
-    # trial_df rows are row-aligned with views[subj].smoothed_probs per subject.
-    if _has_pl and hasattr(trial_df, "filter"):
-        # trial_df is already row-aligned with view.smoothed_probs; re-sorting
-        # by within-session trial numbers can scramble that alignment.
-        _df_sub_all = trial_df.filter(pl.col("subject") == subj)
-        _sess_row_indices = (
-            _df_sub_all
-            .with_row_index("_r")
-            .filter(pl.col(session_col) == sess)["_r"]
-            .to_numpy()
-        )
-        _df_sess  = _df_sub_all.filter(pl.col(session_col) == sess)
-        _hit_col = "correct_bool" if "correct_bool" in _df_sess.columns else "performance"
-        _ild_col = "ILD" if "ILD" in _df_sess.columns else "stimulus"
-        _choice_col = "response" if "response" in _df_sess.columns else "Choice"
-        _hit      = _df_sess[_hit_col].to_numpy().astype(float)
-        _ild      = _df_sess[_ild_col].to_numpy().astype(float)
-        _choice   = _df_sess[_choice_col].to_numpy().astype(int)
-    else:
-        _df_sub_all = trial_df[trial_df["subject"] == subj].reset_index(drop=True)
-        _sess_row_indices = _df_sub_all.index[_df_sub_all[session_col] == sess].to_numpy()
-        _df_sess  = _df_sub_all[_df_sub_all[session_col] == sess]
-        _hit_col = "correct_bool" if "correct_bool" in _df_sess.columns else "performance"
-        _ild_col = "ILD" if "ILD" in _df_sess.columns else "stimulus"
-        _choice_col = "response" if "response" in _df_sess.columns else "Choice"
-        _hit      = _df_sess[_hit_col].to_numpy().astype(float)
-        _ild      = _df_sess[_ild_col].to_numpy().astype(float)
-        _choice   = _df_sess[_choice_col].to_numpy().astype(int)
-
-    _probs_all = views[subj].smoothed_probs
-    _probs     = _probs_all[_sess_row_indices]
-    _T         = _probs.shape[0]
-    # guard: align lengths in case session filter differs
-    _T = min(_T, len(_hit))
-    _probs, _hit, _ild, _choice = (
-        _probs[:_T], _hit[:_T], _ild[:_T], _choice[:_T]
+    return _plot_session_deepdive_common(
+        views,
+        trial_df,
+        subj,
+        sess,
+        session_col=session_col,
+        performance_candidates=("correct_bool", "performance"),
+        stim_candidates=("ILD", "stimulus"),
+        response_candidates=("response", "Choice"),
     )
-    _x = np.arange(_T)
-
-    # ── auto-detect action traces from X ─────────────────────────────────────
-    _X_cols_s = views[subj].feat_names
-    _X_idx    = {f: i for i, f in enumerate(_X_cols_s)}
-    _X_sess   = views[subj].X[_sess_row_indices][:_T]
-
-    _trace_colors = {
-        "A_plus": "royalblue", "A_minus": "gold",
-        "A_L": "royalblue",    "A_C": "gold",    "A_R": "tomato",
-    }
-    _trace_sources = {
-        tc: (_X_sess, idx)
-        for tc, idx in _X_idx.items()
-        if tc.startswith("A_")
-    }
-
-    # ── cumulative accuracy on ILD≠0 trials ──────────────────────────────────
-    _nz      = _ild != 0
-    _cum_acc = np.full(_T, np.nan)
-    _cum_n, _cum_s = 0, 0.0
-    for _ti in range(_T):
-        if _nz[_ti]:
-            _cum_s += _hit[_ti]; _cum_n += 1
-        if _cum_n > 0:
-            _cum_acc[_ti] = 100.0 * _cum_s / _cum_n
-
-    # ── find "Engaged" state index ────────────────────────────────────────────
-    _slbl = views[subj].state_name_by_idx
-    _engaged_k = views[subj].engaged_k()
-    _palette = _DEFAULT_COLORS
-
-    # ── figure ────────────────────────────────────────────────────────────────
-    _n_rows = 2 if _trace_sources else 1
-    _height_ratios = [2, 1.5] if _trace_sources else [1]
-    fig, _axes = plt.subplots(
-        _n_rows, 1,
-        figsize=(14, 5 + 2.5 * (_n_rows - 1)),
-        sharex=True,
-        gridspec_kw={"height_ratios": _height_ratios},
-    )
-    _axes = np.atleast_1d(_axes)
-    _ax1  = _axes[0]
-
-    # top panel: same stacked posterior rendering as the notebook posterior plot
-    _colors = ["tab:green", "tab:grey", *sns.color_palette("tab10", n_colors=max(0, K - 2))]
-    _bottom = np.zeros(_T)
-    for _k in views[subj].state_idx_order:
-        _rank = views[subj].state_rank_by_idx.get(int(_k), int(_k))
-        _col = _colors[_rank] if _rank < len(_colors) else sns.color_palette("tab10", n_colors=K)[_rank % K]
-        _ax1.fill_between(
-            _x,
-            _bottom,
-            _bottom + _probs[:, _k],
-            alpha=0.7,
-            color=_col,
-            label=_slbl.get(_k, f"State {_k}"),
-        )
-        _bottom += _probs[:, _k]
-
-    _ax1.plot(
-        _x,
-        _probs[:, _engaged_k],
-        color=_palette[0],
-        lw=2,
-        label=f"P({_slbl.get(_engaged_k, 'Engaged')})",
-    )
-
-    _choice_cols = {0: "royalblue", 1: "tomato"}
-    _choice_lbls = {0: "L", 1: "R"}
-    for _resp, _c in _choice_cols.items():
-        _m = _choice == _resp
-        _ax1.scatter(
-            _x[_m], np.ones(_m.sum()) * 1.03,
-            c=_c, s=5, marker="|",
-            label=_choice_lbls[_resp],
-            transform=_ax1.get_xaxis_transform(),
-            clip_on=False,
-        )
-
-    _ax1.set_ylim(0, 1)
-    _ax1.set_ylabel("State probability")
-    _ax1.set_title(f"Subject {subj}  —  session {sess}  ({_T} trials)")
-
-    _ax1r = _ax1.twinx()
-    _ax1r.plot(_x, _cum_acc, color="black", lw=1.8, linestyle="-", alpha=0.7,
-               label="Cumul. accuracy")
-    _ax1r.axhline(50, color="grey", lw=0.9, linestyle="--", alpha=0.5,
-                  label="Chance (50%)")
-    _ax1r.set_ylim(0, 105)
-    _ax1r.set_ylabel("Accuracy (%)", color="black")
-
-    _lines1,  _labs1  = _ax1.get_legend_handles_labels()
-    _lines1r, _labs1r = _ax1r.get_legend_handles_labels()
-    _ax1.legend(
-        _lines1 + _lines1r, _labs1 + _labs1r,
-        bbox_to_anchor=(1.08, 1), loc="upper left", fontsize=8, frameon=False,
-    )
-
-    # bottom panel: action traces (if any)
-    if _trace_sources:
-        _ax2 = _axes[1]
-        for _tc, (_arr, _ci) in _trace_sources.items():
-            _ax2.plot(_x, _arr[:, _ci],
-                      label=_tc,
-                      color=_trace_colors.get(_tc, "gray"),
-                      lw=1.5, alpha=0.85)
-        _ax2.set_ylabel("Action trace")
-        _ax2.set_ylim(0, None)
-        _ax2.set_xlabel("Trial within session")
-        _ax2.legend(
-            bbox_to_anchor=(1.08, 1), loc="upper left", fontsize=8, frameon=False,
-        )
-    else:
-        _ax1.set_xlabel("Trial within session")
-
-    fig.tight_layout()
-    fig.subplots_adjust(right=0.82)
-    sns.despine(fig=fig, right=False)    
-    return fig
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1757,14 +1388,14 @@ def plot_categorical_performance_all(
     df,
     model_name: str,
     ild_col: str = "ILD",
-    choice_col: str = "Choice",
+    choice_col: str = "response",
     pred_col: str = "p_pred",
     subj_col: str = "subject",
     cond_col: str = "condition",
     exp_col: str = "experiment",
     views: Optional[dict] = None,
     X_cols: Optional[Sequence[str]] = None,
-    ild_max: float = 70.0,
+    ild_max: Optional[float] = None,
 ) -> plt.Figure:
     """Overall psychometric + by-condition + by-experiment panels.
 
@@ -1780,10 +1411,12 @@ def plot_categorical_performance_all(
     Parameters
     ----------
     df         : Polars or pandas DataFrame with Trial-level predictions.
-                 Must contain: ILD, Choice (0/1), p_pred, subject.
+                 Must contain: ILD, response/Choice (0/1), p_pred, subject.
                  The default model overlay is ``p_pred`` because this figure
                  shows psychometrics, i.e. P(rightward choice), not accuracy.
     model_name : String for figure suptitle.
+    ild_max    : Optional explicit normalisation scale. When omitted, the
+                 maximum absolute ILD in ``df[ild_col]`` is used.
 
     Returns
     -------
@@ -1793,6 +1426,12 @@ def plot_categorical_performance_all(
         df_pd = df.to_pandas()
     else:
         df_pd = df.copy()
+    ild_max = _resolve_ild_max(df_pd, ild_col, ild_max)
+    ild_ticks = (
+        sorted(pd.to_numeric(df_pd[ild_col], errors="coerce").dropna().unique())
+        if ild_col in df_pd.columns
+        else []
+    )
 
     has_cond = cond_col in df_pd.columns
     has_exp  = exp_col  in df_pd.columns
@@ -1832,6 +1471,7 @@ def plot_categorical_performance_all(
         title="a) Overall psychometric", xlabel="ILD (dB)",
         ylabel="P(rightward Choice)", color="#2b7bba",
         smooth_curve=_smooth_all,
+        tick_ilds=ild_ticks,
     )
     ax_idx += 1
 
@@ -1852,6 +1492,7 @@ def plot_categorical_performance_all(
                 title=f"b) {cond}", xlabel="ILD (dB)",
                 color=cond_colors.get(cond, "k"),
                 smooth_curve=_smooth_cond,
+                tick_ilds=ild_ticks,
             )
         ax_idx += 1
 
@@ -1872,6 +1513,7 @@ def plot_categorical_performance_all(
                 title=f"c) {exp}", xlabel="ILD (dB)",
                 color=exp_palette[ei],
                 smooth_curve=_smooth_exp,
+                tick_ilds=ild_ticks,
             )
 
     for ax in axes:
@@ -1887,11 +1529,11 @@ def plot_categorical_performance_all_by_state(
     views: dict,
     model_name: str,
     ild_col: str = "ILD",
-    choice_col: str = "Choice",
+    choice_col: str = "response",
     pred_col: str = "p_pred",
     subj_col: str = "subject",
     X_cols: Optional[Sequence[str]] = None,
-    ild_max: float = 70.0,
+    ild_max: Optional[float] = None,
 ) -> plt.Figure:
     """Per-state psychometric grid (K panels, one per state).
 
@@ -1907,6 +1549,8 @@ def plot_categorical_performance_all_by_state(
              :func:`~glmhmmt.postprocess.build_trial_df`.
     views  : {subj: SubjectFitView} as produced by build_views.
     model_name : string used as figure suptitle.
+    ild_max : Optional explicit normalisation scale. When omitted, the
+              maximum absolute ILD in ``df[ild_col]`` is used.
 
     Returns
     -------
@@ -1916,6 +1560,12 @@ def plot_categorical_performance_all_by_state(
         df_pd = df.to_pandas().reset_index(drop=True)
     else:
         df_pd = df.reset_index(drop=True)
+    ild_max = _resolve_ild_max(df_pd, ild_col, ild_max)
+    ild_ticks = (
+        sorted(pd.to_numeric(df_pd[ild_col], errors="coerce").dropna().unique())
+        if ild_col in df_pd.columns
+        else []
+    )
 
     K = next(iter(views.values())).K if views else 2
 
@@ -1951,7 +1601,7 @@ def plot_categorical_performance_all_by_state(
     _as = {s: _rank_ordered_as(v) for s, v in views.items()}
 
     ilds = sorted(df_pd[ild_col].dropna().unique())
-    panel_w = max(3, 0.4 * len(ilds))
+    panel_w = max(2, 0.3 * len(ilds))
 
     # ── K-panel grid ──────────────────────────────────────────────────────────
     _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
@@ -1967,16 +1617,75 @@ def plot_categorical_performance_all_by_state(
         else:
             _smooth_by_k[k] = _mean_glm_curve(_as, _all_subjects, X_cols, ild_max=ild_max, state_k=k)
 
-    fig, axes = plt.subplots(
-        1, K, figsize=(panel_w * K, 4), sharey=True, squeeze=False
-    )
+    _weight_cols: dict[int, str] = {}
+    for k in range(K):
+        _col = f"__p_state_rank_{k}"
+        _weight_cols[k] = _col
+        df_pd[_col] = 0.0
+    for _subj, _view in views.items():
+        _rows = df_pd.index[df_pd[subj_col] == _subj].to_numpy()
+        if len(_rows) == 0:
+            continue
+        for _raw_k, _rank in _view.state_rank_by_idx.items():
+            _pcol = f"p_state_{int(_raw_k)}"
+            _wcol = _weight_cols.get(int(_rank))
+            if _wcol is None or _pcol not in df_pd.columns:
+                continue
+            df_pd.loc[_rows, _wcol] = pd.to_numeric(
+                df_pd.loc[_rows, _pcol], errors="coerce"
+            ).fillna(0.0).to_numpy(dtype=float)
 
-    for k, ax in enumerate(axes[0]):
+    _include_overlay = K > 1
+    _n_panels = K + int(_include_overlay)
+    fig, axes = plt.subplots(1, _n_panels, figsize=(panel_w * _n_panels, 4), sharey=True)
+    axes = np.atleast_1d(axes)
+
+    _xpos_all = np.array(ilds, dtype=float)
+
+    if _include_overlay:
+        _ax_overlay = axes[0]
+        for k in range(K):
+            lbl = slbls.get(k, f"State {k}")
+            color = _state_color(lbl, k)
+            _psych_state_panel(
+                _ax_overlay,
+                df_pd,
+                ild_col,
+                choice_col,
+                pred_col,
+                subj_col,
+                color=color,
+                label=lbl,
+                smooth_curve=_smooth_by_k[k],
+                show_subject_traces=False,
+                weight_col=_weight_cols[k],
+                tick_ilds=ild_ticks,
+            )
+        _ax_overlay.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
+        _ax_overlay.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
+        _ax_overlay.set_ylim(0, 1)
+        _ax_overlay.set_yticks([0, 0.5, 1])
+        _ax_overlay.set_xlabel("ILD (dB)")
+        _ax_overlay.set_ylabel("P(rightward Choice)")
+        _ax_overlay.set_title("All states")
+        _ax_overlay.legend(frameon=False, fontsize=8)
+
+    for k, ax in enumerate(axes[int(_include_overlay):]):
         lbl   = slbls.get(k, f"State {k}")
         color = _state_color(lbl, k)
-        sub   = df_pd[df_pd["_state_k"] == k]
-        _psych_panel(ax, sub, ild_col, choice_col, pred_col, subj_col,
-                           color=color,smooth_curve=_smooth_by_k[k])
+        _psych_state_panel(
+            ax,
+            df_pd,
+            ild_col,
+            choice_col,
+            pred_col,
+            subj_col,
+            color=color,
+            label=lbl,
+            smooth_curve=_smooth_by_k[k],
+            weight_col=_weight_cols[k],
+            tick_ilds=ild_ticks,
+        )
         ax.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
         ax.set_ylim(0, 1)
         ax.set_yticks([0, 0.5, 1])

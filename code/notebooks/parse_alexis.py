@@ -209,54 +209,53 @@ def _(pd):
         return df
 
 
-    def filter_behavior(df, clean_start=True, drop_miss=True, filter_drug=True):
-        """
-        Filter the behavior DataFrame for one subject.
-        :param df: DataFrame containing the data
-        :return: Filtered DataFrame
-        """
+    # def filter_behavior(df, clean_start=True, drop_miss=True, filter_drug=True):
+    #     """
+    #     Filter the behavior DataFrame for one subject.
+    #     :param df: DataFrame containing the data
+    #     :return: Filtered DataFrame
+    #     """
 
-        _ = len(df)
+    #     _ = len(df)
 
-        # General filters
-        # Remove AW and WarmUp trials
-        if clean_start:
-            df = clean_session_start(df)
-        # Drop misses (Choice == NaN)
-        if drop_miss:
-            df = df.dropna(subset=['Choice']).reset_index(drop=True)
+    #     # General filters
+    #     # Remove AW and WarmUp trials
+    #     if clean_start:
+    #         df = clean_session_start(df)
+    #     # Drop misses (Choice == NaN)
+    #     if drop_miss:
+    #         df = df.dropna(subset=['Choice']).reset_index(drop=True)
 
-        # Experiment-specific filters
-        experiment = df.Experiment.unique()[0]
+    #     # Experiment-specific filters
+    #     experiment = df.Experiment.unique()[0]
 
-        if experiment in ['2AFC_2', '2AFC_3']:
-            # These 3 conditons return 0 trials
-            # df = df[df.Stage == 4].reset_index(drop=True)
-            # df = df[df.Motor == 4].reset_index(drop=True)
-            # df = df[df.StimDur == 1].reset_index(drop=True)
-            df = df[df.P > 0].reset_index(drop=True)
+    #     if experiment in ['2AFC_2', '2AFC_3']:
+    #         # These 3 conditons return 0 trials
+    #         # df = df[df.Stage == 4].reset_index(drop=True)
+    #         # df = df[df.Motor == 4].reset_index(drop=True)
+    #         # df = df[df.StimDur == 1].reset_index(drop=True)
+    #         df = df[df.P > 0].reset_index(drop=True)
 
-        elif experiment in ['2AFC_4', '2AFC_6']:
-            # These 3 conditons return 0 trials
-            # df = df[df.Task == 'FD'].reset_index(drop=True)  # (otherwise bump in lick rate before stim. onset)
-            # df = df[df.StimDur == 1].reset_index(drop=True)
-            # df = df[df.Delay == 0.5].reset_index(drop=True)
-            df = df[df.P > 0].reset_index(drop=True)
+    #     elif experiment in ['2AFC_4', '2AFC_6']:
+    #         # These 3 conditons return 0 trials
+    #         # df = df[df.Task == 'FD'].reset_index(drop=True)  # (otherwise bump in lick rate before stim. onset)
+    #         # df = df[df.StimDur == 1].reset_index(drop=True)
+    #         # df = df[df.Delay == 0.5].reset_index(drop=True)
+    #         df = df[df.P > 0].reset_index(drop=True)
 
-            if experiment == '2AFC_6' and filter_drug:  # Drug group
-                df = filter_drug_sessions(df)
+    #         if experiment == '2AFC_6' and filter_drug:  # Drug group
+    #             df = filter_drug_sessions(df)
 
-        elif experiment == '2AFC_5':  # Ephys group
-            df = df[df.Task == 'FD'].reset_index(drop=True)
-            df = df[df.StimDur == 0.5].reset_index(drop=True)
-            df = df[df.Delay == 0.5].reset_index(drop=True)
-            df = df[df.P == 0].reset_index(drop=True)
+    #     elif experiment == '2AFC_5':  # Ephys group
+    #         df = df[df.Task == 'FD'].reset_index(drop=True)
+    #         df = df[df.StimDur == 0.5].reset_index(drop=True)
+    #         df = df[df.Delay == 0.5].reset_index(drop=True)
+    #         df = df[df.P == 0].reset_index(drop=True)
 
-        print(f'Total:{round((_ - len(df)) / 1000)}k trials')
+    #     print(f'Total:{round((_ - len(df)) / 1000)}k trials')
 
-        return df
-
-    return (filter_behavior,)
+    #     return df
+    return
 
 
 @app.cell

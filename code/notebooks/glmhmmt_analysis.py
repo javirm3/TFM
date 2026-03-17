@@ -796,9 +796,10 @@ def _(
     mo.vstack([
         mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
         mo.md(
-            "> **Left**: fraction of all trials assigned to each state (argmax of posterior).  \n"
-            "> **Middle**: per-session occupancy boxplots for each state.  \n"
-            "> **Right**: histogram of inferred state changes per session."
+            "> **Top row**: all selected subjects pooled. Left = posterior fractional occupancy boxplot by state; "
+            "middle = per-session occupancy pooled across subjects; right = histogram of state switches per session.  \n"
+            "> **Rows below**: one row per subject. Left = posterior mean occupancy by state; middle = per-session "
+            "occupancy boxplots; right = histogram of inferred state switches per session."
         ),
         _fig_occ,
     ], align="center")

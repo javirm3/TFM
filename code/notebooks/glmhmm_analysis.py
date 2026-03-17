@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.20.4"
+__generated_with = "0.21.0"
 app = marimo.App(width="full")
 
 
@@ -118,6 +118,12 @@ def _(mo, task_name, ui_model_manager):
         ui_subjects,
         ui_tau,
     )
+
+
+@app.cell
+def _():
+    # df_all.filter(pl.col("subject") == "326.0").select("Session").unique()
+    return
 
 
 @app.cell
@@ -807,13 +813,12 @@ def _(K, mo, plots, trial_df, ui_subjects_traj, views):
         mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
         _fig_occ,
         mo.md(
-            "> **Left**: fraction of all trials assigned to each state (argmax of posterior).  \n"
-            "> **Middle**: per-session occupancy boxplots for each state.  \n"
-            "> **Right**: histogram of inferred state changes per session."
+            "> **Top row**: all selected subjects pooled. Left = posterior fractional occupancy boxplot by state; "
+            "middle = per-session occupancy pooled across subjects; right = histogram of state switches per session.  \n"
+            "> **Rows below**: one row per subject. Left = posterior mean occupancy by state; middle = per-session "
+            "occupancy boxplots; right = histogram of inferred state switches per session."
         ),
     ], align="center")
-
-    trial_df
     return
 
 
@@ -1033,13 +1038,22 @@ def _(mo, task_name):
 def _(
     K,
     adapter,
+    build_trial_df,
+    build_views,
+    current_hash,
     df_all,
     mo,
     np,
+    paths,
     pl,
+    plots,
     plt,
     sns,
     ssm_run_btn,
+    task_name,
+    trial_df,
+    ui_alias,
+    ui_existing,
     ui_subjects,
     ui_trial_range,
     views,
@@ -1048,16 +1062,62 @@ def _(
     # ── SSM fit + posterior plot ───────────────────────────────────────────────
     mo.stop(not ssm_run_btn.value, mo.md("Press **▶ Run SSM safety check** above to fit."))
 
-    import ssm as _ssm_lib
+    try:
+        import ssm as _ssm_lib
+    except ImportError:
+        mo.stop(
+            True,
+            mo.md(
+                "SSM is not installed in the current environment, so the SSM vs custom "
+                "log-likelihood comparison cannot run."
+            ),
+        )
     from scripts.fit_glmhmm import _valid_trial_mask as _vtm
-
-    _STIM_NAMES_SSM = {"stim_vals", "stim_d", "ild_norm", "ILD", "ild",
-                       "stimulus", "net_ild", "stim_strength"}
 
     _ssm_subjects = [s for s in ui_subjects.value if s in views]
     mo.stop(not _ssm_subjects, mo.md("No fitted arrays found — run the custom fit first."))
 
-    _ssm_results = {}
+    _ssm_arrays = {}
+    _cmp_rows = []
+    _missing_metric_subjects = []
+    _selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
+    _out_dir = paths.RESULTS / "fits" / task_name / "glmhmm" / _selected_model_id
+
+    def _load_custom_metrics(_subj: str, _n_trials: int):
+        _candidates = [
+            _out_dir / f"{_subj}_K{K}_glmhmm_metrics.parquet",
+            _out_dir / f"{_subj}_glmhmm_metrics.parquet",
+            *sorted(_out_dir.glob(f"{_subj}*_glmhmm_metrics.parquet")),
+        ]
+        for _path in dict.fromkeys(_candidates):
+            if not _path.exists():
+                continue
+            _df_m = pl.read_parquet(_path)
+            if _df_m.height == 0:
+                continue
+            _row = _df_m.row(0, named=True)
+            _raw_ll = _row.get("raw_ll")
+            _ll_pt = _row.get("ll_per_trial")
+            if _raw_ll is None and _ll_pt is not None:
+                _raw_ll = float(_ll_pt) * _n_trials
+            if _ll_pt is None and _raw_ll is not None:
+                _ll_pt = float(_raw_ll) / max(_n_trials, 1)
+            if _raw_ll is None or _ll_pt is None:
+                continue
+            return float(_raw_ll), float(_ll_pt), _path.name
+        return np.nan, np.nan, None
+
+    def _ssm_data_loglik(_model, _choices_list, _inputs_list):
+        if hasattr(_model, "log_likelihood"):
+            return float(_model.log_likelihood(_choices_list, inputs=_inputs_list)), "log_likelihood"
+        if hasattr(_model, "log_probability"):
+            return float(_model.log_probability(_choices_list, inputs=_inputs_list)), "log_probability"
+        raise AttributeError("SSM HMM object exposes neither log_likelihood nor log_probability.")
+
+    def _stable_softmax_np(_logits: np.ndarray) -> np.ndarray:
+        _shift = _logits - np.max(_logits, axis=-1, keepdims=True)
+        _exp = np.exp(_shift)
+        return _exp / np.sum(_exp, axis=-1, keepdims=True)
 
     with mo.status.spinner(title="Fitting SSM GLM-HMM…"):
         for _subj in _ssm_subjects:
@@ -1094,91 +1154,468 @@ def _(
                 method="em", num_iters=200, tolerance=1e-4,
             )
 
-            # Extract quantities
             _W_ssm    = -_glmhmm_s.observations.params          # (K, C-1, n_feat); flip sign
             _trans_ssm = _glmhmm_s.transitions.transition_matrix  # (K, K)
             _gamma_ssm = np.vstack([
                 _glmhmm_s.expected_states(data=d, input=inp)[0]
                 for d, inp in zip(_choices_list, _inputs_list)
             ])  # (T, K)
-
-            # Identify "Engaged" state: highest |stim weight| (W[:, 0, stim_idx])
-            _feat_names_s = list(_view.feat_names)
-            _stim_idx_s   = next(
-                (i for i, n in enumerate(_feat_names_s) if n in _STIM_NAMES_SSM), None
+            _pi0_ssm = np.asarray(_glmhmm_s.init_state_distn.initial_state_distn, dtype=float)
+            _p_pred_ssm_parts = []
+            for d, inp in zip(_choices_list, _inputs_list):
+                _alpha_s = np.asarray(_glmhmm_s.filter(data=d, input=inp), dtype=float)  # (T_s, K)
+                _T_s = int(inp.shape[0])
+                _pred_z_s = np.vstack([
+                    _pi0_ssm[None, :],
+                    _alpha_s[:-1] @ _trans_ssm,
+                ]) if _T_s > 1 else _pi0_ssm[None, :]
+                _logits_ce_s = np.einsum("kcf,tf->tkc", _W_ssm, np.asarray(inp, dtype=float))
+                _logits_s = np.concatenate(
+                    [
+                        _logits_ce_s,
+                        np.zeros((_T_s, K, 1), dtype=float),
+                    ],
+                    axis=-1,
+                )
+                _p_y_given_z_s = _stable_softmax_np(_logits_s)  # (T_s, K, C)
+                _p_pred_ssm_parts.append(
+                    np.einsum("tk,tkc->tc", _pred_z_s, _p_y_given_z_s)
+                )
+            _p_pred_ssm = np.concatenate(_p_pred_ssm_parts, axis=0)
+            _ssm_raw_ll, _ssm_ll_source = _ssm_data_loglik(
+                _glmhmm_s, _choices_list, _inputs_list
             )
-            if _stim_idx_s is not None and _W_ssm.ndim == 3:
-                _scores_s = np.abs(_W_ssm[:, 0, _stim_idx_s])
-            else:
-                _scores_s = np.zeros(K)
-            _engaged_ssm = int(np.argmin(_scores_s))
+            _n_trials = int(_y.shape[0])
+            _ssm_ll_per_trial = _ssm_raw_ll / max(_n_trials, 1)
+            _custom_raw_ll, _custom_ll_per_trial, _metric_file = _load_custom_metrics(
+                _subj, _n_trials
+            )
+            if _metric_file is None:
+                _missing_metric_subjects.append(_subj)
 
-            _ssm_results[_subj] = {
-                "gamma": _gamma_ssm,
-                "W":     _W_ssm,
-                "trans": _trans_ssm,
-                "y":     _y,
-                "engaged_k": _engaged_ssm,
+            _cmp_rows.append(
+                {
+                    "subject": _subj,
+                    "n_trials": _n_trials,
+                    "custom_raw_ll": _custom_raw_ll,
+                    "ssm_raw_ll": _ssm_raw_ll,
+                    "delta_raw_ll_ssm_minus_custom": _ssm_raw_ll - _custom_raw_ll,
+                    "custom_ll_per_trial": _custom_ll_per_trial,
+                    "ssm_ll_per_trial": _ssm_ll_per_trial,
+                    "delta_ll_per_trial_ssm_minus_custom": _ssm_ll_per_trial - _custom_ll_per_trial,
+                    "custom_metrics_file": _metric_file,
+                    "ssm_ll_source": _ssm_ll_source,
+                }
+            )
+
+            _ssm_arrays[_subj] = {
+                "smoothed_probs": _gamma_ssm,
+                "emission_weights": _W_ssm,
+                "transition_matrix": _trans_ssm,
+                "X": _X,
+                "y": _y,
+                "X_cols": np.array(list(_view.feat_names), dtype=object),
+                "p_pred": _p_pred_ssm,
             }
 
-    # ── Plot: SSM posterior vs custom posterior (Engaged state) ──────────────
-    _n_s   = len(_ssm_subjects)
+    _ssm_views = build_views(_ssm_arrays, adapter, K, _ssm_subjects)
+    _views_sel = {s: views[s] for s in _ssm_subjects}
+    _ssm_views_sel = {s: _ssm_views[s] for s in _ssm_subjects}
+    _trial_df_custom_sel = trial_df.filter(pl.col("subject").is_in(_ssm_subjects))
+    _sort_col = adapter.sort_col
+    _ses_col = adapter.session_col
+    _bcols = adapter.behavioral_cols
+    _trial_frames_ssm = []
+    for _subj, _view in _ssm_views_sel.items():
+        _df_sub = (
+            df_all
+            .filter(pl.col("subject") == _subj)
+            .sort(_sort_col)
+            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
+        )
+        if _df_sub.height != _view.T:
+            continue
+        _trial_frames_ssm.append(build_trial_df(_view, adapter, _df_sub, _bcols))
+    _trial_df_ssm = pl.concat(_trial_frames_ssm) if _trial_frames_ssm else pl.DataFrame()
+
+    _psych_fig_custom = None
+    _psych_fig_ssm = None
+    if _trial_df_custom_sel.height > 0 and _trial_df_ssm.height > 0:
+        _plot_df_custom = plots.prepare_predictions_df(_trial_df_custom_sel)
+        _psych_fig_custom, _ = plots.plot_categorical_performance_all(
+            _plot_df_custom,
+            f"Dynamax glmhmm K={K}",
+            views=_views_sel,
+        )
+        _plot_df_ssm = plots.prepare_predictions_df(_trial_df_ssm)
+        _psych_fig_ssm, _ = plots.plot_categorical_performance_all(
+            _plot_df_ssm,
+            f"SSM glmhmm K={K}",
+            views=_ssm_views_sel,
+        )
+
+    _cmp_df = pl.DataFrame(_cmp_rows)
+    _contrast_labels = list(adapter.choice_labels[:-1]) or ["contrast_0"]
+    _coef_rows = []
+    for _subj in _ssm_subjects:
+        _custom_view = views[_subj]
+        _ssm_view = _ssm_views[_subj]
+        _custom_feat_names = list(_custom_view.feat_names)
+        _ssm_feat_names = list(_ssm_view.feat_names)
+        _feat_names = _custom_feat_names if _custom_feat_names == _ssm_feat_names else [
+            _custom_feat_names[_i]
+            if _i < len(_custom_feat_names)
+            else _ssm_feat_names[_i]
+            for _i in range(min(len(_custom_feat_names), len(_ssm_feat_names)))
+        ]
+
+        for _rank_pos, (_custom_k, _ssm_k) in enumerate(
+            zip(_custom_view.state_idx_order, _ssm_view.state_idx_order, strict=False)
+        ):
+            _custom_label = _custom_view.state_name_by_idx.get(int(_custom_k), f"State {_custom_k}")
+            _ssm_label = _ssm_view.state_name_by_idx.get(int(_ssm_k), f"State {_ssm_k}")
+            _state_label = _custom_label if _custom_label == _ssm_label else f"{_custom_label} | { _ssm_label}"
+            _custom_w = np.asarray(_custom_view.emission_weights[int(_custom_k)], dtype=float)
+            _ssm_w = np.asarray(_ssm_view.emission_weights[int(_ssm_k)], dtype=float)
+            _n_contrasts = min(_custom_w.shape[0], _ssm_w.shape[0], len(_contrast_labels))
+            _n_features = min(_custom_w.shape[1], _ssm_w.shape[1], len(_feat_names))
+
+            for _ci in range(_n_contrasts):
+                for _fi in range(_n_features):
+                    _custom_coef = float(_custom_w[_ci, _fi])
+                    _ssm_coef = -float(_ssm_w[_ci, _fi])
+                    _coef_rows.append(
+                        {
+                            "subject": _subj,
+                            "state_rank": int(_rank_pos),
+                            "state_label": _state_label,
+                            "custom_state_idx": int(_custom_k),
+                            "ssm_state_idx": int(_ssm_k),
+                            "contrast": _contrast_labels[_ci],
+                            "feature": _feat_names[_fi],
+                            "dynamax_coef": _custom_coef,
+                            "ssm_coef": _ssm_coef,
+                            "delta_ssm_minus_dynamax": _ssm_coef - _custom_coef,
+                        }
+                    )
+
+    _coef_df = pl.DataFrame(_coef_rows) if _coef_rows else pl.DataFrame(
+        schema={
+            "subject": pl.Utf8,
+            "state_rank": pl.Int64,
+            "state_label": pl.Utf8,
+            "custom_state_idx": pl.Int64,
+            "ssm_state_idx": pl.Int64,
+            "contrast": pl.Utf8,
+            "feature": pl.Utf8,
+            "dynamax_coef": pl.Float64,
+            "ssm_coef": pl.Float64,
+            "delta_ssm_minus_dynamax": pl.Float64,
+        }
+    )
+    _coef_df = _coef_df.sort(["subject", "state_rank", "contrast", "feature"])
+    _coef_display = _coef_df.select(
+        [
+            "subject",
+            "state_rank",
+            "state_label",
+            "custom_state_idx",
+            "ssm_state_idx",
+            "contrast",
+            "feature",
+            "dynamax_coef",
+            "ssm_coef",
+            "delta_ssm_minus_dynamax",
+        ]
+    )
+
+    _cmp_valid = _cmp_df.filter(pl.col("custom_raw_ll").is_finite())
+    if _cmp_valid.height > 0:
+        _custom_total_raw = float(_cmp_valid["custom_raw_ll"].sum())
+        _ssm_total_raw = float(_cmp_valid["ssm_raw_ll"].sum())
+        _total_trials = int(_cmp_valid["n_trials"].sum())
+        _summary_md = "\n".join(
+            [
+                "### Log-likelihood comparison",
+                "",
+                f"- Compared on **{_cmp_valid.height} subject(s)** and **{_total_trials} trials**.",
+                f"- **Custom / Dynamax total raw LL:** `{_custom_total_raw:.3f}`",
+                f"- **SSM total raw LL:** `{_ssm_total_raw:.3f}`",
+                f"- **Δ raw LL (SSM - custom):** `{_ssm_total_raw - _custom_total_raw:.3f}`",
+                f"- **Custom / Dynamax LL per trial:** `{_custom_total_raw / max(_total_trials, 1):.6f}`",
+                f"- **SSM LL per trial:** `{_ssm_total_raw / max(_total_trials, 1):.6f}`",
+                f"- **Δ LL per trial (SSM - custom):** `{(_ssm_total_raw - _custom_total_raw) / max(_total_trials, 1):.6f}`",
+            ]
+        )
+    else:
+        _summary_md = (
+            "### Log-likelihood comparison\n\n"
+            "No matching saved custom metrics were found for the selected fit, so only the "
+            "SSM posterior overlay is shown below."
+        )
+
+    _notes = []
+    if _missing_metric_subjects:
+        _notes.append(
+            "Missing custom metrics for: "
+            + ", ".join(sorted(dict.fromkeys(_missing_metric_subjects)))
+        )
+    _ssm_sources = sorted(dict.fromkeys(_cmp_df["ssm_ll_source"].to_list())) if _cmp_df.height > 0 else []
+    if _ssm_sources and _ssm_sources != ["log_likelihood"]:
+        _notes.append(
+            "SSM LL used fallback method(s): " + ", ".join(_ssm_sources)
+        )
+    _notes_md = (
+        "  \n".join(f"- {note}" for note in _notes)
+        if _notes else
+        "- `raw_ll` is the data log-likelihood from the saved custom fit metrics.  \n"
+        "- `delta` columns are defined as **SSM - custom / Dynamax**."
+    )
+    _notes_md += (
+        "  \n- Emission coefficients are compared after each model's states are reordered by the notebook's "
+        "semantic state labelling (`state_idx_order`), not by raw fitted state index."
+    )
+
+    _coef_fig = None
+    if _coef_df.height > 0:
+        _coef_pd = _coef_df.to_pandas()
+        _panel_keys = (
+            _coef_pd[["state_rank", "state_label", "contrast"]]
+            .drop_duplicates()
+            .sort_values(["state_rank", "contrast"])
+            .to_dict("records")
+        )
+        _n_panels = len(_panel_keys)
+        _n_cols = 1 if _n_panels == 1 else min(2, _n_panels)
+        _n_rows = int(np.ceil(_n_panels / _n_cols))
+        _coef_fig, _coef_axes = plt.subplots(
+            _n_rows,
+            _n_cols,
+            figsize=(max(8, 5.5 * _n_cols), max(3.6, 3.6 * _n_rows)),
+            squeeze=False,
+            sharey=True,
+        )
+        _axes_flat = _coef_axes.ravel()
+        for _ax, _key in zip(_axes_flat, _panel_keys, strict=False):
+            _mask = (
+                (_coef_pd["state_rank"] == _key["state_rank"])
+                & (_coef_pd["state_label"] == _key["state_label"])
+                & (_coef_pd["contrast"] == _key["contrast"])
+            )
+            _panel_df = _coef_pd.loc[_mask].copy()
+            sns.boxplot(
+                data=_panel_df,
+                x="feature",
+                y="delta_ssm_minus_dynamax",
+                ax=_ax,
+                showfliers=False,
+                color="#D9D9D9",
+                boxprops={"alpha": 0.8},
+            )
+            sns.stripplot(
+                data=_panel_df,
+                x="feature",
+                y="delta_ssm_minus_dynamax",
+                ax=_ax,
+                color="black",
+                alpha=0.7,
+                size=4,
+                jitter=0.22,
+            )
+            _ax.axhline(0, color="black", lw=0.9, ls="--", alpha=0.7)
+            _ax.set_title(
+                f"{_key['state_label']}  ({_key['contrast']})"
+            )
+            _ax.set_xlabel("")
+            _ax.set_ylabel("SSM - Dynamax coefficient")
+            _ax.tick_params(axis="x", rotation=35)
+            sns.despine(ax=_ax)
+        for _ax in _axes_flat[_n_panels:]:
+            _ax.set_visible(False)
+        _coef_fig.tight_layout()
+
+    def _choice_meta(_num_classes: int):
+        if _num_classes == 2:
+            return {0: "royalblue", 1: "tomato"}
+        return {0: "royalblue", 1: "gold", 2: "tomato"}
+
+    def _choice_short_labels(_labels):
+        return {int(_i): str(_label)[0].upper() for _i, _label in enumerate(_labels)}
+
+    def _posterior_color(_rank: int):
+        _palette = ["tab:green", "tab:grey", *sns.color_palette("tab10", n_colors=max(0, K - 2))]
+        if _rank < len(_palette):
+            return _palette[_rank]
+        return sns.color_palette("tab10", n_colors=K)[_rank % K]
+
     _t0_s, _t1_s = ui_trial_range.value
+
+    def _plot_view_posterior(
+        _ax,
+        _view,
+        _title: str,
+        _t0_plot: int,
+        _t1_plot: int,
+        _overlay_line=None,
+        _overlay_label: str | None = None,
+    ):
+        _probs = np.asarray(_view.smoothed_probs)[_t0_plot:_t1_plot + 1]
+        _y_w = np.asarray(_view.y).astype(int)[_t0_plot:_t1_plot + 1]
+        _T_w = _probs.shape[0]
+        _x_w = np.arange(_t0_plot, _t0_plot + _T_w)
+        _bottom = np.zeros(_T_w)
+
+        for _k in list(_view.state_idx_order):
+            _rank = _view.state_rank_by_idx.get(int(_k), int(_k))
+            _col = _posterior_color(_rank)
+            _ax.fill_between(
+                _x_w,
+                _bottom,
+                _bottom + _probs[:, _k],
+                alpha=0.7,
+                color=_col,
+                label=_view.state_name_by_idx.get(_k, f"State {_k}"),
+            )
+            _bottom += _probs[:, _k]
+
+        _engaged_k = _view.engaged_k()
+        _engaged_lbl = _view.state_name_by_idx.get(_engaged_k, f"State {_engaged_k}")
+        _ax.plot(
+            _x_w,
+            _probs[:, _engaged_k],
+            color="black",
+            lw=1.4,
+            alpha=0.95,
+            label=f"P({_engaged_lbl})",
+        )
+        if _overlay_line is not None:
+            _ax.plot(
+                _x_w,
+                np.asarray(_overlay_line)[:_T_w],
+                color="darkorange",
+                lw=2,
+                alpha=0.95,
+                linestyle="--",
+                label=_overlay_label or "Overlay",
+            )
+
+        _choice_colors = _choice_meta(_view.num_classes)
+        _choice_labels = _choice_short_labels(adapter.choice_labels)
+        for _resp, _col in _choice_colors.items():
+            _mask = _y_w == _resp
+            if not np.any(_mask):
+                continue
+            _ax.scatter(
+                _x_w[_mask],
+                np.ones(_mask.sum()) * 1.03,
+                c=_col,
+                s=4,
+                marker="|",
+                label=_choice_labels.get(_resp, str(_resp)),
+                transform=_ax.get_xaxis_transform(),
+                clip_on=False,
+            )
+
+        _ax.set_xlim(_t0_plot, _t0_plot + _T_w - 1)
+        _ax.set_ylim(0, 1)
+        _ax.set_ylabel("State probability")
+        _ax.set_title(_title)
+        _ax.legend(
+            bbox_to_anchor=(1.01, 1),
+            loc="upper left",
+            fontsize=8,
+            ncol=1,
+            frameon=False,
+        )
+
+    # ── Plot: custom posterior + inverted SSM engaged posterior ──────────────
+    _n_s   = len(_ssm_subjects)
     _fig_ssm, _axes_ssm = plt.subplots(
-        _n_s, 1, figsize=(14, 3 * _n_s), squeeze=False
+        _n_s, 1, figsize=(14, 3.4 * _n_s), squeeze=False
     )
 
     for _i, _subj in enumerate(_ssm_subjects):
-        _ax = _axes_ssm[_i, 0]
-
-        # SSM engaged posterior (already identified above)
-        _g_ssm = _ssm_results[_subj]["gamma"][_t0_s:_t1_s + 1]   # (window, K)
-        _ek    = _ssm_results[_subj]["engaged_k"]
-        _p_ssm_eng = _g_ssm[:, _ek]
-
-        # Custom model's Engaged state for this subject
-        _view = views[_subj]
-        _ek_custom = _view.engaged_k()
-        _g_custom = np.asarray(_view.smoothed_probs)[_t0_s:_t1_s + 1]
-        _p_custom_eng = _g_custom[:, _ek_custom]
-
-        _x_w = np.arange(_t0_s, _t0_s + len(_p_ssm_eng))
-
-        _ax.plot(_x_w, _p_custom_eng, color="steelblue",  lw=1.2, alpha=0.85, label="Custom (stickiness)")
-        _ax.plot(_x_w, _p_ssm_eng,    color="darkorange", lw=1.2, alpha=0.85, linestyle="--", label="SSM (standard)")
-
-        # Choice rug
-        _y_w = np.asarray(_view.y)[_t0_s:_t1_s + 1].astype(int)
-        for _resp, _col, _lbl in [(0, "royalblue", "L"), (1, "gold", "R")]:
-            _m = _y_w == _resp
-            _ax.scatter(
-                _x_w[_m], np.ones(_m.sum()) * 1.03,
-                c=_col, s=4, marker="|",
-                transform=_ax.get_xaxis_transform(), clip_on=False,
-            )
-
-        _ax.set_xlim(_t0_s, _t0_s + len(_p_ssm_eng) - 1)
-        _ax.set_ylim(0, 1)
-        _ax.set_ylabel("P(Engaged)")
-        _ax.set_title(f"Subject {_subj}  — SSM state {_ek} vs Custom state {_ek_custom}")
-        _ax.legend(fontsize=8, frameon=False, loc="upper right")
+        _ssm_view = _ssm_views[_subj]
+        _ssm_probs = np.asarray(_ssm_view.smoothed_probs)[_t0_s:_t1_s + 1]
+        _ssm_p_inv = 1.0 - _ssm_probs[:, _ssm_view.engaged_k()]
+        _plot_view_posterior(
+            _axes_ssm[_i, 0],
+            views[_subj],
+            f"Subject {_subj} — Custom posterior + inverted SSM line",
+            _t0_s,
+            _t1_s,
+            _overlay_line=_ssm_p_inv,
+            _overlay_label="SSM P(Engaged) inverted",
+        )
 
     _axes_ssm[-1, 0].set_xlabel("Trial")
     _fig_ssm.tight_layout()
+    _fig_ssm.subplots_adjust(right=0.84)
     sns.despine(fig=_fig_ssm)
 
     mo.vstack([
-        mo.md(f"### SSM GLM-HMM sanity check — P(Engaged)  (K={K})"),
+        mo.md("### SSM GLM-HMM fit summary"),
+        mo.md(_summary_md),
+        mo.md(_notes_md),
+        mo.ui.dataframe(_cmp_df),
+        mo.md("### Emission coefficients — SSM vs Dynamax"),
         mo.md(
-            "**Blue** = custom model posterior (with transition stickiness prior).  \n"
-            "**Dashed orange** = SSM posterior (standard Baum-Welch, no stickiness).  \n"
-            "SSM typically yields smoother posteriors because it lacks the stickiness "
-            "prior that keeps the custom model in its current state, and because SSM's "
-            "EM runs unconstrained for longer. Large discrepancies may indicate the "
-            "stickiness prior is over-regularising state transitions."
+            "Each row below is one fitted emission coefficient for one subject, aligned by the notebook's "
+            "state order. `delta_ssm_minus_dynamax > 0` means the SSM coefficient is larger."
         ),
-        _fig_ssm,
+        mo.ui.dataframe(_coef_display),
     ], align="center")
+    ssm_coef_fig = _coef_fig
+    ssm_cmp_df = _cmp_df
+    ssm_coef_display = _coef_display
+    ssm_notes_md = _notes_md
+    ssm_posterior_fig = _fig_ssm
+    ssm_psych_fig_custom = _psych_fig_custom
+    ssm_psych_fig_ssm = _psych_fig_ssm
+    ssm_summary_md = _summary_md
+    return (
+        ssm_coef_fig,
+        ssm_posterior_fig,
+        ssm_psych_fig_custom,
+        ssm_psych_fig_ssm,
+    )
+
+
+@app.cell
+def _(ssm_posterior_fig):
+    ssm_posterior_fig
+    return
+
+
+@app.cell
+def _(K, mo, ssm_coef_fig, ssm_psych_fig_custom, ssm_psych_fig_ssm):
+    mo.vstack([
+        mo.md(f"### SSM GLM-HMM plots  (K={K})"),
+        mo.md("### Categorical psychometrics — Dynamax vs SSM"),
+        (
+            mo.hstack(
+                [
+                    mo.vstack([mo.md("#### Dynamax"), ssm_psych_fig_custom], align="center"),
+                    mo.vstack([mo.md("#### SSM"), ssm_psych_fig_ssm], align="center"),
+                ],
+                justify="start",
+            )
+            if ssm_psych_fig_custom is not None and ssm_psych_fig_ssm is not None
+            else mo.md("Psychometric comparison unavailable because one of the trial-level prediction tables could not be built.")
+        ),
+        mo.md("### Coefficient differences"),
+        ssm_coef_fig if ssm_coef_fig is not None else mo.md("No coefficient comparison available."),
+    ], align="center")
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _():
     return
 
 

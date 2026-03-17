@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import copy
+
 import numpy as np
 import polars as pl
 
@@ -55,6 +57,8 @@ def build_editor_payload(
             "subtitle": f"{reference_label} is implied by the binary logit.",
             "explicit_class_indices": display_class_indices,
             "reference_class_idx": display_reference_class_idx,
+            "stored_class_indices": list(stored_class_indices),
+            "stored_reference_class_idx": reference_class_idx,
         }
 
     reference_label = choice_labels[display_reference_class_idx]
@@ -65,7 +69,64 @@ def build_editor_payload(
         "subtitle": f"Displayed with {reference_label} implicit.",
         "explicit_class_indices": display_class_indices,
         "reference_class_idx": display_reference_class_idx,
+        "stored_class_indices": list(stored_class_indices),
+        "stored_reference_class_idx": reference_class_idx,
     }
+
+
+def stored_weights_from_editor_weights(
+    editor_weights: np.ndarray,
+    *,
+    explicit_class_indices: list[int],
+    reference_class_idx: int,
+    stored_class_indices: list[int],
+    stored_reference_class_idx: int,
+) -> np.ndarray:
+    """Map editor/display weights back to the stored explicit-class parametrization."""
+    weights = np.asarray(editor_weights, dtype=float)
+    if len(explicit_class_indices) != weights.shape[0]:
+        raise ValueError("explicit_class_indices must match the number of editor weight rows.")
+    if len(stored_class_indices) != weights.shape[0]:
+        raise ValueError("stored_class_indices must match the number of stored weight rows.")
+
+    explicit_class_indices = [int(idx) for idx in explicit_class_indices]
+    stored_class_indices = [int(idx) for idx in stored_class_indices]
+    reference_class_idx = int(reference_class_idx)
+    stored_reference_class_idx = int(stored_reference_class_idx)
+
+    if (
+        explicit_class_indices == stored_class_indices
+        and reference_class_idx == stored_reference_class_idx
+    ):
+        return weights.copy()
+
+    row_by_display_class = {
+        class_idx: weights[row_idx].copy()
+        for row_idx, class_idx in enumerate(explicit_class_indices)
+    }
+    zeros = np.zeros(weights.shape[1], dtype=float)
+    abs_by_class = {stored_reference_class_idx: zeros}
+
+    if reference_class_idx == stored_reference_class_idx:
+        for class_idx in stored_class_indices:
+            if class_idx not in row_by_display_class:
+                raise ValueError(f"Missing editor row for class {class_idx}.")
+            abs_by_class[class_idx] = row_by_display_class[class_idx]
+    else:
+        if stored_reference_class_idx not in row_by_display_class:
+            raise ValueError("Stored reference class must be explicit in the editor parametrization.")
+        ref_shift = -row_by_display_class[stored_reference_class_idx]
+        abs_by_class[reference_class_idx] = ref_shift
+        for class_idx, row in row_by_display_class.items():
+            if class_idx == stored_reference_class_idx:
+                continue
+            abs_by_class[class_idx] = row + ref_shift
+
+    missing = [class_idx for class_idx in stored_class_indices if class_idx not in abs_by_class]
+    if missing:
+        raise ValueError(f"Could not reconstruct stored weights for classes {missing}.")
+
+    return np.asarray([abs_by_class[class_idx] for class_idx in stored_class_indices], dtype=float)
 
 
 def emission_probs_from_editor_weights(
@@ -90,6 +151,34 @@ def emission_probs_from_editor_weights(
     shifted = logits - logits.max(axis=1, keepdims=True)
     exp = np.exp(shifted)
     return exp / exp.sum(axis=1, keepdims=True)
+
+
+def apply_state_tweak_to_view(
+    view,
+    *,
+    state_idx: int,
+    edited_weights: np.ndarray,
+    explicit_class_indices: list[int],
+    reference_class_idx: int,
+    stored_class_indices: list[int],
+    stored_reference_class_idx: int,
+):
+    """Return a shallow-copied view with one state's stored emission weights replaced."""
+    tweaked_view = copy(view)
+    emission_weights = np.asarray(view.emission_weights, dtype=float).copy()
+    stored_weights = stored_weights_from_editor_weights(
+        edited_weights,
+        explicit_class_indices=list(explicit_class_indices),
+        reference_class_idx=int(reference_class_idx),
+        stored_class_indices=list(stored_class_indices),
+        stored_reference_class_idx=int(stored_reference_class_idx),
+    )
+    state_idx = int(state_idx)
+    if emission_weights[state_idx].shape != stored_weights.shape:
+        raise ValueError("Edited weights do not match the stored emission weight shape.")
+    emission_weights[state_idx] = stored_weights
+    tweaked_view.emission_weights = emission_weights
+    return tweaked_view
 
 
 def apply_state_tweak_to_trial_df(

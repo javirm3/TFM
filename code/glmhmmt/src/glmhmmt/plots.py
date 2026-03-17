@@ -12,6 +12,12 @@ from scipy.special import softmax as _softmax
 import tomllib
 from matplotlib import cm, colors
 from typing import Tuple
+from glmhmmt.plots_common import (
+    plot_state_accuracy as _plot_state_accuracy_common,
+    plot_session_trajectories as _plot_session_trajectories_common,
+    plot_state_occupancy as _plot_state_occupancy_common,
+    plot_session_deepdive as _plot_session_deepdive_common,
+)
 sns.set_style("white")
 
 with paths.CONFIG.open("rb") as f:
@@ -1115,157 +1121,14 @@ def plot_state_accuracy(
     stim_col: str = "stimd_n",
     **kwargs,
 ) -> Tuple[plt.Figure, pd.DataFrame]:
-    """Per-state accuracy bar chart.
-
-    Mirrors plots.plot_state_accuracy.
-    Accuracy = fraction of correct trials assigned to each state
-    with posterior probability ≥ thresh, on nonzero-stimulus trials only.
-
-    Parameters
-    ----------
-    trial_df : output of build_trial_df; must contain a performance column and
-               a nonzero-stimulus column (typically ``stimd_n``).
-
-    Returns
-    -------
-    fig, summary_df
-    """
-    subjects = list(views.keys())
-    K = next(iter(views.values())).K if views else 2
-    if not subjects:
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, "No data", ha="center", va="center")
-        return fig, pd.DataFrame()
-
-    _first_view = views[subjects[0]]
-    _state_labels = [
-        _first_view.state_name_by_idx.get(k, f"State {k}")
-        for k in _first_view.state_idx_order
-    ]
-    _cmap = {"All": "#999999"}
-    for _k in _first_view.state_idx_order:
-        _lbl = _first_view.state_name_by_idx.get(_k, f"State {_k}")
-        _rank = _first_view.state_rank_by_idx.get(int(_k), int(_k))
-        _cmap[_lbl] = _state_color(_lbl, _rank)
-    _x_labels = ["All"] + _state_labels
-
-    _acc_records = []
-    for subj in subjects:
-        P = np.asarray(views[subj].smoothed_probs)  # (T, K)
-        if hasattr(trial_df, "filter"):
-            df_sub = trial_df.filter(pl.col("subject") == subj)
-        else:
-            df_sub = trial_df[trial_df["subject"] == subj]
-
-        _perf_col = performance_col if performance_col in df_sub.columns else "performance"
-        _stim_col = stim_col
-        for _cand in [stim_col, "stimulus", "ILD"]:
-            if _cand in df_sub.columns:
-                _stim_col = _cand
-                break
-
-        hits = np.asarray(df_sub[_perf_col]).astype(float)
-        stim = np.asarray(df_sub[_stim_col]).astype(float)
-
-        T = min(len(P), len(hits), len(stim))
-        P, hits, stim = P[:T], hits[:T], stim[:T]
-        valid = np.isfinite(hits) & np.isfinite(stim) & (np.abs(stim) > 0)
-
-        if valid.sum() > 0:
-            _acc_records.append(
-                {
-                    "subject": subj,
-                    "label": "All",
-                    "acc": hits[valid].mean() * 100,
-                    "n": int(valid.sum()),
-                }
-            )
-
-        slbls = views[subj].state_name_by_idx
-        for k in views[subj].state_idx_order:
-            lbl = slbls.get(k, f"State {k}")
-            mask = valid & (P[:, k] >= thresh)
-            if mask.sum() > 0:
-                _acc_records.append(
-                    {
-                        "subject": subj,
-                        "label": lbl,
-                        "acc": hits[mask].mean() * 100,
-                        "n": int(mask.sum()),
-                    }
-                )
-
-    if not _acc_records:
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, "No data", ha="center", va="center")
-        return fig, pd.DataFrame()
-
-    _df_acc = pd.DataFrame(_acc_records)
-    _tbl = (
-        _df_acc.groupby("label")[["acc", "n"]]
-        .agg({"acc": "mean", "n": "sum"})
-        .reindex(_x_labels)
-        .rename(columns={"acc": "mean_acc (%)", "n": "total_trials"})
-        .round(1)
+    return _plot_state_accuracy_common(
+        views,
+        trial_df,
+        thresh=thresh,
+        performance_candidates=(performance_col, "performance"),
+        stim_candidates=(stim_col, "stimulus", "ILD"),
+        stim_label="nonzero stimulus",
     )
-
-    fig, ax = plt.subplots(figsize=(2 + len(_x_labels) * 1.0, 4.5))
-    rng = np.random.default_rng(42)
-    for li, lbl in enumerate(_x_labels):
-        rows = _df_acc[_df_acc["label"] == lbl]["acc"].dropna().values
-        if len(rows) == 0:
-            continue
-        _color = _cmap.get(lbl, "k")
-        _box = ax.boxplot(
-            rows,
-            positions=[li],
-            widths=0.5,
-            patch_artist=True,
-            showfliers=False,
-            zorder=1,
-        )
-        for _patch in _box["boxes"]:
-            _patch.set(facecolor=_color, alpha=0.25, edgecolor=_color, linewidth=1.2)
-        for _elem in ["whiskers", "caps", "medians"]:
-            for _artist in _box[_elem]:
-                _artist.set(color=_color, linewidth=1.2)
-        jitter = rng.uniform(-0.12, 0.12, size=len(rows))
-        ax.scatter(
-            np.full(len(rows), li) + jitter,
-            rows,
-            color=_color,
-            alpha=0.65,
-            s=28,
-            zorder=3,
-        )
-        if len(rows) > 1:
-            _sem = rows.std(ddof=1) / np.sqrt(len(rows))
-        else:
-            _sem = 0.0
-        ax.errorbar(
-            li,
-            rows.mean(),
-            yerr=_sem,
-            fmt="o",
-            color=_color,
-            ms=7,
-            capsize=4,
-            lw=1.8,
-            zorder=4,
-        )
-
-    ax.axhline(50, color="black", linestyle="--", linewidth=0.9, alpha=0.5,
-               label="Chance (50%)")
-    ax.set_xticks(range(len(_x_labels)))
-    ax.set_xticklabels(_x_labels, rotation=20, ha="right")
-    ax.set_xlabel("State")
-    ax.set_ylabel("Accuracy (%)")
-    ax.set_ylim(40, 105)
-    ax.set_title(f"Per-state accuracy  (K={K},  posterior ≥ {thresh},  nonzero stimulus)")
-    ax.legend(frameon=False, fontsize=8)
-    fig.tight_layout()
-    sns.despine(fig=fig)
-    return fig, _tbl
 
 
 def plot_session_trajectories(
@@ -1275,72 +1138,11 @@ def plot_session_trajectories(
     sort_col: str = "trial_idx",
     **kwargs,
 ):
-    """Average state-probability trajectories within a session (mean ± SEM)."""
-    subjects = list(views.keys())
-    K = next(iter(views.values())).K if views else 2
-    fig, axes = plt.subplots(
-        len(subjects), 1, figsize=(10, 3.5 * len(subjects)), squeeze=False
+    return _plot_session_trajectories_common(
+        views,
+        trial_df,
+        session_col=session_col,
     )
-
-    for _i, _subj in enumerate(subjects):
-        _ax = axes[_i, 0]
-        _P = np.asarray(views[_subj].smoothed_probs)
-
-        try:
-            if hasattr(trial_df, "filter"):
-                _df_sub = trial_df.filter(pl.col("subject") == _subj)
-                _sess_arr = _df_sub[session_col].to_numpy()
-            else:
-                raise AttributeError
-        except AttributeError:
-            _df_sub = trial_df[trial_df["subject"] == _subj]
-            _sess_arr = _df_sub[session_col].to_numpy()
-
-        _T = min(len(_P), len(_sess_arr))
-        _P, _sess_arr = _P[:_T], _sess_arr[:_T]
-        _sess_ids = np.unique(_sess_arr)
-        if len(_sess_ids) == 0:
-            continue
-
-        _max_len = max(int(np.sum(_sess_arr == _s)) for _s in _sess_ids)
-        _traj = np.full((len(_sess_ids), _max_len, K), np.nan)
-        for _si, _s in enumerate(_sess_ids):
-            _idx = np.where(_sess_arr == _s)[0]
-            _traj[_si, : len(_idx), :] = _P[_idx, :]
-
-        _mean = np.nanmean(_traj, axis=0)
-        _n_obs = np.sum(~np.isnan(_traj[:, :, 0]), axis=0)
-        _sem = np.nanstd(_traj, axis=0, ddof=1) / np.maximum(_n_obs[:, None] ** 0.5, 1)
-        _x = np.arange(_mean.shape[0])
-
-        _slbls = views[_subj].state_name_by_idx
-        for _k in views[_subj].state_idx_order:
-            _rank = views[_subj].state_rank_by_idx.get(int(_k), int(_k))
-            _col = _STATE_HEX[_rank % len(_STATE_HEX)]
-            _valid_x = ~np.isnan(_mean[:, _k])
-            _ax.plot(
-                _x[_valid_x],
-                _mean[_valid_x, _k],
-                color=_col,
-                lw=2,
-                label=_slbls.get(_k, f"State {_k}"),
-            )
-            _ax.fill_between(
-                _x[_valid_x],
-                (_mean[:, _k] - _sem[:, _k])[_valid_x],
-                (_mean[:, _k] + _sem[:, _k])[_valid_x],
-                color=_col,
-                alpha=0.25,
-            )
-        _ax.set_ylim(0, 1)
-        _ax.set_xlabel("Trial within session")
-        _ax.set_ylabel("State probability")
-        _ax.set_title(f"Subject {_subj} — avg. state trajectory  (n={len(_sess_ids)} sessions)")
-        _ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=8, frameon=False)
-
-    fig.tight_layout()
-    sns.despine(fig=fig)
-    return fig
 
 
 def plot_state_occupancy(
@@ -1350,103 +1152,11 @@ def plot_state_occupancy(
     sort_col: str = "trial_idx",
     **kwargs,
 ):
-    """Fractional occupancy summaries + state-change histogram per session."""
-    subjects = list(views.keys())
-    fig, axes = plt.subplots(
-        len(subjects), 3, figsize=(14, 3.8 * len(subjects)), squeeze=False
+    return _plot_state_occupancy_common(
+        views,
+        trial_df,
+        session_col=session_col,
     )
-    rng = np.random.default_rng(42)
-
-    for _i, _subj in enumerate(subjects):
-        _ax_occ, _ax_box, _ax_chg = axes[_i, 0], axes[_i, 1], axes[_i, 2]
-        _P = np.asarray(views[_subj].smoothed_probs)
-
-        try:
-            if hasattr(trial_df, "filter"):
-                _df_sub = trial_df.filter(pl.col("subject") == _subj)
-                _sess_arr = _df_sub[session_col].to_numpy()
-            else:
-                raise AttributeError
-        except AttributeError:
-            _df_sub = trial_df[trial_df["subject"] == _subj]
-            _sess_arr = _df_sub[session_col].to_numpy()
-
-        _T = min(len(_P), len(_sess_arr))
-        _P, _sess_arr = _P[:_T], _sess_arr[:_T]
-        _viterbi = np.argmax(_P, axis=1)
-
-        _rank_order = views[_subj].state_idx_order
-        _slbls = views[_subj].state_name_by_idx
-        _labels = [_slbls.get(_k, f"State {_k}") for _k in _rank_order]
-        _occ = [float(np.mean(_viterbi == _k)) for _k in _rank_order]
-        _colors = [
-            _STATE_HEX[views[_subj].state_rank_by_idx.get(int(_k), int(_k)) % len(_STATE_HEX)]
-            for _k in _rank_order
-        ]
-
-        _ax_occ.bar(_labels, _occ, color=_colors, alpha=0.85)
-        _ax_occ.set_ylim(0, 1)
-        _ax_occ.set_ylabel("Fractional occupancy")
-        _ax_occ.set_title(f"Subject {_subj} - overall occupancy")
-
-        _sess_occ = {int(_k): [] for _k in _rank_order}
-        _changes_per_sess = []
-        for _s in np.unique(_sess_arr):
-            _v = _viterbi[_sess_arr == _s]
-            if len(_v) == 0:
-                continue
-            _changes_per_sess.append(int(np.sum(np.diff(_v) != 0)))
-            for _k in _rank_order:
-                _sess_occ[int(_k)].append(float(np.mean(_v == _k)))
-
-        for _pos, _k in enumerate(_rank_order):
-            _vals = np.asarray(_sess_occ[int(_k)], dtype=float)
-            if _vals.size == 0:
-                continue
-            _col = _colors[_pos]
-            _box = _ax_box.boxplot(
-                _vals,
-                positions=[_pos],
-                widths=0.5,
-                patch_artist=True,
-                showfliers=False,
-            )
-            for _patch in _box["boxes"]:
-                _patch.set(facecolor=_col, alpha=0.25, edgecolor=_col, linewidth=1.2)
-            for _elem in ["whiskers", "caps", "medians"]:
-                for _artist in _box[_elem]:
-                    _artist.set(color=_col, linewidth=1.2)
-            _jitter = rng.uniform(-0.12, 0.12, size=_vals.size)
-            _ax_box.scatter(
-                np.full(_vals.size, _pos) + _jitter,
-                _vals,
-                color=_col,
-                alpha=0.6,
-                s=24,
-                zorder=3,
-            )
-
-        _ax_box.set_xticks(range(len(_labels)))
-        _ax_box.set_xticklabels(_labels, rotation=15, ha="right")
-        _ax_box.set_ylim(0, 1)
-        _ax_box.set_ylabel("Session occupancy")
-        _ax_box.set_title(f"Subject {_subj} - occupancy by session")
-
-        _max_chg = max(_changes_per_sess) if _changes_per_sess else 1
-        _ax_chg.hist(
-            _changes_per_sess,
-            bins=range(0, _max_chg + 2),
-            color="#888888",
-            alpha=0.75,
-            edgecolor="white",
-        )
-        _ax_chg.set_xlabel("# state switches / session")
-        _ax_chg.set_ylabel("# sessions")
-        _ax_chg.set_title(f"Subject {_subj} - state switches")
-
-    fig.tight_layout()
-    sns.despine(fig=fig)
-    return fig
 
 
 def plot_session_deepdive(
@@ -1461,148 +1171,16 @@ def plot_session_deepdive(
     resp_col: str = "response",
     **kwargs,
 ):
-    """
-    Session deep-dive: P(Engaged) + cumulative accuracy (twin axis) + action traces.
-
-    Action traces are auto-detected: prefers A_plus / A_minus from U (glmhmmt),
-    then falls back to A_L / A_C / A_R from X (glmhmm).
-
-    Parameters
-    ----------
-    session_col : column name for session identifier (default ``"session"``)
-    sort_col    : column name for global trial ordering (default ``"trial_idx"``)
-    stimd_col   : column whose nonzero values indicate informative trials
-    perf_col    : column containing 0/1 trial outcome
-    resp_col    : column containing integer response
-
-    Returns
-    -------
-    fig
-    """
-    try:
-        sess = int(sess)
-    except (TypeError, ValueError):
-        pass
-
-    if hasattr(trial_df, "filter"):
-        _df_sub_all = trial_df.filter(pl.col("subject") == subj)
-        _sess_row_indices = (
-            _df_sub_all.with_row_index("_r").filter(pl.col(session_col) == sess)["_r"].to_numpy()
-        )
-        _df_sess = _df_sub_all.filter(pl.col(session_col) == sess)
-        _y = _df_sess[perf_col].to_numpy().astype(float)
-        _stim = _df_sess[stimd_col].to_numpy()
-        _response = _df_sess[resp_col].to_numpy().astype(int)
-    else:
-        _df_sub_all = trial_df[trial_df["subject"] == subj].reset_index(drop=True)
-        _sess_row_indices = _df_sub_all.index[_df_sub_all[session_col] == sess].to_numpy()
-        _df_sess = _df_sub_all[_df_sub_all[session_col] == sess]
-        _y = _df_sess[perf_col].to_numpy().astype(float)
-        _stim = _df_sess[stimd_col].to_numpy()
-        _response = _df_sess[resp_col].to_numpy().astype(int)
-
-    _probs_all = np.asarray(views[subj].smoothed_probs)
-    _probs = _probs_all[_sess_row_indices]
-    _T = min(_probs.shape[0], len(_y))
-    _probs, _y, _stim, _response = _probs[:_T], _y[:_T], _stim[:_T], _response[:_T]
-    _x = np.arange(_T)
-
-    # ── auto-detect action traces ─────────────────────────────────────────────
-    _X_cols_s = views[subj].feat_names
-    _X_idx    = {f: i for i, f in enumerate(_X_cols_s)}
-    _X_sess   = np.asarray(views[subj].X)[_sess_row_indices][:_T]
-
-    _trace_sources = {}
-    _U_raw = views[subj].U
-    if _U_raw is not None:
-        _U_cols_s = views[subj].U_cols
-        _U_idx    = {f: i for i, f in enumerate(_U_cols_s)}
-        _U_sess   = np.asarray(_U_raw)[_sess_row_indices][:_T]
-        for _tc in ["A_plus", "A_minus"]:
-            if _tc in _U_idx:
-                _trace_sources[_tc] = (_U_sess, _U_idx[_tc])
-    for _tc in ["A_R", "A_L", "A_C"]:
-        if _tc in _X_idx and _tc not in _trace_sources:
-            _trace_sources[_tc] = (_X_sess, _X_idx[_tc])
-
-    _trace_colors = {
-        "A_plus": "royalblue", "A_minus": "gold",
-        "A_L": "royalblue", "A_C": "gold", "A_R": "tomato",
-    }
-
-    # ── cumulative accuracy (non-zero-stim trials) ────────────────────────────
-    _nz = _stim != 0
-    _cum_acc = np.full(_T, np.nan)
-    _cum_n, _cum_s = 0, 0.0
-    for _ti in range(_T):
-        if _nz[_ti]:
-            _cum_s += _y[_ti]; _cum_n += 1
-        if _cum_n > 0:
-            _cum_acc[_ti] = 100.0 * _cum_s / _cum_n
-
-    # ── figure ────────────────────────────────────────────────────────────────
-    _slbl      = views[subj].state_name_by_idx
-    _engaged_k = views[subj].engaged_k()
-
-    fig, (_ax1, _ax2) = plt.subplots(
-        2, 1, figsize=(14, 7), sharex=True,
-        gridspec_kw={"height_ratios": [2, 1.5]},
+    return _plot_session_deepdive_common(
+        views,
+        trial_df,
+        subj,
+        sess,
+        session_col=session_col,
+        performance_candidates=(perf_col, "correct_bool", "performance"),
+        stim_candidates=(stimd_col, "stimulus", "ILD"),
+        response_candidates=(resp_col, "response", "Choice"),
     )
-
-    _bottom = np.zeros(_T)
-    for _k in views[subj].state_idx_order:
-        _rank = views[subj].state_rank_by_idx.get(int(_k), int(_k))
-        _col = _STATE_HEX[_rank % len(_STATE_HEX)]
-        _ax1.fill_between(
-            _x,
-            _bottom,
-            _bottom + _probs[:, _k],
-            alpha=0.7,
-            color=_col,
-            label=_slbl.get(_k, f"State {_k}"),
-        )
-        _bottom += _probs[:, _k]
-
-    _ax1.plot(_x, _probs[:, _engaged_k], color=_STATE_HEX[0], lw=2,
-              label=f"P({_slbl.get(_engaged_k, 'Engaged')})")
-    _choice_cols = {0: "royalblue", 1: "gold", 2: "tomato"}
-    _choice_lbls = {0: "L", 1: "C", 2: "R"}
-    for _resp, _c in _choice_cols.items():
-        _m = _response == _resp
-        _ax1.scatter(_x[_m], np.ones(_m.sum()) * 1.03, c=_c, s=5, marker="|",
-                     label=_choice_lbls[_resp],
-                     transform=_ax1.get_xaxis_transform(), clip_on=False)
-    _ax1.set_ylim(0, 1)
-    _ax1.set_ylabel("State probability")
-    _ax1.set_title(f"Subject {subj}  —  session {sess}  ({_T} trials)")
-
-    _ax1r = _ax1.twinx()
-    _ax1r.plot(_x, _cum_acc, color="black", lw=1.8, linestyle="-", alpha=0.7,
-               label="Cumul. accuracy")
-    _ax1r.axhline(100 / 3, color="grey", lw=0.9, linestyle="--", alpha=0.5)
-    _ax1r.set_ylim(0, 105)
-    _ax1r.set_ylabel("Accuracy (%)", color="black")
-    _lines1, _labs1   = _ax1.get_legend_handles_labels()
-    _lines1r, _labs1r = _ax1r.get_legend_handles_labels()
-    _ax1.legend(_lines1 + _lines1r, _labs1 + _labs1r,
-                bbox_to_anchor=(1.08, 1), loc="upper left", fontsize=8, frameon=False)
-
-    if _trace_sources:
-        for _tc, (_arr, _ci) in _trace_sources.items():
-            _ax2.plot(_x, _arr[:, _ci], label=_tc,
-                      color=_trace_colors.get(_tc, "gray"), lw=1.5, alpha=0.85)
-        _ax2.legend(bbox_to_anchor=(1.08, 1), loc="upper left", fontsize=8, frameon=False)
-    else:
-        _ax2.text(0.5, 0.5, "No action-trace features found",
-                  ha="center", va="center", transform=_ax2.transAxes)
-    _ax2.set_ylabel("Action trace")
-    _ax2.set_ylim(0, None)
-    _ax2.set_xlabel("Trial within session")
-
-    fig.tight_layout()
-    fig.subplots_adjust(right=0.82)
-    sns.despine(fig=fig, right=False)
-    return fig
 
 
 def plot_tau_sweep(sweep_path, subjects: list, K: int):
