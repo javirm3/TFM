@@ -121,7 +121,7 @@ class TwoAFCAdapter(TaskAdapter):
     # ── plots ────────────────────────────────────────────────────────────────
 
     def get_plots(self) -> types.ModuleType:
-        import glmhmmt.plots_alexis as plots
+        import tasks.plots.two_afc as plots
         return plots
     # ── state labelling ─────────────────────────────────────────────────────
 

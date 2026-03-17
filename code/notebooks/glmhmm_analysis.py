@@ -546,10 +546,7 @@ def _(editor_views, mo, ui_editor_subject):
 
 
 @app.cell
-def _(
-    adapter,
-    mo,
-):
+def _(adapter, mo):
     if adapter.num_classes != 2:
         ui_editor_side = None
     else:
@@ -636,7 +633,6 @@ def _(
     coef_editor_stored_reference_class_idx = _payload["stored_reference_class_idx"]
     return (
         coef_editor,
-        coef_editor_panel,
         coef_editor_explicit_class_indices,
         coef_editor_reference_class_idx,
         coef_editor_stored_class_indices,
@@ -1077,8 +1073,6 @@ def _(mo, task_name):
         mo.md(
             "Fits a K-state GLM-HMM using the **SSM library** (`input_driven_obs`, `standard` "
             "transitions) with the exact same covariates as the custom model.  \n"
-            "SSM uses a different EM implementation (no custom stickiness prior, "
-            "standard Baum-Welch) which often yields smoother posteriors — useful as a sanity check."
         ),
         ssm_run_btn,
     ])

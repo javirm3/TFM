@@ -13,7 +13,10 @@ import os
 from dynamax.utils.plotting import gradient_cmap
 from glmhmmt.model import SoftmaxGLMHMM
 from glmhmmt.features import build_sequence_from_df
-import glmhmmt.plots as plots
+from tasks import get_adapter
+
+adapter = get_adapter("mcdr")
+plots = adapter.get_plots()
 
 sns.set_style("white")
 
@@ -26,7 +29,7 @@ color_names = [
 colors = sns.xkcd_palette(color_names)
 cmap = gradient_cmap(colors)    
 
-df = pl.read_parquet(paths.DATA_PATH/"df_filtered.parquet")
+df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
 y, X, U, names, _ = build_sequence_from_df(df.filter(pl.col("subject") == "A89"))
 
 num_states= 2        # nº estados

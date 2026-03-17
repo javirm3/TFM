@@ -47,13 +47,18 @@ code/
 │   └── src/glmhmmt/
 │       ├── model.py                # SoftmaxGLMHMM — core model, EM fitting
 │       ├── features.py             # shared feature builders (action traces, etc.)
-│       ├── plots.py                # plots for 3AFC / MCDR tasks
-│       └── plots_alexis.py         # plots for 2AFC tasks
+│       ├── model_plots.py          # package-wide model diagnostics
+│       ├── views.py                # fit result views / state labels
+│       └── postprocess.py          # trial-level and weight-level data frames
 │
 ├── tasks/                          # one file per experimental task
 │   ├── base.py                     # TaskAdapter abstract base class
 │   ├── mcdr.py                     # MCDRTask adapter
-│   └── two_afc.py                  # TwoAFCTask adapter
+│   ├── two_afc.py                  # TwoAFCTask adapter
+│   └── plots/                      # task-owned plot modules
+│       ├── mcdr.py                 # MCDR psychometric/performance plots
+│       ├── two_afc.py              # 2AFC psychometric/performance API
+│       └── two_afc_impl.py         # 2AFC plotting implementation
 │
 ├── scripts/
 │   └── fit_model.py                # single generic fit script, all tasks/models
@@ -219,7 +224,10 @@ class MyTask(TaskAdapter):
     Data: data/my_task.parquet
     """
     num_classes  = 2                           # number of choice categories
-    plots_module = "glmhmmt.plots_alexis"      # or "glmhmmt.plots" for 3AFC
+
+    def get_plots(self):
+        import tasks.plots.two_afc as plots    # or tasks.plots.mcdr
+        return plots
 
     def list_subjects(self, cfg):
         return (pl.scan_parquet(DATA)

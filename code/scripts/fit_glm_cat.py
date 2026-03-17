@@ -10,11 +10,15 @@ import seaborn as sns
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
 # from glmhmmt.features import build_sequence_from_df
-import glmhmmt.plots as plots
+from tasks import get_adapter
 
 sns.set_style("white")
 
 # ── Data ──────────────────────────────────────────────────────────────────────
+
+adapter = get_adapter("mcdr")
+plots = adapter.get_plots()
+
 
 def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
     # ttype_n levels: 0, 1, 2, 3  → dummies ttype_1..ttype_3 (ref = 0)
@@ -82,7 +86,7 @@ def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
     }
     return jnp.asarray(y), jnp.asarray(X), jnp.asarray(U), names, jnp.concatenate([A_plus, A_minus], axis=1)
 
-df = pl.read_parquet(paths.DATA_PATH / "df_filtered.parquet")
+df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
 y, X, U, names, _ = build_sequence_from_df(df.filter(pl.col("subject") == "A89"))
 
 y_np = np.asarray(y)        # (T,)  int {0,1,2}

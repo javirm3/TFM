@@ -1,18 +1,12 @@
 """
-plots_alexis.py
+two_afc_impl.py
 ───────────────
 Plotting utilities for 2-AFC (binary) GLM-HMM results.
 
-API mirrors glmhmmt.plots so analysis notebooks can swap imports without
-changing any call sites:
+This is the task-owned implementation behind ``tasks.plots.two_afc``.
+Its public API mirrors the task plot interface used by the analysis notebooks.
 
-    import glmhmmt.plots_alexis as plots   # 2AFC
-
-vs
-
-    import glmhmmt.plots as plots          # 3AFC / MCDR
-
-High-level functions (same signatures as plots.py):
+High-level functions:
   - plot_emission_weights
   - plot_posterior_probs
   - plot_state_accuracy
@@ -49,7 +43,7 @@ from glmhmmt.plots_common import (
     plot_session_deepdive as _plot_session_deepdive_common,
 )
 
-# ── default state colour palette (matches plots.py config colours) ────────────
+# ── default state colour palette ──────────────────────────────────────────────
 _DEFAULT_COLORS = ["#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02"]
 
 _LABEL_RANK = {
@@ -1196,7 +1190,7 @@ def prepare_predictions_df(df_pred):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# High-level API  — mirrors glmhmmt.plots exactly
+# High-level API used by the task plot facade
 # ─────────────────────────────────────────────────────────────────────────────
 
 def plot_emission_weights(
@@ -1400,7 +1394,7 @@ def plot_session_deepdive(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Psychometric performance  (≡ categorical performance in plots.py)
+# Psychometric performance helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
 def plot_categorical_performance_all(
@@ -1701,5 +1695,5 @@ def plot_categorical_performance_all_by_state(
     return fig, None
 
 
-# Alias to match the plots.py API used in analysis notebooks
+# Alias used by the analysis notebooks
 plot_categorical_performance_by_state = plot_categorical_performance_all_by_state

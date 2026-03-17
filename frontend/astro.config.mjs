@@ -21,6 +21,8 @@ export default defineConfig({
 					items: [
 						{ label: 'Introduction', slug: 'docs/intro' },
 						{ label: 'Quickstart', slug: 'docs/guide/quickstart' },
+						{ label: 'Framework', slug: 'docs/guide/framework' },
+						{ label: 'Adding a Task', slug: 'docs/guide/tasks' },
 					],
 				},
 				{

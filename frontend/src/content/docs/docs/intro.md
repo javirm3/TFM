@@ -28,20 +28,31 @@ The **GLM emission** connects observable covariates (stimulus contrast, previous
 | Per-subject session-aware EM | ❌ | ✅ |
 | Feature engineering helpers | ❌ | `build_sequence_from_df` |
 | Postprocessing utilities | ❌ | `build_trial_df`, `build_emission_weights_df` |
-| Rich diagnostic plots | ❌ | Full `plots.py` module |
+| Shared diagnostics + task-owned plots | ❌ | `glmhmmt.model_plots` + `tasks.plots.*` |
 
 ## Package structure
 
+```text
+code/
+├── glmhmmt/src/glmhmmt/
+│   ├── model.py
+│   ├── features.py
+│   ├── postprocess.py
+│   ├── views.py
+│   └── model_plots.py
+├── tasks/
+│   ├── mcdr.py
+│   ├── two_afc.py
+│   └── plots/
+└── notebooks/
 ```
-glmhmmt/
-├── model.py          # SoftmaxGLMHMM — core model class
-├── features.py       # build_sequence_from_df — raw data → tensors
-├── postprocess.py    # build_trial_df, build_emission_weights_df, …
-├── views.py          # SubjectFitView, build_views — fit result containers
-└── plots.py          # Matplotlib diagnostic figures
-```
+
+The core package stays task-agnostic. All task semantics live in the adapter and
+its task-owned plotting module.
 
 ## Next steps
 
 - **[Quickstart →](/docs/guide/quickstart)** — install and fit your first model
+- **[Framework guide →](/docs/guide/framework)** — understand the repository layout and data flow
+- **[Adding a task →](/docs/guide/tasks)** — add a new experimental task cleanly
 - **[API Reference →](/docs/api/model)** — detailed class and function docs
