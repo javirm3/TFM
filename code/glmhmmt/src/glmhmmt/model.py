@@ -1,3 +1,4 @@
+import math
 from dynamax.hidden_markov_model.models.initial import StandardHMMInitialState, ParamsStandardHMMInitialState
 from dynamax.types import IntScalar, Scalar
 from dynamax.hidden_markov_model.inference import hmm_two_filter_smoother
@@ -12,10 +13,71 @@ from jaxtyping import Float, Array
 import optax
 import tensorflow_probability.substrates.jax.distributions as tfd
 import tensorflow_probability.substrates.jax.bijectors as tfb
-from typing import Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 from dynamax.parameters import ParameterProperties
 from dynamax.hidden_markov_model.models.abstractions import HMM, HMMEmissions, HMMParameterSet, HMMPropertySet
+
+
+def normalize_frozen_emissions(frozen: Any) -> dict[int, dict[str, float]]:
+    """Normalize a raw freeze mapping into ``{int_state: {feature: float}}``."""
+    if not isinstance(frozen, dict):
+        return {}
+
+    result: dict[int, dict[str, float]] = {}
+    for raw_state, raw_features in frozen.items():
+        try:
+            state = int(raw_state)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(raw_features, dict):
+            continue
+
+        feature_map: dict[str, float] = {}
+        for feature_name, raw_value in raw_features.items():
+            if not isinstance(feature_name, str):
+                continue
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(value):
+                continue
+            feature_map[feature_name] = value
+
+        if feature_map:
+            result[state] = feature_map
+
+    return result
+
+
+def serialize_frozen_emissions(frozen: Any) -> dict[str, dict[str, float]]:
+    """Convert a freeze mapping to a JSON-safe, sorted representation."""
+    normalized = normalize_frozen_emissions(frozen)
+    return {
+        str(state): {feature: normalized[state][feature] for feature in sorted(normalized[state])}
+        for state in sorted(normalized)
+    }
+
+
+def prune_frozen_emissions(
+    frozen: Any,
+    num_states: int,
+    allowed_features: list[str],
+) -> dict[str, dict[str, float]]:
+    """Drop freezes for removed states or deselected features."""
+    normalized = normalize_frozen_emissions(frozen)
+    allowed = set(allowed_features)
+    pruned: dict[int, dict[str, float]] = {}
+
+    for state, feature_map in normalized.items():
+        if state < 0 or state >= num_states:
+            continue
+        kept = {feature: value for feature, value in feature_map.items() if feature in allowed}
+        if kept:
+            pruned[state] = kept
+
+    return serialize_frozen_emissions(pruned)
 
 
 def _resolve_frozen(

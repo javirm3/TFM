@@ -317,6 +317,72 @@
     margin: 8px 0;
 }
 
+/* ── Frozen emission editor ─────────────────────────────────────────────── */
+.mm-freeze-table-wrap {
+    overflow-x: auto;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+.mm-freeze-table {
+    width: 100%;
+    min-width: max-content;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.mm-freeze-table thead {
+    background: #f3f4f6;
+}
+
+.mm-freeze-th-state,
+.mm-freeze-th {
+    padding: 8px 10px;
+    border-bottom: 2px solid #d1d5db;
+    text-align: left;
+    font-weight: 800;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.mm-freeze-row:hover {
+    background: #f9fafb;
+}
+
+.mm-freeze-state,
+.mm-freeze-td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e5e7eb;
+    vertical-align: middle;
+}
+
+.mm-freeze-state {
+    font-weight: 700;
+    white-space: nowrap;
+    color: #374151;
+}
+
+.mm-freeze-input {
+    width: 96px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    color: #111827;
+    font-family: monospace;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.mm-freeze-input:focus {
+    outline: none;
+    border-color: var(--brand-light);
+    box-shadow: 0 0 0 2px rgba(0, 75, 135, 0.15);
+}
+
 /* ── Standard inputs ────────────────────────────────────────────────────── */
 .mm-input {
     width: 100%;
@@ -752,6 +818,32 @@
     .mm-reg-cell.selected {
         background: rgba(59, 130, 246, 0.25);
         color: #93c5fd;
+    }
+
+    .mm-freeze-table-wrap {
+        border-color: #374151;
+    }
+
+    .mm-freeze-table thead {
+        background: #1f2937;
+    }
+
+    .mm-freeze-th-state,
+    .mm-freeze-th,
+    .mm-freeze-state,
+    .mm-freeze-td {
+        color: #d1d5db;
+        border-color: #374151;
+    }
+
+    .mm-freeze-row:hover {
+        background: #1f2937;
+    }
+
+    .mm-freeze-input {
+        background: #111827;
+        border-color: #4b5563;
+        color: #f9fafb;
     }
 
     /* Standard inputs */

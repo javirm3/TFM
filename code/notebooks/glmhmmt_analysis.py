@@ -91,7 +91,14 @@ def _(mo, task_name, ui_model_manager):
             self.value = value
 
     _val = ui_model_manager.value
-    current_hash = _gen_id(task_name, _val["K"], _val["tau"], _val["emission_cols"])
+    current_hash = _gen_id(
+        task_name,
+        _val["K"],
+        _val["tau"],
+        _val["emission_cols"],
+        _val.get("transition_cols", []),
+        _val.get("frozen_emissions", {}),
+    )
     ui_existing = _V(None if _val.get("existing_model") in ("", "__default__") else _val.get("existing_model"))
     ui_alias = _V(_val.get("alias", ""))
     ui_K = _V(_val["K"])
@@ -99,6 +106,7 @@ def _(mo, task_name, ui_model_manager):
     ui_tau = _V(_val["tau"])
     ui_emission_cols = _V(_val["emission_cols"])
     ui_transition_cols = _V(_val["transition_cols"])
+    ui_frozen_emissions = _V(_val.get("frozen_emissions", {}))
     fit_clicks = _V(_val.get("run_fit_clicks", 0))
 
     mo.vstack([
@@ -113,6 +121,7 @@ def _(mo, task_name, ui_model_manager):
         ui_alias,
         ui_emission_cols,
         ui_existing,
+        ui_frozen_emissions,
         ui_subjects,
         ui_tau,
         ui_transition_cols,
@@ -134,6 +143,7 @@ def _(
     ui_alias,
     ui_emission_cols,
     ui_existing,
+    ui_frozen_emissions,
     ui_subjects,
     ui_tau,
     ui_transition_cols,
@@ -191,6 +201,7 @@ def _(
                 out_dir=_OUT,
                 emission_cols=ui_emission_cols.value or None,
                 transition_cols=ui_transition_cols.value or None,
+                frozen_emissions=ui_frozen_emissions.value or None,
                 tau=ui_tau.value,
                 task=task_name,
                 n_restarts=_n_restarts,
@@ -937,7 +948,7 @@ def _(K, mo, plots, trial_df, ui_session_id, ui_session_subj, views):
         mo.md("No fitted arrays for this subject — run the fit first."),
     )
 
-    _sess = int(ui_session_id.value)
+    _sess = ui_session_id.value
     _fig = plots.plot_session_deepdive(
         views={_subj: views[_subj]},
         trial_df=trial_df,

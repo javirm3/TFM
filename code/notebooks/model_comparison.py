@@ -11,7 +11,7 @@
 
 import marimo
 
-__generated_with = "0.20.4"
+__generated_with = "0.21.0"
 app = marimo.App(width="full")
 
 
@@ -60,27 +60,27 @@ def _(get_adapter, mo, paths, ui_task):
             return []
         return sorted([d.name for d in p.iterdir() if d.is_dir()])
 
-    ui_glm_dir = mo.ui.dropdown(
+    ui_glm_dir = mo.ui.multiselect(
         options=_model_aliases(ui_task.value, "glm"),
-        value=None,
-        label="GLM alias",
+        value=[],
+        label="GLM aliases",
     )
-    ui_glmhmm_dir = mo.ui.dropdown(
+    ui_glmhmm_dir = mo.ui.multiselect(
         options=_model_aliases(ui_task.value, "glmhmm"),
-        value=None,
-        label="GLMHMM alias",
+        value=[],
+        label="GLMHMM aliases",
     )
-    ui_glmhmmt_dir = mo.ui.dropdown(
+    ui_glmhmmt_dir = mo.ui.multiselect(
         options=_model_aliases(ui_task.value, "glmhmmt"),
-        value=None,
-        label="GLMHMM-T alias",
+        value=[],
+        label="GLMHMM-T aliases",
     )
 
     mo.vstack([
         mo.md("### Model Comparison — Configuration"),
         mo.md(
-            "Select the model alias for each model kind. "
-            "Set to **None** to skip that model."
+            "Select one or more aliases for each model kind. "
+            "Leave empty to skip that model."
         ),
         mo.hstack([ui_task]),
         mo.hstack([ui_glm_dir, ui_glmhmm_dir, ui_glmhmmt_dir]),
@@ -113,6 +113,12 @@ def _(adapter, mo, paths, pl):
 
 @app.cell
 def _(mo, paths, pl, ui_glm_dir, ui_glmhmm_dir, ui_glmhmmt_dir, ui_task):
+    _MODEL_LABELS = {
+        "glm": "GLM",
+        "glmhmm": "GLMHMM",
+        "glmhmmt": "GLMHMM-T",
+    }
+
     def _load_dir(folder_name, expected_model_kind):
         """Scan a fit dir for *_metrics.parquet files and concat them."""
         if not folder_name:
@@ -143,18 +149,23 @@ def _(mo, paths, pl, ui_glm_dir, ui_glmhmm_dir, ui_glmhmmt_dir, ui_task):
             df = df.with_columns(pl.col("K").cast(pl.Int64))
         if "model_kind" not in df.columns:
             df = df.with_columns(pl.lit(expected_model_kind).alias("model_kind"))
-        keep = ["subject", "K", "model_kind", "ll_per_trial", "bic", "acc"]
+        df = df.with_columns([
+            pl.lit(folder_name).alias("model_alias"),
+            pl.lit(f"{_MODEL_LABELS.get(expected_model_kind, expected_model_kind)} ({folder_name})").alias("model_label"),
+        ])
+        keep = ["subject", "K", "model_kind", "model_alias", "model_label", "ll_per_trial", "bic", "acc"]
         return df.select([c for c in keep if c in df.columns])
 
     _parts = []
-    for _name, _kind in [
-        (ui_glm_dir.value,    "glm"),
+    for _names, _kind in [
+        (ui_glm_dir.value, "glm"),
         (ui_glmhmm_dir.value, "glmhmm"),
         (ui_glmhmmt_dir.value, "glmhmmt"),
     ]:
-        _p = _load_dir(_name, _kind)
-        if _p is not None:
-            _parts.append(_p)
+        for _name in _names:
+            _p = _load_dir(_name, _kind)
+            if _p is not None:
+                _parts.append(_p)
 
     if _parts:
         results_long = pl.concat(_parts, how="diagonal")
@@ -162,6 +173,7 @@ def _(mo, paths, pl, ui_glm_dir, ui_glmhmm_dir, ui_glmhmmt_dir, ui_task):
         results_long = pl.DataFrame(
             schema={
                 "subject": pl.Utf8, "K": pl.Int64, "model_kind": pl.Utf8,
+                "model_alias": pl.Utf8, "model_label": pl.Utf8,
                 "ll_per_trial": pl.Float64, "bic": pl.Float64, "acc": pl.Float64,
             }
         )
@@ -191,7 +203,7 @@ def _(pl, results_long, ui_K_range, ui_subjects):
 @app.cell
 def _(pl, results_filtered):
     agg = (
-        results_filtered.group_by(["model_kind", "K"])
+        results_filtered.group_by(["model_kind", "model_alias", "model_label", "K"])
         .agg([
             pl.len().alias("n_subjects"),
             pl.mean("ll_per_trial").alias("ll_mean"),
@@ -204,52 +216,203 @@ def _(pl, results_filtered):
             (pl.col("ll_std")  / pl.col("n_subjects").sqrt()).alias("ll_sem"),
             (pl.col("bic_std") / pl.col("n_subjects").sqrt()).alias("bic_sem"),
         ])
-        .sort(["model_kind", "K"])
+        .sort(["model_kind", "model_alias", "K"])
     )
     agg
     return (agg,)
 
 
 @app.cell
-def _(agg, plt, sns):
+def _(agg):
+    agg
+    return
+
+
+@app.cell
+def _():
+    import itertools
+    import pandas as pd
+    from scipy.stats import ttest_rel, ttest_ind
+
+    def _sig_label(p):
+        if p < 0.001: return "***"
+        if p < 0.01:  return "**"
+        if p < 0.05:  return "*"
+        return "ns"
+
+    def add_sig_bars(ax, df, *, x_col, y_col, hue_col, order, hue_order, pair_col=None):
+        n_hue = max(1, len(hue_order))
+        hue_width = 0.8 / n_hue
+        y_range = df[y_col].max() - df[y_col].min()
+        if pd.isna(y_range) or y_range == 0:
+            y_range = 1.0
+
+        for m, xval in enumerate(order):
+            sub = df[df[x_col] == xval]
+            if sub.empty:
+                continue
+
+            current_y = sub[y_col].max() + y_range * 0.05
+            h = y_range * 0.02
+
+            for p1, p2 in itertools.combinations(range(n_hue), 2):
+                g1 = hue_order[p1]
+                g2 = hue_order[p2]
+
+                s1 = sub[sub[hue_col] == g1]
+                s2 = sub[sub[hue_col] == g2]
+
+                if pair_col is not None:
+                    v1 = s1.set_index(pair_col)[y_col]
+                    v2 = s2.set_index(pair_col)[y_col]
+                    common = v1.index.intersection(v2.index)
+                    if len(common) < 2:
+                        continue
+                    _, pval = ttest_rel(v1.loc[common].values, v2.loc[common].values)
+                else:
+                    v1 = s1[y_col].dropna().values
+                    v2 = s2[y_col].dropna().values
+                    if min(len(v1), len(v2)) < 2:
+                        continue
+                    _, pval = ttest_ind(v1, v2, equal_var=False)
+
+                star = _sig_label(pval)
+                if star == "ns":
+                    continue
+
+                x1 = m + (p1 - (n_hue - 1) / 2) * hue_width
+                x2 = m + (p2 - (n_hue - 1) / 2) * hue_width
+
+                ax.plot([x1, x1, x2, x2], [current_y, current_y + h, current_y + h, current_y], lw=1, c="k")
+                ax.text((x1 + x2) / 2, current_y + h, star, ha="center", va="bottom", color="k")
+                current_y += y_range * 0.075
+
+
+    return add_sig_bars, ttest_rel
+
+
+@app.cell
+def _(add_sig_bars, np, plt, results_filtered, sns):
+    from matplotlib.colors import to_rgb, to_hex
+
     _MODEL_STYLES = {
-        "glm":      {"color": "#4C72B0", "marker": "s", "label": "GLM (K=1)"},
-        "glmhmm":   {"color": "#55A868", "marker": "o", "label": "GLMHMM"},
-        "glmhmmt":  {"color": "#C44E52", "marker": "^", "label": "GLMHMM-T"},
+        "glm": {"marker": "s", "label": "GLM"},
+        "glmhmm": {"marker": "o", "label": "GLMHMM"},
+        "glmhmmt": {"marker": "^", "label": "GLMHMM-T"},
     }
 
-    fig_cmp, (ax_ll, ax_bic) = plt.subplots(1, 2, figsize=(8, 4))
+    def darken(color, factor=0.75):
+        rgb = np.array(to_rgb(color))
+        return to_hex(np.clip(rgb * factor, 0, 1))
 
-    for _kind_tup, _group in agg.group_by("model_kind"):
-        _kind = _kind_tup[0]
-        _g = _group.sort("K").to_pandas()
-        _st = _MODEL_STYLES.get(_kind, {"color": "grey", "marker": "o", "label": _kind})
-        _x = _g["K"].values
-        ax_ll.errorbar(
-            _x, _g["ll_mean"], yerr=_g["ll_sem"],
-            color=_st["color"], marker=_st["marker"],
-            label=_st["label"], capsize=3, linewidth=1.5,
+    raw = results_filtered.to_pandas()
+
+    _label_df = raw[["model_kind", "model_label"]].drop_duplicates()
+    hue_order = _label_df["model_label"].tolist()
+    _base_colors = sns.color_palette("tab20", n_colors=max(1, len(hue_order)))
+    palette = {
+        _label: to_hex(_base_colors[_i])
+        for _i, _label in enumerate(hue_order)
+    }
+    strip_palette = {
+        _label: darken(palette[_label], 0.70)
+        for _label in hue_order
+    }
+    K_order = sorted(raw["K"].unique())
+
+    fig_cmp, (ax_ll, ax_bic) = plt.subplots(1, 2, figsize=(8, 4.8), constrained_layout=False)
+
+    for ax, ycol in [(ax_ll, "ll_per_trial"), (ax_bic, "bic")]:
+        sns.boxplot(
+            data=raw,
+            x="K",
+            y=ycol,
+            hue="model_label",
+            order=K_order,
+            hue_order=hue_order,
+            palette=palette,
+            width=0.8,
+            showfliers=False,
+            boxprops={"alpha": 0.45},
+            ax=ax,
         )
-        ax_bic.errorbar(
-            _x, _g["bic_mean"], yerr=_g["bic_sem"],
-            color=_st["color"], marker=_st["marker"],
-            label=_st["label"], capsize=3, linewidth=1.5,
+
+        sns.stripplot(
+            data=raw,
+            x="K",
+            y=ycol,
+            hue="model_label",
+            order=K_order,
+            hue_order=hue_order,
+            palette=strip_palette,
+            dodge=True,
+            jitter=0.18,
+            alpha=0.85,
+            size=4,
+            ax=ax,
+            legend=False,
         )
 
-    _K_all = agg["K"].unique().sort().to_list()
-    for _ax, _ylabel, _title in [
-        (ax_ll,  "Log-likelihood / trial", "LL / trial  (higher = better)"),
-        (ax_bic, "BIC",                    "BIC  (lower = better)"),
-    ]:
-        _ax.set_xlabel("Number of states K")
-        _ax.set_ylabel(_ylabel)
-        _ax.set_title(_title)
-        _ax.set_xticks(_K_all)
-        _ax.legend(frameon=False)
-        sns.despine(ax=_ax)
+    add_sig_bars(
+        ax_ll, raw,
+        x_col="K", y_col="ll_per_trial", hue_col="model_label",
+        order=K_order, hue_order=hue_order, pair_col="subject",
+    )
 
-    fig_cmp.tight_layout()
+    add_sig_bars(
+        ax_bic, raw,
+        x_col="K", y_col="bic", hue_col="model_label",
+        order=K_order, hue_order=hue_order, pair_col="subject",
+    )
+
+    ax_ll.set_ylabel("Log-likelihood / trial")
+    ax_ll.set_title("LL / trial (higher = better)")
+
+    ax_bic.set_ylabel("BIC")
+    ax_bic.set_title("BIC (lower = better)")
+
+    handles, labels = ax_ll.get_legend_handles_labels()
+    _legend_handles = []
+    _legend_labels = []
+    for _h, _l in zip(handles, labels):
+        if _l in hue_order and _l not in _legend_labels:
+            _legend_handles.append(_h)
+            _legend_labels.append(_l)
+    if ax_ll.get_legend() is not None:
+        ax_ll.get_legend().remove()
+    if ax_bic.get_legend() is not None:
+        ax_bic.get_legend().remove()
+    fig_cmp.legend(
+        _legend_handles,
+        _legend_labels,
+        title="Model",
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.02),
+        ncol=min(3, max(1, len(_legend_labels))),
+        frameon=False,
+    )
+
+    sns.despine(fig=fig_cmp)
+    fig_cmp.tight_layout(rect=(0, 0.12, 1, 1))
     fig_cmp
+    return (raw,)
+
+
+@app.cell
+def _(raw, ttest_rel):
+    sub = raw[raw["K"] == 2]
+    g1 = "GLMHMM (3 covs 2 states)"
+    g2 = "GLMHMM (3 covs 2 states frozen stim)"
+
+    pair_df = (
+        sub[sub["model_label"].isin([g1, g2])]
+        .pivot(index="subject", columns="model_label", values="ll_per_trial")
+        .dropna()
+    )
+
+    pair_df[g1]
+    ttest_rel(pair_df[g1], pair_df[g2])
+
     return
 
 
@@ -258,7 +421,7 @@ def _(mo, pl, plt, results_filtered, sns):
     _pivot_df = (
         results_filtered
         .with_columns(
-            (pl.col("model_kind") + "_K" + pl.col("K").cast(pl.Utf8)).alias("model_K")
+            (pl.col("model_label") + "_K" + pl.col("K").cast(pl.Utf8)).alias("model_K")
         )
         .pivot(index="subject", on="model_K", values="ll_per_trial")
         .to_pandas()
@@ -285,28 +448,37 @@ def _(mo, pl, plt, results_filtered, sns):
 @app.cell
 def _(agg, plt, sns):
     _MODEL_STYLES = {
-        "glm":      {"color": "#4C72B0", "marker": "s", "label": "GLM (K=1)"},
-        "glmhmm":   {"color": "#55A868", "marker": "o", "label": "GLMHMM"},
-        "glmhmmt":  {"color": "#C44E52", "marker": "^", "label": "GLMHMM-T"},
+        "glm": {"marker": "s", "label": "GLM"},
+        "glmhmm": {"marker": "o", "label": "GLMHMM"},
+        "glmhmmt": {"marker": "^", "label": "GLMHMM-T"},
     }
 
     fig_acc, ax_acc = plt.subplots(figsize=(6, 4))
-    for _kind_tup, _group in agg.group_by("model_kind"):
-        _kind = _kind_tup[0]
+    _labels = agg["model_label"].unique().to_list()
+    _colors = sns.color_palette("tab20", n_colors=max(1, len(_labels)))
+    _palette = {_label: _colors[_i] for _i, _label in enumerate(_labels)}
+    for _label_tup, _group in agg.group_by("model_label"):
+        _label = _label_tup[0]
         _g = _group.sort("K").to_pandas()
-        _st = _MODEL_STYLES.get(_kind, {"color": "grey", "marker": "o", "label": _kind})
+        _kind = _g["model_kind"].iloc[0]
+        _st = _MODEL_STYLES.get(_kind, {"marker": "o", "label": _label})
         ax_acc.plot(
             _g["K"], _g["acc_mean"],
-            color=_st["color"], marker=_st["marker"],
-            label=_st["label"], linewidth=1.5,
+            color=_palette[_label], marker=_st["marker"],
+            label=_label, linewidth=1.5,
         )
 
     ax_acc.set_xlabel("Number of states K")
     ax_acc.set_ylabel("Accuracy (mean over subjects)")
     ax_acc.set_title("Model accuracy vs K")
-    ax_acc.legend(frameon=False)
+    ax_acc.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.18),
+        ncol=min(3, max(1, len(_labels))),
+    )
     sns.despine(ax=ax_acc)
-    fig_acc.tight_layout()
+    fig_acc.tight_layout(rect=(0, 0.08, 1, 1))
     fig_acc
     return
 
@@ -501,21 +673,23 @@ def _(
 
     with mo.status.spinner(title="Re-fitting GLMHMM…"):
         if ui_glmhmm_dir.value:
-            _fit_glmhmm_main(
-                subjects=ui_subjects.value,
-                K_list=_K_list,
-                out_dir=paths.RESULTS / "fits" / ui_task.value / "glmhmm" / ui_glmhmm_dir.value,
-                task=ui_task.value,
-            )
+            for _alias in ui_glmhmm_dir.value:
+                _fit_glmhmm_main(
+                    subjects=ui_subjects.value,
+                    K_list=_K_list,
+                    out_dir=paths.RESULTS / "fits" / ui_task.value / "glmhmm" / _alias,
+                    task=ui_task.value,
+                )
 
     with mo.status.spinner(title="Re-fitting GLMHMM-T…"):
         if ui_glmhmmt_dir.value:
-            _fit_glmhmmt_main(
-                subjects=ui_subjects.value,
-                K_list=_K_list,
-                out_dir=paths.RESULTS / "fits" / ui_task.value / "glmhmmt" / ui_glmhmmt_dir.value,
-                task=ui_task.value,
-            )
+            for _alias in ui_glmhmmt_dir.value:
+                _fit_glmhmmt_main(
+                    subjects=ui_subjects.value,
+                    K_list=_K_list,
+                    out_dir=paths.RESULTS / "fits" / ui_task.value / "glmhmmt" / _alias,
+                    task=ui_task.value,
+                )
 
     mo.md("✅  Re-fit complete. Reload the notebook to refresh cached metrics.")
     return

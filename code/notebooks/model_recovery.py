@@ -395,7 +395,8 @@ def _(mo):
             ),
             mo.md(
                 "When enabled, the notebook reruns recovery over a symmetric range around "
-                "each current parameter while keeping all other parameters fixed."
+                "each current parameter while keeping all other parameters fixed, and it "
+                "tracks both recovery sensitivity and true-vs-recovered parameter values."
             ),
         ],
         align="start",
@@ -698,7 +699,7 @@ def _(
     _targets = ui_sweep_target.value
     _run_idx = [0]
 
-    def _record(_parameter, _kind, _value, _delta, _A_var, _W_var):
+    def _record(_parameter, _kind, _value, _delta, _A_var, _W_var, _lookup):
         _res = run_recovery_once(
             A_true=_A_var,
             W_true=_W_var,
@@ -712,11 +713,20 @@ def _(
             n_restarts=_n_restarts,
         )
         _run_idx[0] += 1
+        if _kind == "weight":
+            _recovered_value = float(_res["W_fit_aligned"][_lookup])
+        else:
+            _recovered_value = float(_res["A_fit_aligned"][_lookup])
+        _recovery_error = _recovered_value - float(_value)
         _rows.append(
             {
                 "parameter": _parameter,
                 "kind": _kind,
                 "value": float(_value),
+                "true_value": float(_value),
+                "recovered_value": _recovered_value,
+                "recovery_error": float(_recovery_error),
+                "abs_recovery_error": float(abs(_recovery_error)),
                 "delta": float(_delta),
                 "viterbi_accuracy": float(
                     np.mean(_res["vit_fit_al"] == np.asarray(_res["z_sim"]))
@@ -746,6 +756,7 @@ def _(
                             _value - _base,
                             np.array(A_true, copy=True),
                             _W_var,
+                            (_k, _ci, _fi),
                         )
 
     if _targets in ("all", "transitions"):
@@ -763,24 +774,27 @@ def _(
                         _A_var[_k, _j] - _base,
                         _A_var,
                         np.array(W_true, copy=True),
+                        (_k, _j),
                     )
 
-    if not _rows:
+    if _rows:
+        sweep_df = pd.DataFrame(_rows)
+        sweep_summary = (
+            sweep_df.groupby(["parameter", "kind"], as_index=False)
+            .agg(
+                min_viterbi_accuracy=("viterbi_accuracy", "min"),
+                mean_viterbi_accuracy=("viterbi_accuracy", "mean"),
+                mean_weight_rmse=("weight_rmse", "mean"),
+                mean_transition_rmse=("transition_rmse", "mean"),
+                mean_abs_recovery_error=("abs_recovery_error", "mean"),
+                max_abs_recovery_error=("abs_recovery_error", "max"),
+                mean_recovery_bias=("recovery_error", "mean"),
+            )
+            .reset_index(drop=True)
+        )
+    else:
         sweep_df = None
         sweep_summary = None
-
-    sweep_df = pd.DataFrame(_rows)
-    sweep_summary = (
-        sweep_df.groupby(["parameter", "kind"], as_index=False)
-        .agg(
-            min_viterbi_accuracy=("viterbi_accuracy", "min"),
-            mean_viterbi_accuracy=("viterbi_accuracy", "mean"),
-            mean_weight_rmse=("weight_rmse", "mean"),
-            mean_transition_rmse=("transition_rmse", "mean"),
-        )
-        .sort_values(["min_viterbi_accuracy", "mean_weight_rmse"], ascending=[True, False])
-        .reset_index(drop=True)
-    )
     return sweep_df, sweep_summary
 
 
@@ -789,12 +803,16 @@ def _(mo, plt, sns, sweep_df, sweep_summary, ui_sweep_enabled):
     mo.stop(not ui_sweep_enabled.value, mo.md("Enable the parameter sweep to run sensitivity recovery."))
     mo.stop(sweep_df is None or sweep_summary is None, mo.md("No sweep results available."))
 
-    _top_params = sweep_summary.head(12)["parameter"].tolist()
+    _summary_sensitive = sweep_summary.sort_values(
+        ["min_viterbi_accuracy", "mean_weight_rmse"],
+        ascending=[True, False],
+    ).reset_index(drop=True)
+    _top_params = _summary_sensitive.head(12)["parameter"].tolist()
     _plot_df = sweep_df[sweep_df["parameter"].isin(_top_params)].copy()
 
     _fig, _axes = plt.subplots(1, 2, figsize=(16, 5))
     sns.barplot(
-        data=sweep_summary.head(20),
+        data=_summary_sensitive.head(20),
         y="parameter",
         x="min_viterbi_accuracy",
         hue="kind",
@@ -826,9 +844,88 @@ def _(mo, plt, sns, sweep_df, sweep_summary, ui_sweep_enabled):
     plt.tight_layout()
     mo.vstack(
         [
-            mo.md("### Parameter sweep recovery"),
+            mo.md("### Parameter sweep sensitivity"),
             _fig,
-            sweep_summary.head(20),
+            _summary_sensitive.head(20),
+        ],
+        align="center",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo, np, plt, sweep_df, sweep_summary, ui_sweep_enabled):
+    mo.stop(not ui_sweep_enabled.value, mo.md("Enable the parameter sweep to run sweep-based recovery."))
+    mo.stop(sweep_df is None or sweep_summary is None, mo.md("No sweep recovery results available."))
+
+    _summary_recovery = sweep_summary.sort_values(
+        ["mean_abs_recovery_error", "max_abs_recovery_error"],
+        ascending=[False, False],
+    ).reset_index(drop=True)
+    _top_params = _summary_recovery.head(8)["parameter"].tolist()
+    _plot_df = (
+        sweep_df[sweep_df["parameter"].isin(_top_params)]
+        .sort_values(["kind", "parameter", "true_value"])
+        .copy()
+    )
+
+    _fig, _axes = plt.subplots(1, 2, figsize=(16, 5))
+    _summary_recovery.head(20).plot.barh(
+        x="parameter",
+        y="mean_abs_recovery_error",
+        color="#4C78A8",
+        ax=_axes[0],
+    )
+    _axes[0].set_title("Worst recovered parameters")
+    _axes[0].set_xlabel("Mean absolute recovery error")
+    _axes[0].set_ylabel("")
+
+    _delta_vmax = float(np.abs(_plot_df["delta"]).max())
+    _scatter = None
+    for _kind, _marker in [("weight", "o"), ("transition", "s")]:
+        _sub = _plot_df[_plot_df["kind"] == _kind]
+        if _sub.empty:
+            continue
+        _scatter = _axes[1].scatter(
+            _sub["true_value"],
+            _sub["recovered_value"],
+            c=_sub["delta"],
+            cmap="coolwarm",
+            s=60,
+            alpha=0.8,
+            marker=_marker,
+            label=_kind,
+            vmin=-_delta_vmax,
+            vmax=_delta_vmax,
+        )
+    _lo = float(min(_plot_df["true_value"].min(), _plot_df["recovered_value"].min()))
+    _hi = float(max(_plot_df["true_value"].max(), _plot_df["recovered_value"].max()))
+    _pad = 0.05 * (_hi - _lo if _hi > _lo else 1.0)
+    _axes[1].plot([_lo - _pad, _hi + _pad], [_lo - _pad, _hi + _pad], "k--", lw=1, alpha=0.6)
+    _axes[1].set_xlim(_lo - _pad, _hi + _pad)
+    _axes[1].set_ylim(_lo - _pad, _hi + _pad)
+    _axes[1].set_title("Sweep-based recovery")
+    _axes[1].set_xlabel("True swept value")
+    _axes[1].set_ylabel("Recovered value")
+    if _scatter is not None:
+        _fig.colorbar(_scatter, ax=_axes[1], label="Sweep delta")
+    _axes[1].legend(frameon=False, fontsize=8)
+
+    plt.tight_layout()
+    mo.vstack(
+        [
+            mo.md("### Sweep-based model recovery"),
+            _fig,
+            _summary_recovery.head(20)[
+                [
+                    "parameter",
+                    "kind",
+                    "mean_abs_recovery_error",
+                    "max_abs_recovery_error",
+                    "mean_recovery_bias",
+                    "min_viterbi_accuracy",
+                ]
+            ],
         ],
         align="center",
     )
@@ -1099,11 +1196,6 @@ def _(
     _fig.suptitle("GLM-HMM model recovery", fontsize=14, y=1.01)
     plt.tight_layout()
     mo.vstack([mo.md("### Recovery results"), _fig], align="center")
-    return
-
-
-@app.cell
-def _():
     return
 
 

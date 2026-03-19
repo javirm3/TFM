@@ -20,7 +20,9 @@ import traitlets
 
 # Make sure sibling packages (paths, tasks) are importable from notebooks/
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", "glmhmmt", "src"))
 import paths
+from glmhmmt.model import prune_frozen_emissions, serialize_frozen_emissions
 from tasks import get_adapter
 
 # ── Regressor group registries ───────────────────────────────────────────────
@@ -174,6 +176,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
     emission_cols_options = traitlets.List(traitlets.Unicode()).tag(sync=True)
     emission_cols         = traitlets.List(traitlets.Unicode()).tag(sync=True)
     emission_groups       = traitlets.List(traitlets.Dict()).tag(sync=True)
+    frozen_emissions      = traitlets.Dict(default_value={}).tag(sync=True)
 
     transition_cols_options = traitlets.List(traitlets.Unicode()).tag(sync=True)
     transition_cols         = traitlets.List(traitlets.Unicode()).tag(sync=True)
@@ -201,6 +204,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
         self.subjects = []
         self.emission_cols = []
         self.transition_cols = []
+        self.frozen_emissions = {}
         self.alias_error = ""
         self.alias_status = ""
         self.saved_model_name = ""
@@ -215,6 +219,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
         self.alias_status = ""
         self.saved_model_name = ""
         self.alias = ""
+        self.frozen_emissions = {}
         self._update_options()
 
     @traitlets.observe("alias")
@@ -222,6 +227,17 @@ class ModelManagerWidget(anywidget.AnyWidget):
         if change["old"] != change["new"]:
             self.alias_error = ""
             self.alias_status = ""
+
+    @traitlets.observe("K", "emission_cols", "frozen_emissions")
+    def _on_frozen_inputs_change(self, change):
+        if self.model_type == "glm":
+            if self.frozen_emissions:
+                self.frozen_emissions = {}
+            return
+
+        pruned = prune_frozen_emissions(self.frozen_emissions, int(self.K), list(self.emission_cols))
+        if pruned != self.frozen_emissions:
+            self.frozen_emissions = pruned
 
     @traitlets.observe("existing_model")
     def _on_existing_model_change(self, change):
@@ -265,6 +281,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
         k = _get_K_from_config(cfg)
         if isinstance(k, int):
             self.K = k
+        self.frozen_emissions = serialize_frozen_emissions(cfg.get("frozen_emissions", {}))
         if "lapse" in cfg:
             self.lapse = bool(cfg["lapse"])
         if "lapse_max" in cfg:
@@ -294,6 +311,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
             )
             self.emission_cols  = ecols[:10] if self.model_type == "glm" else ecols
             self.transition_cols = adapter.default_transition_cols()
+            self.frozen_emissions = {}
             self.alias = ""
             self.saved_model_name = ""
             self.alias_error = ""
@@ -339,6 +357,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
             cfg["lapse_max"] = float(self.lapse_max)
         else:
             cfg["K_list"] = [int(self.K)]
+            cfg["frozen_emissions"] = serialize_frozen_emissions(self.frozen_emissions)
         if self.model_type == "glmhmmt":
             cfg["transition_cols"] = list(self.transition_cols)
         return cfg
@@ -369,6 +388,9 @@ class ModelManagerWidget(anywidget.AnyWidget):
 
         saved_k = _get_K_from_config(saved)
         if not isinstance(saved_k, int) or saved_k != int(self.K):
+            return False
+
+        if serialize_frozen_emissions(saved.get("frozen_emissions", {})) != serialize_frozen_emissions(self.frozen_emissions):
             return False
 
         if self.model_type == "glmhmmt":

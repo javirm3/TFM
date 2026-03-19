@@ -83,6 +83,62 @@ function renderSelectAll(subjectsList, currentSubjects) {
   return `<button class="mm-select-all ${cls}" id="btn-select-all">${label}</button>`;
 }
 
+function renderFrozenTable(numStates, selectedFeatures, frozenEmissions) {
+  if (!selectedFeatures || selectedFeatures.length === 0) {
+    return '<p class="mm-empty-note">Select emission regressors to freeze per state.</p>';
+  }
+
+  const frozen = frozenEmissions || {};
+  const head = selectedFeatures
+    .map((feature) => `<th class="mm-freeze-th">${feature}</th>`)
+    .join("");
+
+  const rows = Array.from({ length: numStates }, (_, stateIdx) => {
+    const stateKey = String(stateIdx);
+    const stateFrozen = frozen[stateKey] || {};
+    const cells = selectedFeatures
+      .map((feature) => {
+        const value = stateFrozen[feature];
+        const display = Number.isFinite(value) ? String(value) : "";
+        return `
+          <td class="mm-freeze-td">
+            <input
+              type="number"
+              step="any"
+              class="mm-freeze-input"
+              data-state="${stateKey}"
+              data-feature="${feature}"
+              value="${display}"
+              placeholder="free"
+            >
+          </td>
+        `;
+      })
+      .join("");
+
+    return `
+      <tr class="mm-freeze-row">
+        <td class="mm-freeze-state">state ${stateIdx}</td>
+        ${cells}
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <div class="mm-freeze-table-wrap">
+      <table class="mm-freeze-table">
+        <thead>
+          <tr>
+            <th class="mm-freeze-th-state">State</th>
+            ${head}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 // ── Main render ───────────────────────────────────────────────────────────────
 
 function render({ model, el }) {
@@ -103,6 +159,7 @@ function render({ model, el }) {
     const currentSubjects  = model.get("subjects");
     const currentEmission  = model.get("emission_cols");
     const currentTransition = model.get("transition_cols");
+    const currentFrozen    = model.get("frozen_emissions") || {};
     const currentTau       = model.get("tau");
     const currentLapse     = model.get("lapse");
     const currentLapseMax  = model.get("lapse_max");
@@ -245,7 +302,18 @@ function render({ model, el }) {
       html += `
           </div>
         </div>
+      `;
 
+      if (modelType !== "glm") {
+        html += `
+        <div class="mm-section">
+          <label class="mm-label">Frozen Emission Weights</label>
+          ${renderFrozenTable(currentK, currentEmission, currentFrozen)}
+        </div>
+        `;
+      }
+
+      html += `
         <hr class="mm-divider"/>
 
         <div class="mm-flex-row">
@@ -397,6 +465,46 @@ function render({ model, el }) {
     wireRegRowLabel("emission", "emission_cols");
     wireRegCell("transition", "transition_cols");
     wireRegRowLabel("transition", "transition_cols");
+
+    const commitFreezeInput = (input) => {
+      if (!input) return;
+      const state = input.dataset.state;
+      const feature = input.dataset.feature;
+      if (state == null || !feature) return;
+
+      const current = JSON.parse(JSON.stringify(model.get("frozen_emissions") || {}));
+      const rawValue = input.value.trim();
+
+      if (!rawValue) {
+        if (current[state]) {
+          delete current[state][feature];
+          if (Object.keys(current[state]).length === 0) {
+            delete current[state];
+          }
+        }
+      } else {
+        const parsed = parseFloat(rawValue);
+        if (!Number.isFinite(parsed)) {
+          input.value = current[state] && Number.isFinite(current[state][feature]) ? String(current[state][feature]) : "";
+          return;
+        }
+        if (!current[state]) current[state] = {};
+        current[state][feature] = parsed;
+      }
+
+      model.set("frozen_emissions", current);
+      model.save_changes();
+    };
+
+    bindAll(".mm-freeze-input", "change", (e) => {
+      commitFreezeInput(e.target);
+    });
+    bindAll(".mm-freeze-input", "keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      commitFreezeInput(e.target);
+      e.target.blur();
+    });
 
     // Task selector
     bind("#inp-task", "change", (e) => {

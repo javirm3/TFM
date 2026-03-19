@@ -1,4 +1,3 @@
-import hashlib
 import json
 import numpy as np
 import polars as pl
@@ -9,24 +8,30 @@ from pathlib import Path
 from typing import Any, Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
-from glmhmmt.model import SoftmaxGLMHMM
+from glmhmmt.model import SoftmaxGLMHMM, normalize_frozen_emissions, serialize_frozen_emissions
+from scripts.fit_common import stable_model_id, valid_trial_mask
 from tasks import get_adapter
 
 ProgressCallback = Callable[[dict[str, Any]], None]
 
 
-def generate_model_id(task: str, K: int, tau: float, emission_cols: list | None = None) -> str:
-    """Stable 8-char MD5 hash over (task, K, tau, sorted emission_cols)."""
-    cols = sorted(emission_cols) if emission_cols else []
-    config = {"task": task, "K": int(K), "tau": float(tau), "emission_cols": cols}
-    return hashlib.md5(json.dumps(config, sort_keys=True).encode()).hexdigest()[:8]
-
-
-def _valid_trial_mask(session_ids: np.ndarray, min_length: int = 2) -> np.ndarray:
-    """Return a boolean mask keeping only trials from sessions with >= min_length trials."""
-    ids, counts = np.unique(session_ids, return_counts=True)
-    keep = set(ids[counts >= min_length])
-    return np.array([s in keep for s in session_ids])
+def generate_model_id(
+    task: str,
+    K: int,
+    tau: float,
+    emission_cols: list | None = None,
+    transition_cols: list | None = None,
+    frozen_emissions: dict | None = None,
+) -> str:
+    """Stable 8-char hash over the GLMHMMT-defining model configuration."""
+    return stable_model_id(
+        task=task,
+        K=K,
+        tau=tau,
+        emission_cols=emission_cols,
+        transition_cols=transition_cols,
+        frozen_emissions=frozen_emissions,
+    )
 
 
 def fit_subject(
@@ -39,6 +44,7 @@ def fit_subject(
     stickiness: float = 10.0,
     emission_cols: list[str] | None = None,
     transition_cols: list[str] | None = None,
+    frozen_emissions: dict[int, dict[str, float]] | dict[str, dict[str, float]] | None = None,
     tau: float = 50.0,
     task: str = "MCDR",
     verbose: bool = True,
@@ -53,9 +59,10 @@ def fit_subject(
     )
     num_classes = adapter.num_classes
     session_ids = df_sub[adapter.session_col].to_numpy()
+    frozen = normalize_frozen_emissions(frozen_emissions)
 
     # Drop trials from sessions too short for EM (must match _split_by_session)
-    mask = _valid_trial_mask(session_ids)
+    mask = valid_trial_mask(session_ids)
     y, X, U = y[mask], X[mask], U[mask]
     session_ids = session_ids[mask]
     inputs_all = jnp.concatenate([X, U], axis=1)
@@ -67,6 +74,8 @@ def fit_subject(
         transition_input_dim=U.shape[1],
         m_step_num_iters=m_step_num_iters,
         transition_matrix_stickiness=stickiness,
+        frozen_emissions=frozen or None,
+        emission_feature_names=names.get("X_cols", []),
     )
 
     best_lp, best_params = -np.inf, None
@@ -126,6 +135,7 @@ def fit_subject(
         "y": np.asarray(y),
         "X": np.asarray(X),
         "U": np.asarray(U),
+        "frozen_emissions": serialize_frozen_emissions(frozen),
     }
 
 
@@ -168,6 +178,7 @@ def save_results(result: dict, out_dir: Path) -> None:
         U=result["U"],
         X_cols=np.array(result["names"].get("X_cols", []), dtype=object),
         U_cols=np.array(result["names"].get("U_cols", []), dtype=object),
+        frozen_emissions_json=np.array(json.dumps(result["frozen_emissions"], sort_keys=True)),
     )
 
 
@@ -180,6 +191,7 @@ def main(
     out_dir: Path | None = None,
     emission_cols: list[str] | None = None,
     transition_cols: list[str] | None = None,
+    frozen_emissions: dict[int, dict[str, float]] | dict[str, dict[str, float]] | None = None,
     tau: float = 50.0,
     task: str = "MCDR",
     verbose: bool = True,
@@ -190,6 +202,7 @@ def main(
     if out_dir is None:
         out_dir = paths.RESULTS / "fits" / task / "glmhmmt"
     out_dir.mkdir(parents=True, exist_ok=True)
+    frozen_spec = serialize_frozen_emissions(frozen_emissions)
     with open(out_dir / "config.json", "w") as _f:
         json.dump({
             "task": task,
@@ -197,6 +210,7 @@ def main(
             "subjects": subjects,
             "emission_cols": emission_cols or adapter.default_emission_cols(),
             "transition_cols": transition_cols or adapter.default_transition_cols(),
+            "frozen_emissions": frozen_spec,
             "K_list": K_list,
             "model_id": out_dir.name,
         }, _f, indent=4)
@@ -229,6 +243,7 @@ def main(
                 base_seed=base_seed,
                 emission_cols=emission_cols,
                 transition_cols=transition_cols,
+                frozen_emissions=frozen_spec,
                 tau=tau,
                 task=task,
                 verbose=verbose,
@@ -252,7 +267,14 @@ if __name__ == "__main__":
                         help="Half-life for exponential action traces.")
     parser.add_argument("--task", type=str, default="MCDR",
                         help="Task to fit: 'MCDR' or '2AFC'.")
+    parser.add_argument(
+        "--frozen_emissions",
+        type=str,
+        default=None,
+        help='JSON object mapping state indices to {feature: fixed_value}, e.g. \'{"0":{"SL":0.0}}\'.',
+    )
     args = parser.parse_args()
+    frozen_emissions = json.loads(args.frozen_emissions) if args.frozen_emissions else None
     main(
         subjects=args.subjects,
         K_list=args.K,
@@ -262,4 +284,5 @@ if __name__ == "__main__":
         out_dir=Path(args.out_dir) if args.out_dir else None,
         tau=args.tau,
         task=args.task,
+        frozen_emissions=frozen_emissions,
     )

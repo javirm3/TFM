@@ -1,4 +1,3 @@
-import hashlib
 import json
 import numpy as np
 import polars as pl
@@ -10,7 +9,8 @@ from typing import Any, Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
-from glmhmmt.model import SoftmaxGLMHMM
+from glmhmmt.model import SoftmaxGLMHMM, normalize_frozen_emissions, serialize_frozen_emissions
+from scripts.fit_common import stable_model_id, valid_trial_mask
 from tasks import get_adapter
 
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -24,18 +24,21 @@ def _raw_loglik_multisession(model: SoftmaxGLMHMM, params, emissions, inputs, se
     return float(jnp.sum(ll_batch))
 
 
-def generate_model_id(task: str, K: int, tau: float, emission_cols: list | None = None) -> str:
-    """Stable 8-char MD5 hash over (task, K, tau, sorted emission_cols)."""
-    cols = sorted(emission_cols) if emission_cols else []
-    config = {"task": task, "K": int(K), "tau": float(tau), "emission_cols": cols}
-    return hashlib.md5(json.dumps(config, sort_keys=True).encode()).hexdigest()[:8]
-
-
-def _valid_trial_mask(session_ids: np.ndarray, min_length: int = 2) -> np.ndarray:
-    """Return a boolean mask keeping only trials from sessions with >= min_length trials."""
-    ids, counts = np.unique(session_ids, return_counts=True)
-    keep = set(ids[counts >= min_length])
-    return np.array([s in keep for s in session_ids])
+def generate_model_id(
+    task: str,
+    K: int,
+    tau: float,
+    emission_cols: list | None = None,
+    frozen_emissions: dict | None = None,
+) -> str:
+    """Stable 8-char hash over the GLMHMM-defining model configuration."""
+    return stable_model_id(
+        task=task,
+        K=K,
+        tau=tau,
+        emission_cols=emission_cols,
+        frozen_emissions=frozen_emissions,
+    )
 
 
 def fit_subject(
@@ -46,12 +49,14 @@ def fit_subject(
     base_seed: int = 0,
     m_step_num_iters: int = 100,
     emission_cols: list[str] | None = None,
+    frozen_emissions: dict[int, dict[str, float]] | dict[str, dict[str, float]] | None = None,
     stickiness: float = 10.0,
     tau: float = 50.0,
     task: str = "MCDR",
     verbose: bool = True,
     progress_callback: ProgressCallback | None = None,
 ) -> dict:
+    """Fit a GLMHMM to a single subject's data, returning the best-fitting params and other info."""
     adapter = get_adapter(task)
     df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
     df = adapter.subject_filter(df)
@@ -59,9 +64,10 @@ def fit_subject(
     y, X, _, names = adapter.load_subject(df_sub, tau=tau, emission_cols=emission_cols)
     session_ids = df_sub[adapter.session_col].to_numpy()
     num_classes = adapter.num_classes
+    frozen = normalize_frozen_emissions(frozen_emissions)
 
     # Drop trials from sessions too short for EM (must match _split_by_session)
-    mask = _valid_trial_mask(session_ids)
+    mask = valid_trial_mask(session_ids)
     y, X = y[mask], X[mask]
     session_ids = session_ids[mask]
     model = SoftmaxGLMHMM(
@@ -71,6 +77,8 @@ def fit_subject(
         transition_input_dim=0,
         m_step_num_iters=m_step_num_iters,
         transition_matrix_stickiness=stickiness,
+        frozen_emissions=frozen or None,
+        emission_feature_names=names.get("X_cols", []),
     )
 
     best_lp, best_params = -np.inf, None
@@ -132,6 +140,7 @@ def fit_subject(
         "names": names,
         "y": np.asarray(y),
         "X": np.asarray(X),
+        "frozen_emissions": serialize_frozen_emissions(frozen),
     }
 
 
@@ -185,6 +194,7 @@ def save_results(result: dict, out_dir: Path) -> None:
         y=result["y"],
         X=result["X"],
         X_cols=np.array(result["names"].get("X_cols", []), dtype=object),
+        frozen_emissions_json=np.array(json.dumps(result["frozen_emissions"], sort_keys=True)),
     )
 
 
@@ -196,6 +206,7 @@ def main(
     base_seed: int = 0,
     out_dir: Path | None = None,
     emission_cols: list[str] | None = None,
+    frozen_emissions: dict[int, dict[str, float]] | dict[str, dict[str, float]] | None = None,
     tau: float = 50.0,
     task: str = "MCDR",
     verbose: bool = True,
@@ -207,6 +218,7 @@ def main(
     if out_dir is None:
         out_dir = paths.RESULTS / "fits" / task / "glmhmm"
     out_dir.mkdir(parents=True, exist_ok=True)
+    frozen_spec = serialize_frozen_emissions(frozen_emissions)
     with open(out_dir / "config.json", "w") as _f:
         json.dump(
             {
@@ -214,6 +226,7 @@ def main(
                 "tau": tau,
                 "subjects": subjects,
                 "emission_cols": emission_cols or adapter.default_emission_cols(),
+                "frozen_emissions": frozen_spec,
                 "K_list": K_list,
                 "model_id": out_dir.name,
             },
@@ -251,6 +264,7 @@ def main(
                 base_seed=base_seed,
                 tau=tau,
                 emission_cols=emission_cols,
+                frozen_emissions=frozen_spec,
                 task=task,
                 verbose=verbose,
                 progress_callback=_progress if progress_callback is not None else None,
@@ -276,7 +290,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task", type=str, default="MCDR", help="Task to fit: 'MCDR' or '2AFC'. Affects data loading and features."
     )
+    parser.add_argument(
+        "--frozen_emissions",
+        type=str,
+        default=None,
+        help='JSON object mapping state indices to {feature: fixed_value}, e.g. \'{"0":{"SL":0.0}}\'.',
+    )
     args = parser.parse_args()
+    frozen_emissions = json.loads(args.frozen_emissions) if args.frozen_emissions else None
     main(
         subjects=args.subjects,
         K_list=args.K,
@@ -286,4 +307,5 @@ if __name__ == "__main__":
         out_dir=Path(args.out_dir) if args.out_dir else None,
         tau=args.tau,
         task=args.task,
+        frozen_emissions=frozen_emissions,
     )
