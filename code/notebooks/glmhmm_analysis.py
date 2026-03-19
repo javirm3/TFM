@@ -249,9 +249,16 @@ def _(
     for _f in _files:
         _subj = _f.name.removesuffix("_glmhmm_arrays.npz").removesuffix(f"_K{K}")
         _d = dict(np.load(_f, allow_pickle=True))
-        # decode column names saved as string arrays; fall back to adapter output
+        _saved_names = {}
+        if "names" in _d:
+            _raw_names = _d["names"]
+            if getattr(_raw_names, "shape", None) == ():
+                _saved_names = _raw_names.item()
+        # decode column names saved as string arrays; fall back to nested names,
+        # then to the current adapter output for backward compatibility
         _d["X_cols"] = (
-            list(_d["X_cols"]) if "X_cols" in _d else names["X_cols"]
+            list(_d["X_cols"]) if "X_cols" in _d
+            else list(_saved_names.get("X_cols", names["X_cols"]))
         )
         arrays_store[_subj] = _d
 
@@ -1108,7 +1115,7 @@ def _(
     mo.stop(not ssm_run_btn.value, mo.md("Press **▶ Run SSM safety check** above to fit."))
 
     try:
-        import ssm as _ssm_lib
+        import ssm as ssm_lib
     except ImportError:
         mo.stop(
             True,
@@ -1117,7 +1124,7 @@ def _(
                 "log-likelihood comparison cannot run."
             ),
         )
-    from scripts.fit_glmhmm import _valid_trial_mask as _vtm
+    from scripts.fit_glmhmm import _valid_trial_mask as valid_trial_mask
 
     _ssm_subjects = [s for s in ui_subjects.value if s in views]
     mo.stop(not _ssm_subjects, mo.md("No fitted arrays found — run the custom fit first."))
@@ -1128,41 +1135,41 @@ def _(
     _selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
     _out_dir = paths.RESULTS / "fits" / task_name / "glmhmm" / _selected_model_id
 
-    def _load_custom_metrics(_subj: str, _n_trials: int):
-        _candidates = [
-            _out_dir / f"{_subj}_K{K}_glmhmm_metrics.parquet",
-            _out_dir / f"{_subj}_glmhmm_metrics.parquet",
-            *sorted(_out_dir.glob(f"{_subj}*_glmhmm_metrics.parquet")),
+    def load_custom_metrics(subject: str, n_trials: int):
+        candidates = [
+            _out_dir / f"{subject}_K{K}_glmhmm_metrics.parquet",
+            _out_dir / f"{subject}_glmhmm_metrics.parquet",
+            *sorted(_out_dir.glob(f"{subject}*_glmhmm_metrics.parquet")),
         ]
-        for _path in dict.fromkeys(_candidates):
-            if not _path.exists():
+        for path in dict.fromkeys(candidates):
+            if not path.exists():
                 continue
-            _df_m = pl.read_parquet(_path)
-            if _df_m.height == 0:
+            metrics_df = pl.read_parquet(path)
+            if metrics_df.height == 0:
                 continue
-            _row = _df_m.row(0, named=True)
-            _raw_ll = _row.get("raw_ll")
-            _ll_pt = _row.get("ll_per_trial")
-            if _raw_ll is None and _ll_pt is not None:
-                _raw_ll = float(_ll_pt) * _n_trials
-            if _ll_pt is None and _raw_ll is not None:
-                _ll_pt = float(_raw_ll) / max(_n_trials, 1)
-            if _raw_ll is None or _ll_pt is None:
+            row = metrics_df.row(0, named=True)
+            raw_ll = row.get("raw_ll")
+            ll_per_trial = row.get("ll_per_trial")
+            if raw_ll is None and ll_per_trial is not None:
+                raw_ll = float(ll_per_trial) * n_trials
+            if ll_per_trial is None and raw_ll is not None:
+                ll_per_trial = float(raw_ll) / max(n_trials, 1)
+            if raw_ll is None or ll_per_trial is None:
                 continue
-            return float(_raw_ll), float(_ll_pt), _path.name
+            return float(raw_ll), float(ll_per_trial), path.name
         return np.nan, np.nan, None
 
-    def _ssm_data_loglik(_model, _choices_list, _inputs_list):
-        if hasattr(_model, "log_likelihood"):
-            return float(_model.log_likelihood(_choices_list, inputs=_inputs_list)), "log_likelihood"
-        if hasattr(_model, "log_probability"):
-            return float(_model.log_probability(_choices_list, inputs=_inputs_list)), "log_probability"
+    def ssm_data_loglik(model, choices_list, inputs_list):
+        if hasattr(model, "log_likelihood"):
+            return float(model.log_likelihood(choices_list, inputs=inputs_list)), "log_likelihood"
+        if hasattr(model, "log_probability"):
+            return float(model.log_probability(choices_list, inputs=inputs_list)), "log_probability"
         raise AttributeError("SSM HMM object exposes neither log_likelihood nor log_probability.")
 
-    def _stable_softmax_np(_logits: np.ndarray) -> np.ndarray:
-        _shift = _logits - np.max(_logits, axis=-1, keepdims=True)
-        _exp = np.exp(_shift)
-        return _exp / np.sum(_exp, axis=-1, keepdims=True)
+    def stable_softmax_np(logits: np.ndarray) -> np.ndarray:
+        shifted_logits = logits - np.max(logits, axis=-1, keepdims=True)
+        exp_logits = np.exp(shifted_logits)
+        return exp_logits / np.sum(exp_logits, axis=-1, keepdims=True)
 
     with mo.status.spinner(title="Fitting SSM GLM-HMM…"):
         for _subj in _ssm_subjects:
@@ -1173,7 +1180,7 @@ def _(
             # Reconstruct session ids with same mask as fit_subject()
             _df_s    = df_all.filter(pl.col("subject") == _subj).sort(adapter.sort_col)
             _sess_raw = _df_s[adapter.session_col].to_numpy()
-            _mask_s  = _vtm(_sess_raw)
+            _mask_s  = valid_trial_mask(_sess_raw)
             _sess_ids = _sess_raw[_mask_s]
 
             # Split into per-session lists — SSM expects list of arrays
@@ -1188,7 +1195,7 @@ def _(
             _obs_dim   = 1
             _n_cats    = 2
             _n_feat    = _X.shape[1]
-            _glmhmm_s  = _ssm_lib.HMM(
+            _glmhmm_s  = ssm_lib.HMM(
                 K, _obs_dim, _n_feat,
                 observations="input_driven_obs",
                 observation_kwargs=dict(C=_n_cats),
@@ -1222,17 +1229,17 @@ def _(
                     ],
                     axis=-1,
                 )
-                _p_y_given_z_s = _stable_softmax_np(_logits_s)  # (T_s, K, C)
+                _p_y_given_z_s = stable_softmax_np(_logits_s)  # (T_s, K, C)
                 _p_pred_ssm_parts.append(
                     np.einsum("tk,tkc->tc", _pred_z_s, _p_y_given_z_s)
                 )
             _p_pred_ssm = np.concatenate(_p_pred_ssm_parts, axis=0)
-            _ssm_raw_ll, _ssm_ll_source = _ssm_data_loglik(
+            _ssm_raw_ll, _ssm_ll_source = ssm_data_loglik(
                 _glmhmm_s, _choices_list, _inputs_list
             )
             _n_trials = int(_y.shape[0])
             _ssm_ll_per_trial = _ssm_raw_ll / max(_n_trials, 1)
-            _custom_raw_ll, _custom_ll_per_trial, _metric_file = _load_custom_metrics(
+            _custom_raw_ll, _custom_ll_per_trial, _metric_file = load_custom_metrics(
                 _subj, _n_trials
             )
             if _metric_file is None:
@@ -1283,23 +1290,23 @@ def _(
         _trial_frames_ssm.append(build_trial_df(_view, adapter, _df_sub, _bcols))
     _trial_df_ssm = pl.concat(_trial_frames_ssm) if _trial_frames_ssm else pl.DataFrame()
 
-    _psych_fig_custom = None
-    _psych_fig_ssm = None
+    ssm_psych_fig_custom = None
+    ssm_psych_fig_ssm = None
     if _trial_df_custom_sel.height > 0 and _trial_df_ssm.height > 0:
         _plot_df_custom = plots.prepare_predictions_df(_trial_df_custom_sel)
-        _psych_fig_custom, _ = plots.plot_categorical_performance_all(
+        ssm_psych_fig_custom, _ = plots.plot_categorical_performance_all(
             _plot_df_custom,
             f"Dynamax glmhmm K={K}",
             views=_views_sel,
         )
         _plot_df_ssm = plots.prepare_predictions_df(_trial_df_ssm)
-        _psych_fig_ssm, _ = plots.plot_categorical_performance_all(
+        ssm_psych_fig_ssm, _ = plots.plot_categorical_performance_all(
             _plot_df_ssm,
             f"SSM glmhmm K={K}",
             views=_ssm_views_sel,
         )
 
-    _cmp_df = pl.DataFrame(_cmp_rows)
+    ssm_cmp_df = pl.DataFrame(_cmp_rows)
     _contrast_labels = list(adapter.choice_labels[:-1]) or ["contrast_0"]
     _coef_rows = []
     for _subj in _ssm_subjects:
@@ -1359,7 +1366,7 @@ def _(
         }
     )
     _coef_df = _coef_df.sort(["subject", "state_rank", "contrast", "feature"])
-    _coef_display = _coef_df.select(
+    ssm_coef_display = _coef_df.select(
         [
             "subject",
             "state_rank",
@@ -1374,12 +1381,12 @@ def _(
         ]
     )
 
-    _cmp_valid = _cmp_df.filter(pl.col("custom_raw_ll").is_finite())
+    _cmp_valid = ssm_cmp_df.filter(pl.col("custom_raw_ll").is_finite())
     if _cmp_valid.height > 0:
         _custom_total_raw = float(_cmp_valid["custom_raw_ll"].sum())
         _ssm_total_raw = float(_cmp_valid["ssm_raw_ll"].sum())
         _total_trials = int(_cmp_valid["n_trials"].sum())
-        _summary_md = "\n".join(
+        ssm_summary_md = "\n".join(
             [
                 "### Log-likelihood comparison",
                 "",
@@ -1393,7 +1400,7 @@ def _(
             ]
         )
     else:
-        _summary_md = (
+        ssm_summary_md = (
             "### Log-likelihood comparison\n\n"
             "No matching saved custom metrics were found for the selected fit, so only the "
             "SSM posterior overlay is shown below."
@@ -1405,23 +1412,26 @@ def _(
             "Missing custom metrics for: "
             + ", ".join(sorted(dict.fromkeys(_missing_metric_subjects)))
         )
-    _ssm_sources = sorted(dict.fromkeys(_cmp_df["ssm_ll_source"].to_list())) if _cmp_df.height > 0 else []
+    _ssm_sources = (
+        sorted(dict.fromkeys(ssm_cmp_df["ssm_ll_source"].to_list()))
+        if ssm_cmp_df.height > 0 else []
+    )
     if _ssm_sources and _ssm_sources != ["log_likelihood"]:
         _notes.append(
             "SSM LL used fallback method(s): " + ", ".join(_ssm_sources)
         )
-    _notes_md = (
+    ssm_notes_md = (
         "  \n".join(f"- {note}" for note in _notes)
         if _notes else
         "- `raw_ll` is the data log-likelihood from the saved custom fit metrics.  \n"
         "- `delta` columns are defined as **SSM - custom / Dynamax**."
     )
-    _notes_md += (
+    ssm_notes_md += (
         "  \n- Emission coefficients are compared after each model's states are reordered by the notebook's "
         "semantic state labelling (`state_idx_order`), not by raw fitted state index."
     )
 
-    _coef_fig = None
+    ssm_coef_fig = None
     if _coef_df.height > 0:
         _coef_pd = _coef_df.to_pandas()
         _panel_keys = (
@@ -1433,7 +1443,7 @@ def _(
         _n_panels = len(_panel_keys)
         _n_cols = 1 if _n_panels == 1 else min(2, _n_panels)
         _n_rows = int(np.ceil(_n_panels / _n_cols))
-        _coef_fig, _coef_axes = plt.subplots(
+        ssm_coef_fig, _coef_axes = plt.subplots(
             _n_rows,
             _n_cols,
             figsize=(max(8, 5.5 * _n_cols), max(3.6, 3.6 * _n_rows)),
@@ -1477,95 +1487,95 @@ def _(
             sns.despine(ax=_ax)
         for _ax in _axes_flat[_n_panels:]:
             _ax.set_visible(False)
-        _coef_fig.tight_layout()
+        ssm_coef_fig.tight_layout()
 
-    def _choice_meta(_num_classes: int):
-        if _num_classes == 2:
+    def choice_meta(num_classes: int):
+        if num_classes == 2:
             return {0: "royalblue", 1: "tomato"}
         return {0: "royalblue", 1: "gold", 2: "tomato"}
 
-    def _choice_short_labels(_labels):
-        return {int(_i): str(_label)[0].upper() for _i, _label in enumerate(_labels)}
+    def choice_short_labels(labels):
+        return {int(i): str(label)[0].upper() for i, label in enumerate(labels)}
 
-    def _posterior_color(_rank: int):
-        _palette = ["tab:green", "tab:grey", *sns.color_palette("tab10", n_colors=max(0, K - 2))]
-        if _rank < len(_palette):
-            return _palette[_rank]
-        return sns.color_palette("tab10", n_colors=K)[_rank % K]
+    def posterior_color(rank: int):
+        palette = ["tab:green", "tab:grey", *sns.color_palette("tab10", n_colors=max(0, K - 2))]
+        if rank < len(palette):
+            return palette[rank]
+        return sns.color_palette("tab10", n_colors=K)[rank % K]
 
-    _t0_s, _t1_s = ui_trial_range.value
+    t0_ssm, t1_ssm = ui_trial_range.value
 
-    def _plot_view_posterior(
-        _ax,
-        _view,
-        _title: str,
-        _t0_plot: int,
-        _t1_plot: int,
-        _overlay_line=None,
-        _overlay_label: str | None = None,
+    def plot_view_posterior(
+        ax,
+        view,
+        title: str,
+        t0_plot: int,
+        t1_plot: int,
+        overlay_line=None,
+        overlay_label: str | None = None,
     ):
-        _probs = np.asarray(_view.smoothed_probs)[_t0_plot:_t1_plot + 1]
-        _y_w = np.asarray(_view.y).astype(int)[_t0_plot:_t1_plot + 1]
-        _T_w = _probs.shape[0]
-        _x_w = np.arange(_t0_plot, _t0_plot + _T_w)
-        _bottom = np.zeros(_T_w)
+        probs = np.asarray(view.smoothed_probs)[t0_plot:t1_plot + 1]
+        y_window = np.asarray(view.y).astype(int)[t0_plot:t1_plot + 1]
+        n_trials_window = probs.shape[0]
+        x_window = np.arange(t0_plot, t0_plot + n_trials_window)
+        bottom = np.zeros(n_trials_window)
 
-        for _k in list(_view.state_idx_order):
-            _rank = _view.state_rank_by_idx.get(int(_k), int(_k))
-            _col = _posterior_color(_rank)
-            _ax.fill_between(
-                _x_w,
-                _bottom,
-                _bottom + _probs[:, _k],
+        for state_idx in list(view.state_idx_order):
+            rank = view.state_rank_by_idx.get(int(state_idx), int(state_idx))
+            color = posterior_color(rank)
+            ax.fill_between(
+                x_window,
+                bottom,
+                bottom + probs[:, state_idx],
                 alpha=0.7,
-                color=_col,
-                label=_view.state_name_by_idx.get(_k, f"State {_k}"),
+                color=color,
+                label=view.state_name_by_idx.get(state_idx, f"State {state_idx}"),
             )
-            _bottom += _probs[:, _k]
+            bottom += probs[:, state_idx]
 
-        _engaged_k = _view.engaged_k()
-        _engaged_lbl = _view.state_name_by_idx.get(_engaged_k, f"State {_engaged_k}")
-        _ax.plot(
-            _x_w,
-            _probs[:, _engaged_k],
+        engaged_state = view.engaged_k()
+        engaged_label = view.state_name_by_idx.get(engaged_state, f"State {engaged_state}")
+        ax.plot(
+            x_window,
+            probs[:, engaged_state],
             color="black",
             lw=1.4,
             alpha=0.95,
-            label=f"P({_engaged_lbl})",
+            label=f"P({engaged_label})",
         )
-        if _overlay_line is not None:
-            _ax.plot(
-                _x_w,
-                np.asarray(_overlay_line)[:_T_w],
+        if overlay_line is not None:
+            ax.plot(
+                x_window,
+                np.asarray(overlay_line)[:n_trials_window],
                 color="darkorange",
                 lw=2,
                 alpha=0.95,
                 linestyle="--",
-                label=_overlay_label or "Overlay",
+                label=overlay_label or "Overlay",
             )
 
-        _choice_colors = _choice_meta(_view.num_classes)
-        _choice_labels = _choice_short_labels(adapter.choice_labels)
-        for _resp, _col in _choice_colors.items():
-            _mask = _y_w == _resp
-            if not np.any(_mask):
+        choice_colors = choice_meta(view.num_classes)
+        choice_labels = choice_short_labels(adapter.choice_labels)
+        for response, color in choice_colors.items():
+            mask = y_window == response
+            if not np.any(mask):
                 continue
-            _ax.scatter(
-                _x_w[_mask],
-                np.ones(_mask.sum()) * 1.03,
-                c=_col,
+            ax.scatter(
+                x_window[mask],
+                np.ones(mask.sum()) * 1.03,
+                c=color,
                 s=4,
                 marker="|",
-                label=_choice_labels.get(_resp, str(_resp)),
-                transform=_ax.get_xaxis_transform(),
+                label=choice_labels.get(response, str(response)),
+                transform=ax.get_xaxis_transform(),
                 clip_on=False,
             )
 
-        _ax.set_xlim(_t0_plot, _t0_plot + _T_w - 1)
-        _ax.set_ylim(0, 1)
-        _ax.set_ylabel("State probability")
-        _ax.set_title(_title)
-        _ax.legend(
+        ax.set_xlim(t0_plot, t0_plot + n_trials_window - 1)
+        ax.set_ylim(0, 1)
+        ax.set_ylabel("State probability")
+        ax.set_title(title)
+        ax.legend(
             bbox_to_anchor=(1.01, 1),
             loc="upper left",
             fontsize=8,
@@ -1575,54 +1585,50 @@ def _(
 
     # ── Plot: custom posterior + inverted SSM engaged posterior ──────────────
     _n_s   = len(_ssm_subjects)
-    _fig_ssm, _axes_ssm = plt.subplots(
+    ssm_posterior_fig, _axes_ssm = plt.subplots(
         _n_s, 1, figsize=(14, 3.4 * _n_s), squeeze=False
     )
 
     for _i, _subj in enumerate(_ssm_subjects):
         _ssm_view = _ssm_views[_subj]
-        _ssm_probs = np.asarray(_ssm_view.smoothed_probs)[_t0_s:_t1_s + 1]
+        _ssm_probs = np.asarray(_ssm_view.smoothed_probs)[t0_ssm:t1_ssm + 1]
         _ssm_p_inv = 1.0 - _ssm_probs[:, _ssm_view.engaged_k()]
-        _plot_view_posterior(
+        plot_view_posterior(
             _axes_ssm[_i, 0],
             views[_subj],
             f"Subject {_subj} — Custom posterior + inverted SSM line",
-            _t0_s,
-            _t1_s,
-            _overlay_line=_ssm_p_inv,
-            _overlay_label="SSM P(Engaged) inverted",
+            t0_ssm,
+            t1_ssm,
+            overlay_line=_ssm_p_inv,
+            overlay_label="SSM P(Engaged) inverted",
         )
 
     _axes_ssm[-1, 0].set_xlabel("Trial")
-    _fig_ssm.tight_layout()
-    _fig_ssm.subplots_adjust(right=0.84)
-    sns.despine(fig=_fig_ssm)
+    ssm_posterior_fig.tight_layout()
+    ssm_posterior_fig.subplots_adjust(right=0.84)
+    sns.despine(fig=ssm_posterior_fig)
 
     mo.vstack([
         mo.md("### SSM GLM-HMM fit summary"),
-        mo.md(_summary_md),
-        mo.md(_notes_md),
-        mo.ui.dataframe(_cmp_df),
+        mo.md(ssm_summary_md),
+        mo.md(ssm_notes_md),
+        mo.ui.dataframe(ssm_cmp_df),
         mo.md("### Emission coefficients — SSM vs Dynamax"),
         mo.md(
             "Each row below is one fitted emission coefficient for one subject, aligned by the notebook's "
             "state order. `delta_ssm_minus_dynamax > 0` means the SSM coefficient is larger."
         ),
-        mo.ui.dataframe(_coef_display),
+        mo.ui.dataframe(ssm_coef_display),
     ], align="center")
-    ssm_coef_fig = _coef_fig
-    ssm_cmp_df = _cmp_df
-    ssm_coef_display = _coef_display
-    ssm_notes_md = _notes_md
-    ssm_posterior_fig = _fig_ssm
-    ssm_psych_fig_custom = _psych_fig_custom
-    ssm_psych_fig_ssm = _psych_fig_ssm
-    ssm_summary_md = _summary_md
     return (
         ssm_coef_fig,
+        ssm_cmp_df,
+        ssm_coef_display,
+        ssm_notes_md,
         ssm_posterior_fig,
         ssm_psych_fig_custom,
         ssm_psych_fig_ssm,
+        ssm_summary_md,
     )
 
 

@@ -42,10 +42,7 @@ def _default_choice_meta(num_classes: int):
 def _state_labels_and_colors(view):
     rank_order = view.state_idx_order
     labels = [view.state_name_by_idx.get(k, f"State {k}") for k in rank_order]
-    colors = [
-        _STATE_HEX[view.state_rank_by_idx.get(int(k), int(k)) % len(_STATE_HEX)]
-        for k in rank_order
-    ]
+    colors = [_STATE_HEX[view.state_rank_by_idx.get(int(k), int(k)) % len(_STATE_HEX)] for k in rank_order]
     return rank_order, labels, colors
 
 
@@ -66,10 +63,7 @@ def plot_state_accuracy(
         return fig, pd.DataFrame()
 
     first_view = views[subjects[0]]
-    state_labels = [
-        first_view.state_name_by_idx.get(k, f"State {k}")
-        for k in first_view.state_idx_order
-    ]
+    state_labels = [first_view.state_name_by_idx.get(k, f"State {k}") for k in first_view.state_idx_order]
     cmap = {"All": "#999999"}
     for k in first_view.state_idx_order:
         lbl = first_view.state_name_by_idx.get(k, f"State {k}")
@@ -350,9 +344,7 @@ def plot_state_occupancy(
                 continue
             n_changes = int(np.sum(np.diff(v) != 0))
             changes_per_sess.append(n_changes)
-            switch_records.append(
-                {"subject": subj, "session": s, "switches": n_changes}
-            )
+            switch_records.append({"subject": subj, "session": s, "switches": n_changes})
             for pos, k in enumerate(rank_order):
                 occ_s = float(np.mean(p_s[:, k]))
                 sess_occ[int(k)].append(occ_s)
@@ -382,11 +374,7 @@ def plot_state_occupancy(
         ax_all_occ,
         [
             np.asarray(
-                [
-                    row["occupancy"]
-                    for row in overall_records
-                    if row["state_label"] == lbl
-                ],
+                [row["occupancy"] for row in overall_records if row["state_label"] == lbl],
                 dtype=float,
             )
             for lbl in labels_all
@@ -401,11 +389,7 @@ def plot_state_occupancy(
         ax_all_sess,
         [
             np.asarray(
-                [
-                    row["occupancy"]
-                    for row in session_records
-                    if row["state_label"] == lbl
-                ],
+                [row["occupancy"] for row in session_records if row["state_label"] == lbl],
                 dtype=float,
             )
             for lbl in labels_all
@@ -449,11 +433,7 @@ def plot_session_deepdive(
 
     df_sub_all = _subject_df(trial_df, subj)
     if _is_polars_df(df_sub_all):
-        sess_row_indices = (
-            df_sub_all.with_row_index("_r")
-            .filter(pl.col(session_col) == sess)["_r"]
-            .to_numpy()
-        )
+        sess_row_indices = df_sub_all.with_row_index("_r").filter(pl.col(session_col) == sess)["_r"].to_numpy()
         df_sess = df_sub_all.filter(pl.col(session_col) == sess)
     else:
         df_sub_all = df_sub_all.reset_index(drop=True)

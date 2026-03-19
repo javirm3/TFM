@@ -58,9 +58,7 @@ def prepare_predictions_df(df_pred: pl.DataFrame) -> pl.DataFrame:
 
     if "correct_bool" not in df.columns:
         if "performance" in df.columns:
-            df = df.with_columns(
-                pl.col("performance").cast(pl.Boolean).alias("correct_bool")
-            )
+            df = df.with_columns(pl.col("performance").cast(pl.Boolean).alias("correct_bool"))
         else:
             raise ValueError("No encuentro 'performance' ni 'correct_bool' en df.")
 
@@ -73,30 +71,25 @@ def prepare_predictions_df(df_pred: pl.DataFrame) -> pl.DataFrame:
 
     if "p_model_correct" not in df.columns:
         df = df.with_columns(
-            pl.when(pl.col("stimulus") == 0).then(pl.col("pL"))
-            .when(pl.col("stimulus") == 1).then(pl.col("pC"))
-            .when(pl.col("stimulus") == 2).then(pl.col("pR"))
+            pl.when(pl.col("stimulus") == 0)
+            .then(pl.col("pL"))
+            .when(pl.col("stimulus") == 1)
+            .then(pl.col("pC"))
+            .when(pl.col("stimulus") == 2)
+            .then(pl.col("pR"))
             .otherwise(None)
             .alias("p_model_correct")
         )
 
     if "stimd_c" not in df.columns:
         if "stimd_n" in df.columns:
-            df = df.with_columns(
-                pl.col("stimd_n")
-                .replace(cfg["encoding"]["stimd"], default=None)
-                .alias("stimd_c")
-            )
+            df = df.with_columns(pl.col("stimd_n").replace(cfg["encoding"]["stimd"], default=None).alias("stimd_c"))
         else:
             raise ValueError("Falta 'stimd_c' y no existe 'stimd_n' para mapear.")
 
     if "ttype_c" not in df.columns:
         if "ttype_n" in df.columns:
-            df = df.with_columns(
-                pl.col("ttype_n")
-                .replace(cfg["encoding"]["ttype"], default=None)
-                .alias("ttype_c")
-            )
+            df = df.with_columns(pl.col("ttype_n").replace(cfg["encoding"]["ttype"], default=None).alias("ttype_c"))
         else:
             raise ValueError("Falta 'ttype_c' y no existe 'ttype_n' para mapear.")
 
@@ -321,9 +314,7 @@ def plot_categorical_performance_by_state(df, views: dict, model_name: str):
     for k in range(K):
         label = state_labels.get(k, f"State {k}")
         color = state_colors[k]
-        legend_handles.append(
-            mlines.Line2D([], [], marker="o", color=color, linestyle="None", ms=7, alpha=0.55)
-        )
+        legend_handles.append(mlines.Line2D([], [], marker="o", color=color, linestyle="None", ms=7, alpha=0.55))
         legend_labels.append(f"{label} data")
         legend_handles.append(mlines.Line2D([], [], color=color, lw=2.2, alpha=0.95))
         legend_labels.append(f"{label} model")
@@ -414,9 +405,7 @@ def plot_delay_or_stim_1d_on_ax(ax, df, subject, n_bins, which):
 
     d = d.copy()
     d["x_bin"], _ = pd.qcut(d[xcol], q=n_bins, retbins=True, duplicates="drop")
-    centers = (
-        d.groupby("x_bin", observed=True)[xcol].median().rename("center").reset_index().sort_values("center")
-    )
+    centers = d.groupby("x_bin", observed=True)[xcol].median().rename("center").reset_index().sort_values("center")
 
     subj = (
         d.groupby(["x_bin", "subject"], observed=True)
@@ -569,15 +558,11 @@ def plot_delay_binned_1d(df, model_name, subject=None, n_bins=7):
     if df_delay.empty or df_stim.empty:
         return None
 
-    df_delay["delay_bin"] = (
-        df_delay.groupby("ttype_c", observed=True)["delay_d"]
-        .transform(lambda s: pd.qcut(s, q=n_bins, duplicates="drop"))
+    df_delay["delay_bin"] = df_delay.groupby("ttype_c", observed=True)["delay_d"].transform(
+        lambda s: pd.qcut(s, q=n_bins, duplicates="drop")
     )
     centers_delay = (
-        df_delay.groupby(["ttype_c", "delay_bin"], observed=True)["delay_d"]
-        .median()
-        .rename("center")
-        .reset_index()
+        df_delay.groupby(["ttype_c", "delay_bin"], observed=True)["delay_d"].median().rename("center").reset_index()
     )
     subj_delay = (
         df_delay.groupby(["ttype_c", "delay_bin", "subject"], observed=True)
@@ -586,15 +571,11 @@ def plot_delay_binned_1d(df, model_name, subject=None, n_bins=7):
         .merge(centers_delay, on=["ttype_c", "delay_bin"], how="left")
     )
 
-    df_stim["stim_bin"] = (
-        df_stim.groupby("stimd_c", observed=True)["stim_d"]
-        .transform(lambda s: pd.qcut(s, q=n_bins, duplicates="drop"))
+    df_stim["stim_bin"] = df_stim.groupby("stimd_c", observed=True)["stim_d"].transform(
+        lambda s: pd.qcut(s, q=n_bins, duplicates="drop")
     )
     centers_stim = (
-        df_stim.groupby(["stimd_c", "stim_bin"], observed=True)["stim_d"]
-        .median()
-        .rename("center")
-        .reset_index()
+        df_stim.groupby(["stimd_c", "stim_bin"], observed=True)["stim_d"].median().rename("center").reset_index()
     )
     subj_stim = (
         df_stim.groupby(["stimd_c", "stim_bin", "subject"], observed=True)

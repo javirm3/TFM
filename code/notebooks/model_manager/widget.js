@@ -146,6 +146,7 @@ function render({ model, el }) {
 
     // ── Load Existing tab ───────────────────────────────────────────────────
     if (mode === "load") {
+      const showTransitionRegressors = modelType === "glmhmmt";
       html += `
         <div class="mm-section">
           <label class="mm-label">Select Saved Model</label>
@@ -157,6 +158,7 @@ function render({ model, el }) {
                   <th>Subjects</th>
                   <th>K</th>
                   <th>Regressors</th>
+                  ${showTransitionRegressors ? "<th>Transition Regressors</th>" : ""}
                   <th>Tau</th>
                   <th>Actions</th>
                 </tr>
@@ -175,6 +177,7 @@ function render({ model, el }) {
                       <td>${info.subjects}</td>
                       <td>${info.K}</td>
                       <td class="mm-wrap">${info.regressors}</td>
+                      ${showTransitionRegressors ? `<td class="mm-wrap">${info.transition_regressors || ""}</td>` : ""}
                       <td>${info.tau}</td>
                       <td class="mm-actions-cell">
                         ${isDefault ? "" : `<button class="mm-btn-delete-row" data-delete-model="${info.id}">Delete</button>`}

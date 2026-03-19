@@ -57,8 +57,7 @@ code/
 │   ├── two_afc.py                  # TwoAFCTask adapter
 │   └── plots/                      # task-owned plot modules
 │       ├── mcdr.py                 # MCDR psychometric/performance plots
-│       ├── two_afc.py              # 2AFC psychometric/performance API
-│       └── two_afc_impl.py         # 2AFC plotting implementation
+│       └── two_afc.py              # 2AFC psychometric/performance plots
 │
 ├── scripts/
 │   └── fit_model.py                # single generic fit script, all tasks/models

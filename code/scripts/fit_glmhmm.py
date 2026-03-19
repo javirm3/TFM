@@ -7,6 +7,7 @@ import jax.random as jr
 import sys
 from pathlib import Path
 from typing import Any, Callable
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
 from glmhmmt.model import SoftmaxGLMHMM
@@ -87,8 +88,10 @@ def fit_subject(
         key = jr.PRNGKey(base_seed + r)
         params, props = model.initialize(key=key)
         fp, lps = model.fit_em_multisession(
-            params=params, props=props,
-            emissions=y, inputs=X,
+            params=params,
+            props=props,
+            emissions=y,
+            inputs=X,
             session_ids=session_ids,
             num_iters=num_iters,
             verbose=verbose,
@@ -145,23 +148,27 @@ def save_results(result: dict, out_dir: Path) -> None:
     raw_ll = float(result["raw_ll"])
     ll_per_trial = raw_ll / T
     num_classes = result["num_classes"]
-    n_params = result["K"] * (result["K"] - 1) + \
-        result["K"] * (num_classes - 1) * result["X"].shape[1]
+    n_params = result["K"] * (result["K"] - 1) + result["K"] * (num_classes - 1) * result["X"].shape[1]
     bic = -2 * raw_ll + n_params * np.log(T)
 
-    pl.DataFrame({
-        "subject": [subj], "K": [K], "model_kind": ["glmhmm"],
-        "ll_per_trial": [ll_per_trial],
-        "raw_ll": [raw_ll],
-        "objective_lp": [float(result["objective_lp"])],
-        "bic": [bic],
-        "acc": [acc],
-    }).write_parquet(str(prefix) + "_metrics.parquet")
+    pl.DataFrame(
+        {
+            "subject": [subj],
+            "K": [K],
+            "model_kind": ["glmhmm"],
+            "ll_per_trial": [ll_per_trial],
+            "raw_ll": [raw_ll],
+            "objective_lp": [float(result["objective_lp"])],
+            "bic": [bic],
+            "acc": [acc],
+        }
+    ).write_parquet(str(prefix) + "_metrics.parquet")
 
     # arrays as npz
     # For input-driven transitions there is no single transition_matrix field;
     # save the input-marginal (bias-only) softmax as a summary (K, K) matrix.
     import jax.nn as jnn
+
     _tp = result["fitted_params"].transitions
     if hasattr(_tp, "transition_matrix"):
         _A = np.asarray(_tp.transition_matrix)
@@ -195,19 +202,24 @@ def main(
     progress_callback: ProgressCallback | None = None,
 ):
     import json
+
     adapter = get_adapter(task)
     if out_dir is None:
         out_dir = paths.RESULTS / "fits" / task / "glmhmm"
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "config.json", "w") as _f:
-        json.dump({
-            "task": task,
-            "tau": tau,
-            "subjects": subjects,
-            "emission_cols": emission_cols or adapter.default_emission_cols(),
-            "K_list": K_list,
-            "model_id": out_dir.name,
-        }, _f, indent=4)
+        json.dump(
+            {
+                "task": task,
+                "tau": tau,
+                "subjects": subjects,
+                "emission_cols": emission_cols or adapter.default_emission_cols(),
+                "K_list": K_list,
+                "model_id": out_dir.name,
+            },
+            _f,
+            indent=4,
+        )
     if subjects is None:
         df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
         df = adapter.subject_filter(df)
@@ -217,6 +229,7 @@ def main(
         for k_idx, K in enumerate(K_list, start=1):
             if verbose:
                 print(f"Fitting glmhmm | subject={subj} K={K} tau={tau} task={task} ...")
+
             def _progress(info: dict[str, Any]) -> None:
                 if progress_callback is None:
                     return
@@ -230,11 +243,18 @@ def main(
                     }
                 )
 
-            result = fit_subject(subj, K, num_iters=num_iters,
-                                 n_restarts=n_restarts, base_seed=base_seed,
-                                 tau=tau, emission_cols=emission_cols,
-                                 task=task, verbose=verbose,
-                                 progress_callback=_progress if progress_callback is not None else None)
+            result = fit_subject(
+                subj,
+                K,
+                num_iters=num_iters,
+                n_restarts=n_restarts,
+                base_seed=base_seed,
+                tau=tau,
+                emission_cols=emission_cols,
+                task=task,
+                verbose=verbose,
+                progress_callback=_progress if progress_callback is not None else None,
+            )
             if verbose:
                 print("Fitted, waiting to save")
             save_results(result, out_dir)
@@ -244,20 +264,18 @@ def main(
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--subjects", nargs="+", default=None,
-                        help="List of subject IDs. If None, fits all subjects.")
-    parser.add_argument("--K", nargs="+", type=int, default=[2, 3],
-                        help="List of number of states to fit.")
+    parser.add_argument("--subjects", nargs="+", default=None, help="List of subject IDs. If None, fits all subjects.")
+    parser.add_argument("--K", nargs="+", type=int, default=[2, 3], help="List of number of states to fit.")
     parser.add_argument("--num_iters", type=int, default=50)
     parser.add_argument("--n_restarts", type=int, default=5)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--out_dir", type=str, default=None,
-                        help="Output directory. Defaults to RESULTS_PATH/glmhmm.")
-    parser.add_argument("--tau", type=float, default=50.0,
-                        help="Half-life for exponential action traces.")
-    parser.add_argument("--task", type=str, default="MCDR",
-                        help="Task to fit: 'MCDR' or '2AFC'. Affects data loading and features.")
+    parser.add_argument("--out_dir", type=str, default=None, help="Output directory. Defaults to RESULTS_PATH/glmhmm.")
+    parser.add_argument("--tau", type=float, default=50.0, help="Half-life for exponential action traces.")
+    parser.add_argument(
+        "--task", type=str, default="MCDR", help="Task to fit: 'MCDR' or '2AFC'. Affects data loading and features."
+    )
     args = parser.parse_args()
     main(
         subjects=args.subjects,

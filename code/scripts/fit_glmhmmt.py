@@ -166,6 +166,8 @@ def save_results(result: dict, out_dir: Path) -> None:
         y=result["y"],
         X=result["X"],
         U=result["U"],
+        X_cols=np.array(result["names"].get("X_cols", []), dtype=object),
+        U_cols=np.array(result["names"].get("U_cols", []), dtype=object),
     )
 
 

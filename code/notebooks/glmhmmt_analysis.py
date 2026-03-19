@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.20.4"
+__generated_with = "0.21.0"
 app = marimo.App(width="full")
 
 
@@ -247,9 +247,21 @@ def _(
     for _f in _files:
         _subj = _f.name.removesuffix("_glmhmmt_arrays.npz").removesuffix(f"_K{K}")
         _d = dict(np.load(_f, allow_pickle=True))
-        # decode column names saved as string arrays; fall back to build output
-        _d["X_cols"] = list(_d["X_cols"]) if "X_cols" in _d else names["X_cols"]
-        _d["U_cols"] = list(_d["U_cols"]) if "U_cols" in _d else names["U_cols"]
+        _saved_names = {}
+        if "names" in _d:
+            _raw_names = _d["names"]
+            if getattr(_raw_names, "shape", None) == ():
+                _saved_names = _raw_names.item()
+        # decode column names saved as string arrays; fall back to nested names,
+        # then to the current build output for backward compatibility.
+        _d["X_cols"] = (
+            list(_d["X_cols"]) if "X_cols" in _d
+            else list(_saved_names.get("X_cols", names["X_cols"]))
+        )
+        _d["U_cols"] = (
+            list(_d["U_cols"]) if "U_cols" in _d
+            else list(_saved_names.get("U_cols", names["U_cols"]))
+        )
         arrays_store[_subj] = _d
 
     # arrays_store
@@ -281,7 +293,7 @@ def _(K, adapter, arrays_store, build_views, mo, ui_scoring_key, ui_subjects):
     views = build_views(arrays_store, adapter, K, _selected)
     state_labels = {s: v.state_name_by_idx for s, v in views.items()}
     state_order = {s: v.state_idx_order for s, v in views.items()}
-    return state_labels, state_order, views
+    return state_labels, views
 
 
 @app.cell
@@ -325,7 +337,18 @@ def _(
 
 
 @app.cell
-def _(K, arrays_store, is_2afc, mo, names, paths, plots, state_labels, ui_subjects, views):
+def _(
+    K,
+    arrays_store,
+    is_2afc,
+    mo,
+    names,
+    paths,
+    plots,
+    state_labels,
+    ui_subjects,
+    views,
+):
     # ── emission weights ───────────────────────────────────────────────────────
     #
     # Agonist collapse: for symmetric L/R feature pairs, take
@@ -422,7 +445,17 @@ def _(arrays_store, mo, ui_subjects):
 
 
 @app.cell
-def _(K, arrays_store, is_2afc, mo, plots, state_labels, ui_subjects, ui_trial_range, views):
+def _(
+    K,
+    arrays_store,
+    is_2afc,
+    mo,
+    plots,
+    state_labels,
+    ui_subjects,
+    ui_trial_range,
+    views,
+):
     # ── posterior state probabilities ─────────────────────────────────────────
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
@@ -452,16 +485,7 @@ def _(K, arrays_store, is_2afc, mo, plots, state_labels, ui_subjects, ui_trial_r
 
 
 @app.cell
-def _(
-    K,
-    is_2afc,
-    mo,
-    pl,
-    plots,
-    trial_df,
-    ui_subjects,
-    views,
-):
+def _(K, is_2afc, mo, pl, plots, trial_df, ui_subjects, views):
     _selected = [s for s in ui_subjects.value if s in views]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
@@ -524,10 +548,7 @@ def _(editor_views, mo, ui_editor_subject):
 
 
 @app.cell
-def _(
-    adapter,
-    mo,
-):
+def _(adapter, mo):
     if adapter.num_classes != 2:
         ui_editor_side = None
     else:
@@ -543,8 +564,8 @@ def _(
 
 @app.cell
 def _(
-    adapter,
     CoefficientEditorWidget,
+    adapter,
     build_editor_payload,
     editor_views,
     mo,
@@ -614,7 +635,6 @@ def _(
     coef_editor_stored_reference_class_idx = _payload["stored_reference_class_idx"]
     return (
         coef_editor,
-        coef_editor_panel,
         coef_editor_explicit_class_indices,
         coef_editor_reference_class_idx,
         coef_editor_stored_class_indices,
@@ -736,20 +756,46 @@ def _(
 
 
 @app.cell
-def _(K, arrays_store, mo, names, plots, ui_subjects):
-    # ── Input-dependent transition weights ────────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
+def _(K, mo, plots, ui_subjects, views):
+    _selected = [s for s in ui_subjects.value if s in views]
     mo.stop(
-        not _selected or "transition_weights" not in arrays_store.get(_selected[0], {}),
+        not _selected or getattr(views.get(_selected[0]), "transition_weights", None) is None,
         mo.md("No transition weights found — run the glmhmm-t fit first."),
     )
-    _fig_line, _fig_std, _fig_raw = plots.plot_transition_weights(
-        arrays_store=arrays_store,
-        names=names,
-        K=K,
-        subjects=_selected,
-    )
-    mo.vstack([mo.md("### Transition weights"), mo.hstack([_fig_line, _fig_std]), _fig_raw])
+    _fig_line, _fig_box = plots.plot_transition_weights(views=views, K=K, subjects=_selected)
+    mo.vstack([
+        mo.md("### Transition weights"),
+        mo.hstack([_fig_line, _fig_box]),
+    ])
+    return
+
+
+@app.cell
+def _(arrays_store, names):
+    def _(K, mo, plots, ui_subjects, views):
+        # ── Input-dependent transition weights ────────────────────────────────────
+        _selected = [s for s in ui_subjects.value if s in arrays_store]
+        _selected = [s for s in ui_subjects.value if s in views]
+        mo.stop(
+            not _selected or "transition_weights" not in arrays_store.get(_selected[0], {}),
+            not _selected or getattr(views.get(_selected[0]), "transition_weights", None) is None,
+            mo.md("No transition weights found — run the glmhmm-t fit first."),
+        )
+        _fig_line, _fig_box, _fig_std, _fig_raw = plots.plot_transition_weights(
+            arrays_store=arrays_store,
+            names=names,
+            K=K,
+            subjects=_selected,
+        )
+        _fig_line, _fig_box = plots.plot_transition_weights(views=views, K=K, subjects=_selected)
+        mo.vstack([
+            mo.md("### Transition weights"),
+            mo.hstack([_fig_line, _fig_box]),
+            _fig_std,
+            _fig_raw,
+        ])
+        return
+
     return
 
 
@@ -802,14 +848,7 @@ def _(df_all, mo):
 
 
 @app.cell
-def _(
-    K,
-    mo,
-    plots,
-    trial_df,
-    ui_subjects_traj,
-    views,
-):
+def _(K, mo, plots, trial_df, ui_subjects_traj, views):
     # ── c. Average state-probability trajectories within a session ────────────
     _selected_traj = [s for s in ui_subjects_traj.value if s in views]
     mo.stop(not _selected_traj, mo.md("Select subjects above to view session trajectories."))
@@ -828,14 +867,7 @@ def _(
 
 
 @app.cell
-def _(
-    K,
-    mo,
-    plots,
-    trial_df,
-    ui_subjects_traj,
-    views,
-):
+def _(K, mo, plots, trial_df, ui_subjects_traj, views):
     # ── d. Fractional occupancy & state-change histogram ─────────────────────
     _selected_occ = [s for s in ui_subjects_traj.value if s in views]
     mo.stop(not _selected_occ, mo.md("Select subjects above."))
@@ -897,15 +929,7 @@ def _(mo, pl, trial_df, ui_session_subj, views):
 
 
 @app.cell
-def _(
-    K,
-    mo,
-    plots,
-    trial_df,
-    ui_session_id,
-    ui_session_subj,
-    views,
-):
+def _(K, mo, plots, trial_df, ui_session_id, ui_session_subj, views):
     # ── Session deep-dive plot ─────────────────────────────────────────────────
     _subj = ui_session_subj.value
     mo.stop(
@@ -954,5 +978,7 @@ def _(K, current_hash, mo, paths, plots, ui_alias, ui_subjects):
         mo.plain_text(_best.to_pandas().to_string(index=False)),
     ], align="center")
     return
+
+
 if __name__ == "__main__":
     app.run()

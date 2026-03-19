@@ -31,8 +31,7 @@ code/
 │   ├── two_afc.py
 │   └── plots/
 │       ├── mcdr.py
-│       ├── two_afc.py
-│       └── two_afc_impl.py
+│       └── two_afc.py
 ├── scripts/
 ├── notebooks/
 └── paths.py

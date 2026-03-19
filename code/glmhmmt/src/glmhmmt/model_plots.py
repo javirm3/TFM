@@ -1244,85 +1244,115 @@ def plot_tau_sweep(sweep_path, subjects: list, K: int):
 
 
 def plot_transition_weights(
-    arrays_store: dict,
-    names: dict,
-    K: int,
-    subjects: list,
+    arrays_store: dict | None = None,
+    names: dict | None = None,
+    K: int | None = None,
+    subjects: list | None = None,
     state_labels: dict | None = None,
+    views: dict | None = None,
 ):
     """
     Input-dependent transition weights (glmhmm-t only).
 
-    Produces three figures:
+    Produces two figures:
       fig_line – standardised lineplot (mean-centred across states)
-      fig_std  – horizontal barplot with significance brackets
-      fig_raw  – raw per-transition lineplot
+      fig_box  – standardised boxplot by feature and state
 
     Parameters
     ----------
     state_labels : {subj: {state_idx: label_str}} – if provided, semantic
                    labels (e.g. "Engaged") and config-driven colours are used
                    consistently across all three figures.
+    views : {subj: SubjectFitView} – preferred source. When provided, state
+            labels, transition weights, and transition feature names are read
+            directly from the views.
 
     Returns
     -------
-    fig_line, fig_std, fig_raw
+    fig_line, fig_box
     """
-    import copy as _copy
+    import itertools as _it
     from scipy import stats as _stats
 
-    _selected = [s for s in subjects
-                 if s in arrays_store and "transition_weights" in arrays_store[s]]
+    _selected = list(subjects or [])
+    if views is not None:
+        if not _selected:
+            _selected = list(views.keys())
+        _selected = [
+            s for s in _selected
+            if s in views and getattr(views[s], "transition_weights", None) is not None
+        ]
+        if K is None and _selected:
+            K = int(views[_selected[0]].K)
+        _slbls_map = {
+            s: dict(views[s].state_name_by_idx) for s in _selected
+        }
+        _state_pal, _states_order = _build_state_palette(_slbls_map)
+        _D_first = views[_selected[0]].transition_weights.shape[2]
+        _U_cols = list(views[_selected[0]].U_cols)[:_D_first]
+
+        def _get_tw(subj: str) -> np.ndarray:
+            return np.asarray(views[subj].transition_weights)
+
+        def _get_ucols(subj: str, D: int) -> list[str]:
+            return list(views[subj].U_cols)[:D]
+    else:
+        if arrays_store is None:
+            raise ValueError("Provide either views or arrays_store.")
+        _selected = [
+            s for s in _selected
+            if s in arrays_store and "transition_weights" in arrays_store[s]
+        ]
+        if K is None:
+            raise ValueError("K is required when views are not provided.")
+        if names is None:
+            names = {}
+
+        _slbls_map: dict = {}
+        for _subj in _selected:
+            _slbls_map[_subj] = (
+                (state_labels or {}).get(_subj) or {k: f"State {k}" for k in range(K)}
+            )
+
+        _resolved: dict[int, str] = {}
+        for _k in range(K):
+            for _subj in _selected:
+                _lbl = _slbls_map[_subj].get(_k)
+                if _lbl:
+                    _resolved[_k] = _lbl
+                    break
+            if _k not in _resolved:
+                _resolved[_k] = f"State {_k}"
+
+        _states_order = [
+            _resolved[k]
+            for k in sorted(_resolved, key=lambda k: _LABEL_RANK.get(_resolved[k], k))
+        ]
+        _state_pal = {lbl: _state_color(lbl, i) for i, lbl in enumerate(_states_order)}
+        _D_first = arrays_store[_selected[0]]["transition_weights"].shape[2]
+        _U_cols = (arrays_store[_selected[0]].get("U_cols") or names.get("U_cols", []))[:_D_first]
+
+        def _get_tw(subj: str) -> np.ndarray:
+            return np.asarray(arrays_store[subj]["transition_weights"])
+
+        def _get_ucols(subj: str, D: int) -> list[str]:
+            return list((arrays_store[subj].get("U_cols") or names.get("U_cols", []))[:D])
+
     if not _selected:
         raise ValueError("No transition weights found for selected subjects.")
 
-    # ── resolve per-subject and global labels ─────────────────────────────────
-    _slbls_map: dict = {}
-    for _subj in _selected:
-        _slbls_map[_subj] = (
-            (state_labels or {}).get(_subj) or {k: f"State {k}" for k in range(K)}
-        )
-
-    # Build a consensus label per state index (first subject that has it)
-    _resolved: dict[int, str] = {}
-    for _k in range(K):
-        for _subj in _selected:
-            _lbl = _slbls_map[_subj].get(_k)
-            if _lbl:
-                _resolved[_k] = _lbl
-                break
-        if _k not in _resolved:
-            _resolved[_k] = f"State {_k}"
-
-    # Rank-ordered list + palette dict (consistent with all other plots)
-    _states_order = [
-        _resolved[k]
-        for k in sorted(_resolved, key=lambda k: _LABEL_RANK.get(_resolved[k], k))
-    ]
-    _state_pal: dict[str, str] = {
-        lbl: _state_color(lbl, i) for i, lbl in enumerate(_states_order)
-    }
-    _state_pairs = [
-        (_states_order[a], _states_order[b])
-        for a in range(len(_states_order))
-        for b in range(a + 1, len(_states_order))
-    ]
-
-    _D_first = arrays_store[_selected[0]]["transition_weights"].shape[2]
-    _U_cols  = (
-        arrays_store[_selected[0]].get("U_cols") or names.get("U_cols", [])
-    )[:_D_first]
+    _state_pairs = list(_it.combinations(_states_order, 2))
 
     # ── standardised records ──────────────────────────────────────────────────
     _std_records = []
     for _subj in _selected:
-        _W_raw    = arrays_store[_subj]["transition_weights"]   # (K, K, D)
+        _W_raw    = _get_tw(_subj)                              # (K, K, D)
         _D        = _W_raw.shape[2]
-        _U_cols_s = (arrays_store[_subj].get("U_cols") or names.get("U_cols", []))[:_D]
+        _U_cols_s = _get_ucols(_subj, _D)
         _W_avg    = _W_raw.mean(axis=0)                         # (K, D)
-        _W_aug    = np.vstack([_W_avg, np.zeros((1, _W_avg.shape[1]))])  # (K+1, D)
+        _W_aug    = np.vstack([_W_avg, np.zeros((1, _W_avg.shape[1]))])
         _v1       = -np.mean(_W_aug, axis=0)
-        _W_std    = _copy.deepcopy(_W_aug)
+        _W_std    = np.array(_W_aug, copy=True)
         _W_std[-1] = _v1
         for _k in range(K):
             _W_std[_k] = _v1 + _W_avg[_k]
@@ -1357,6 +1387,7 @@ def plot_transition_weights(
             _sig_results[(_feat, _st_a, _st_b)] = _p
 
     _feat_xpos = {f: i for i, f in enumerate(_U_cols)}
+    _states_str = " / ".join(_states_order)
 
     # ── fig_line: standardised lineplot ───────────────────────────────────────
     fig_line, ax_line = plt.subplots(figsize=(4, max(3, K * 1.0)))
@@ -1388,100 +1419,83 @@ def plot_transition_weights(
     ax_line.set_xticklabels(_U_cols, rotation=20, ha="right")
     ax_line.set_xlabel("")
     ax_line.set_ylabel("Transition weight")
-    _states_str = " / ".join(_states_order)
     ax_line.set_title(f"glmhmm-t K={K} — transition weights by state ({_states_str})")
     if ax_line.get_legend() is not None:
         ax_line.get_legend().set_title("")
     fig_line.tight_layout()
     sns.despine(fig=fig_line)
 
-    # ── fig_std: horizontal barplot with significance brackets ─────────────────
-    _bar_height    = 0.8 / K
-    _group_offsets = np.linspace(-(K - 1) / 2, (K - 1) / 2, K) * _bar_height
-    _n_feats       = len(_U_cols)
-
-    fig_std, ax_std = plt.subplots(figsize=(6, max(3, _n_feats * K * 0.45)))
-    for _fi, _feat in enumerate(_U_cols):
-        for _ki, _st in enumerate(_states_order):
-            _vals = _df_std[
-                (_df_std["feature"] == _feat) & (_df_std["state"] == _st)
-            ]["weight"].values
-            _mean = _vals.mean() if len(_vals) else 0.0
-            _sem  = _vals.std(ddof=1) / np.sqrt(len(_vals)) if len(_vals) > 1 else 0.0
-            _y    = _fi + _group_offsets[_ki]
-            ax_std.barh(
-                _y, _mean, height=_bar_height * 0.85,
-                xerr=_sem, error_kw={"linewidth": 1.2, "capsize": 3},
-                color=_state_pal[_st], alpha=0.85,
-                label=_st if _fi == 0 else "_nolegend_",
-            )
-            ax_std.scatter(_vals, np.full(len(_vals), _y),
-                           color="black", s=16, zorder=5, alpha=0.5)
-
-    _xlim_r  = ax_std.get_xlim()[1]
-    _xdr     = abs(ax_std.get_xlim()[1] - ax_std.get_xlim()[0])
-    _bgap    = _xdr * 0.06
-    for _fi, _feat in enumerate(_U_cols):
-        for _pi, (_st_a, _st_b) in enumerate(_state_pairs):
-            _lbl = _sig_label(_sig_results[(_feat, _st_a, _st_b)])
-            _y_a = _fi + _group_offsets[_states_order.index(_st_a)]
-            _y_b = _fi + _group_offsets[_states_order.index(_st_b)]
-            _bx  = _xlim_r + _bgap * (1 + _pi)
-            ax_std.plot([_bx, _bx], [_y_a, _y_b], color="black", lw=1.1, clip_on=False)
-            _tick = _xdr * 0.01
-            ax_std.plot([_bx - _tick, _bx], [_y_a, _y_a], color="black", lw=1.1, clip_on=False)
-            ax_std.plot([_bx - _tick, _bx], [_y_b, _y_b], color="black", lw=1.1, clip_on=False)
-            ax_std.text(_bx + _xdr * 0.015, (_y_a + _y_b) / 2, _lbl,
-                        va="center", ha="left", fontsize=9, clip_on=False,
-                        color="black" if _lbl != "ns" else "grey")
-    ax_std.axvline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
-    ax_std.set_yticks(range(_n_feats))
-    ax_std.set_yticklabels(_U_cols)
-    ax_std.set_xlabel("Transition weight")
-    ax_std.set_ylabel("")
-    ax_std.set_title(f"glmhmm-t K={K} — transition weights ({_states_str})")
-    ax_std.legend(title="State", bbox_to_anchor=(1.01, 1), loc="upper left", frameon=False)
-    fig_std.tight_layout()
-    sns.despine(fig=fig_std)
-
-    # ── fig_raw: raw per-transition lineplot ───────────────────────────────────
-    _raw_records = []
-    for _subj in _selected:
-        _W_raw = arrays_store[_subj]["transition_weights"]
-        _slbl  = _slbls_map[_subj]
-        for _kf in range(_W_raw.shape[0]):
-            for _kt in range(_W_raw.shape[1]):
-                _from = _slbl.get(_kf, f"State {_kf}")
-                _to   = _slbl.get(_kt, f"State {_kt}")
-                for _fi, _fname in enumerate(_U_cols):
-                    _raw_records.append({
-                        "subject": _subj, "transition": f"{_from}→{_to}",
-                        "feature": _fname, "weight": float(_W_raw[_kf, _kt, _fi]),
-                    })
-    _df_raw      = pd.DataFrame(_raw_records)
-    _transitions = sorted(_df_raw["transition"].unique())
-    fig_raw, axes_raw = plt.subplots(
-        1, len(_transitions), figsize=(4 * len(_transitions), 4), sharey=True
+    # ── fig_box: emission-style boxplot with paired significance ─────────────
+    fig_box, ax_box = plt.subplots(figsize=(max(5, len(_U_cols) * 1.4), max(3, K * 1.0)))
+    sns.boxplot(
+        data=_df_std, x="feature", y="weight", hue="state", ax=ax_box,
+        palette=_state_pal, hue_order=_states_order,
+        width=0.8, showfliers=False, boxprops={"alpha": 0.75},
     )
-    axes_raw = np.atleast_1d(axes_raw)
-    for _ax_r, _trans in zip(axes_raw, _transitions):
-        # derive color from the "from" state label
-        _from_lbl = _trans.split("→")[0]
-        _t_color  = _state_pal.get(_from_lbl, "steelblue")
-        sns.lineplot(
-            data=_df_raw[_df_raw["transition"] == _trans],
-            x="feature", y="weight", ax=_ax_r,
-            markers=True, marker="o", markersize=10,
-            markeredgewidth=0, alpha=0.75, color=_t_color, errorbar="se",
+    sns.stripplot(
+        data=_df_std, x="feature", y="weight", hue="state", ax=ax_box,
+        palette=_state_pal, hue_order=_states_order,
+        dodge=True, alpha=0.4, zorder=1, legend=False,
+    )
+    _n_states = max(1, len(_states_order))
+    _state_pairs_idx = list(_it.combinations(range(_n_states), 2))
+    _hue_width = 0.8 / _n_states
+    _y_range = _df_std["weight"].max() - _df_std["weight"].min()
+    if pd.isna(_y_range) or _y_range == 0:
+        _y_range = 1.0
+    for _m, _feat in enumerate(_U_cols):
+        _feat_df = _df_std[_df_std["feature"] == _feat]
+        if _feat_df.empty:
+            continue
+        _y_max = _feat_df["weight"].max()
+        _y_offset_step = _y_range * 0.05
+        _current_y_offset = _y_max + _y_offset_step
+        for _p1, _p2 in _state_pairs_idx:
+            _s1 = _states_order[_p1]
+            _s2 = _states_order[_p2]
+            _df1 = _feat_df[_feat_df["state"] == _s1].set_index("subject")["weight"]
+            _df2 = _feat_df[_feat_df["state"] == _s2].set_index("subject")["weight"]
+            _common = _df1.index.intersection(_df2.index)
+            if len(_common) < 2:
+                continue
+            _, _pval = _stats.ttest_rel(_df1.loc[_common].values, _df2.loc[_common].values)
+            _star = _sig_label(_pval)
+            _offset_1 = (_p1 - (_n_states - 1) / 2) * _hue_width
+            _offset_2 = (_p2 - (_n_states - 1) / 2) * _hue_width
+            _x1 = _m + _offset_1
+            _x2 = _m + _offset_2
+            _h = _y_range * 0.02
+            ax_box.plot(
+                [_x1, _x1, _x2, _x2],
+                [_current_y_offset, _current_y_offset + _h, _current_y_offset + _h, _current_y_offset],
+                lw=1,
+                c="k",
+            )
+            ax_box.text(
+                (_x1 + _x2) / 2,
+                _current_y_offset + _h,
+                _star,
+                ha="center",
+                va="bottom",
+                color="k",
+            )
+            _current_y_offset += _y_offset_step * 1.5
+    ax_box.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
+    ax_box.set_xticks(range(len(_U_cols)))
+    ax_box.set_xticklabels(_U_cols, rotation=20, ha="right")
+    ax_box.set_xlabel("")
+    ax_box.set_ylabel("Transition weight")
+    ax_box.set_title(f"glmhmm-t K={K} — transition weight boxplots ({_states_str})")
+    _handles_box, _labels_box = ax_box.get_legend_handles_labels()
+    if len(_handles_box) >= len(_states_order):
+        ax_box.legend(
+            _handles_box[: len(_states_order)],
+            _labels_box[: len(_states_order)],
+            title="State",
+            bbox_to_anchor=(1.01, 1),
+            loc="upper left",
+            frameon=False,
         )
-        _ax_r.set_title(_trans)
-        _ax_r.set_xticks(range(len(_U_cols)))
-        _ax_r.set_xticklabels(_U_cols, rotation=20, ha="right")
-        _ax_r.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
-        _ax_r.set_xlabel("")
-        _ax_r.set_ylabel("Weight" if _ax_r is axes_raw[0] else "")
-    fig_raw.suptitle(f"glmhmm-t K={K} — raw transition weights per state pair", y=1.02)
-    fig_raw.tight_layout()
-    sns.despine(fig=fig_raw)
-
-    return fig_line, fig_std, fig_raw
+    fig_box.tight_layout()
+    sns.despine(fig=fig_box)
+    return fig_line, fig_box

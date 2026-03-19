@@ -492,6 +492,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
                     "K":        _get_K_from_config(cfg),
                     "tau":      cfg.get("tau", ""),
                     "regressors": ", ".join(cfg.get("emission_cols", [])),
+                    "transition_regressors": ", ".join(cfg.get("transition_cols", [])),
                 })
                 names.append(display_name)
 
@@ -504,7 +505,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
         # ── adapter-derived options ───────────────────────────────────────────
         default_info: dict = {
             "id": "__default__", "name": "Default",
-            "subjects": "?", "K": 2, "tau": 50, "regressors": "",
+            "subjects": "?", "K": 2, "tau": 50, "regressors": "", "transition_regressors": "",
         }
         try:
             adapter = get_adapter(self.task)
@@ -539,6 +540,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
                 "K":          2,
                 "tau":        50,
                 "regressors": ", ".join(default_ecols),
+                "transition_regressors": ", ".join(tcols),
             }
         except Exception as e:
             print(f"Error loading adapter for task {self.task}: {e}")

@@ -334,10 +334,17 @@ def _(build_views, get_adapter, np, paths):
                 if not _path.exists():
                     continue
                 _data = dict(np.load(_path, allow_pickle=True))
+                _saved_names = {}
+                if "names" in _data and getattr(_data["names"], "shape", None) == ():
+                    _saved_names = _data["names"].item()
                 if "X_cols" in _data:
                     _data["X_cols"] = list(_data["X_cols"])
+                elif "X_cols" in _saved_names:
+                    _data["X_cols"] = list(_saved_names["X_cols"])
                 if "U_cols" in _data:
                     _data["U_cols"] = list(_data["U_cols"])
+                elif "U_cols" in _saved_names:
+                    _data["U_cols"] = list(_saved_names["U_cols"])
                 arrays_store[_subj] = _data
                 break
 

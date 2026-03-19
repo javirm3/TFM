@@ -1,5 +1,6 @@
 :host {
   display: block;
+  font-family: system-ui, -apple-system, sans-serif;
 }
 
 .ce-shell {
@@ -26,7 +27,7 @@
 }
 
 .ce-title {
-  font-size: 0.98rem;
+  font-size: 1.18rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #0f172a;
@@ -34,7 +35,7 @@
 
 .ce-subtitle {
   margin-top: 4px;
-  font-size: 0.84rem;
+  font-size: 0.98rem;
   color: #475569;
 }
 
@@ -55,13 +56,15 @@
 .ce-legend-item {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 4px 9px;
+  padding: 6px 12px;
   border-radius: 999px;
   background: rgba(226, 232, 240, 0.75);
   color: #334155;
-  font-size: 0.75rem;
+  font-size: 1rem;
   font-weight: 600;
+  text-align: center;
 }
 
 .ce-legend-dot {
@@ -103,7 +106,7 @@
   background: white;
   color: #0f172a;
   padding: 6px 12px;
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
 }
@@ -114,9 +117,12 @@
 
 .ce-board {
   display: grid;
-  grid-template-columns: repeat(14, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(14, minmax(112px, 112px));
+  gap: 10px;
   align-items: stretch;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
 }
 
 .ce-channel-card {
@@ -124,19 +130,19 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 7px;
-  padding: 9px 5px 7px;
+  gap: 10px;
+  padding: 12px 8px 10px;
   border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(241, 245, 249, 0.9));
-  min-height: 194px;
+  min-height: 242px;
 }
 
 .ce-channel-header {
   width: 100%;
   text-align: center;
-  font-size: 0.66rem;
+  font-size: 0.96rem;
   font-weight: 700;
   color: #1e293b;
   word-break: break-word;
@@ -167,21 +173,40 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  min-width: 20px;
+  gap: 6px;
+  min-width: 34px;
 }
 
 .ce-scale-mark {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.44rem;
+  font-size: 0.66rem;
   line-height: 1;
   color: #94a3b8;
 }
 
 .ce-value {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.58rem;
+  font-size: 0.84rem;
   font-weight: 700;
+  width: 6ch;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  box-shadow: none;
+}
+
+.ce-value:focus {
+  outline: none;
+}
+
+.ce-value::-webkit-outer-spin-button,
+.ce-value::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .ce-value-0 {
@@ -219,17 +244,18 @@
 }
 
 .ce-channel-label {
-  font-size: 0.52rem;
+  font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #64748b;
+  text-align: center;
 }
 
 .ce-empty {
   text-align: center;
   color: #64748b;
-  font-size: 0.85rem;
+  font-size: 1rem;
 }
 
 @media (max-width: 900px) {
@@ -239,7 +265,7 @@
   }
 
   .ce-board {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(112px, 112px));
   }
 
   .ce-actions {
@@ -253,13 +279,13 @@
 
 @media (max-width: 1200px) {
   .ce-board {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(112px, 112px));
   }
 }
 
 @media (max-width: 860px) {
   .ce-board {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(112px, 112px));
   }
 }
 
@@ -288,6 +314,10 @@
 
   .ce-scale-mark {
     color: #64748b;
+  }
+
+  .ce-value {
+    background: transparent;
   }
 
   .ce-reset {

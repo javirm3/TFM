@@ -9,8 +9,50 @@ function formatScaleValue(value) {
   return Number(value).toFixed(2).replace(/\.?0+$/, "");
 }
 
+function clampValue(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function editorKey(target) {
+  return `${target.dataset.channelIdx}:${target.dataset.featureIdx}`;
+}
+
+function parseEditableValue(rawValue) {
+  const normalized = String(rawValue)
+    .trim()
+    .replace(/\u2212/g, "-")
+    .replace(",", ".");
+
+  if (
+    normalized === "" ||
+    normalized === "-" ||
+    normalized === "." ||
+    normalized === "-."
+  ) {
+    return null;
+  }
+
+  const value = Number(normalized);
+  return Number.isNaN(value) ? NaN : value;
+}
+
 function render({ model, el }) {
   let isDragging = false;
+  let activeEditor = null;
+
+  const updateWeight = (featureIdx, channelIdx, rawValue) => {
+    const sliderMin = Number(model.get("slider_min"));
+    const sliderMax = Number(model.get("slider_max"));
+    const value = clampValue(Number(rawValue), sliderMin, sliderMax);
+    if (Number.isNaN(value)) {
+      return;
+    }
+
+    const next = cloneWeights(model.get("weights"));
+    next[channelIdx][featureIdx] = value;
+    model.set("weights", next);
+    model.save_changes();
+  };
 
   const updateUI = () => {
     const title = model.get("title") || "Coefficient Editor";
@@ -51,7 +93,17 @@ function render({ model, el }) {
             const value = Number(row[featureIdx] ?? 0);
             return `
               <div class="ce-slider-col">
-                <div class="ce-value ce-value-${channelIdx % 3}">${value.toFixed(2)}</div>
+                <input
+                  type="number"
+                  class="ce-value ce-value-${channelIdx % 3}"
+                  min="${sliderMin}"
+                  max="${sliderMax}"
+                  step="${sliderStep}"
+                  value="${value.toFixed(2)}"
+                  data-feature-idx="${featureIdx}"
+                  data-channel-idx="${channelIdx}"
+                  aria-label="${feature} ${channelLabels[channelIdx] || `Channel ${channelIdx + 1}`} value"
+                />
                 <div class="ce-rail">
                   <input
                     type="range"
@@ -113,16 +165,85 @@ function render({ model, el }) {
         const featureIdx = Number(event.target.dataset.featureIdx);
         const channelIdx = Number(event.target.dataset.channelIdx);
         const value = Number(event.target.value);
-        const next = cloneWeights(model.get("weights"));
-        next[channelIdx][featureIdx] = value;
-        model.set("weights", next);
-        const valueNode = event.target
-          .closest(".ce-slider-col")
-          .querySelector(".ce-value");
+        const valueNode = event.target.closest(".ce-slider-col").querySelector(".ce-value");
         if (valueNode) {
-          valueNode.textContent = value.toFixed(2);
+          valueNode.value = value.toFixed(2);
         }
-        model.save_changes();
+        updateWeight(featureIdx, channelIdx, value);
+      });
+    });
+
+    const valueInputs = el.querySelectorAll(".ce-value");
+    valueInputs.forEach((input) => {
+      const commitInput = (target) => {
+        const featureIdx = Number(target.dataset.featureIdx);
+        const channelIdx = Number(target.dataset.channelIdx);
+        const slider = target.closest(".ce-slider-col").querySelector(".ce-slider");
+        const parsedValue = parseEditableValue(target.value);
+        if (parsedValue === null || Number.isNaN(parsedValue)) {
+          target.value = Number(model.get("weights")[channelIdx][featureIdx] ?? 0).toFixed(2);
+          return;
+        }
+        const value = clampValue(
+          parsedValue,
+          Number(model.get("slider_min")),
+          Number(model.get("slider_max")),
+        );
+        if (slider) {
+          slider.value = String(value);
+        }
+        updateWeight(featureIdx, channelIdx, value);
+        target.value = value.toFixed(2);
+      };
+
+      input.addEventListener("focus", (event) => {
+        activeEditor = editorKey(event.target);
+      });
+
+      input.addEventListener("input", (event) => {
+        const target = event.target;
+        const featureIdx = Number(target.dataset.featureIdx);
+        const channelIdx = Number(target.dataset.channelIdx);
+        const slider = target.closest(".ce-slider-col").querySelector(".ce-slider");
+        const parsedValue = parseEditableValue(target.value);
+        if (parsedValue === null || Number.isNaN(parsedValue)) {
+          return;
+        }
+        const value = clampValue(
+          parsedValue,
+          Number(model.get("slider_min")),
+          Number(model.get("slider_max")),
+        );
+        if (slider) {
+          slider.value = String(value);
+        }
+        updateWeight(featureIdx, channelIdx, value);
+      });
+
+      input.addEventListener("change", (event) => {
+        commitInput(event.target);
+      });
+
+      input.addEventListener("blur", (event) => {
+        activeEditor = null;
+        commitInput(event.target);
+        updateUI();
+      });
+
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commitInput(event.target);
+          event.target.blur();
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          const featureIdx = Number(event.target.dataset.featureIdx);
+          const channelIdx = Number(event.target.dataset.channelIdx);
+          event.target.value = Number(model.get("weights")[channelIdx][featureIdx] ?? 0).toFixed(2);
+          activeEditor = null;
+          event.target.blur();
+        }
       });
     });
 
@@ -151,7 +272,7 @@ function render({ model, el }) {
   model.on("change:channel_labels", updateUI);
   model.on("change:original_weights", updateUI);
   model.on("change:weights", () => {
-    if (!isDragging) {
+    if (!isDragging && activeEditor === null) {
       updateUI();
     }
   });

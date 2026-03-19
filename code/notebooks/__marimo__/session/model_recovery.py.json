@@ -1,8 +1,289 @@
 {
   "version": "1",
   "metadata": {
-    "marimo_version": "0.20.4",
+    "marimo_version": "0.21.0",
     "script_metadata_hash": null
   },
-  "cells": []
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "d7c85ac8f46f909965460aff0a51cf0a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "0cb199ee7f02647a20131251150128ae",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "033375f603eae0bbee2821b796a67a14",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"glm-hmm-model-recovery\">GLM-HMM Model Recovery</h1>\n<span class=\"paragraph\">This notebook now uses the task adapters and <code>SubjectFitView</code> pipeline.</span>\n<span class=\"paragraph\">Workflow:</span>\n<ol>\n<li>Choose a task, subject, and regressors</li>\n<li>Reuse that subject's real covariates and session structure</li>\n<li>Simulate synthetic choices from user-defined ground-truth GLM-HMM parameters</li>\n<li>Fit the same model family back to the synthetic data</li>\n<li>Compare true vs fitted states, posteriors, weights, and transitions</li>\n</ol></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "6b97e2a53ec9c194d5e37805bc1cdccc",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "69435db40aab88084213b95cb8eee561",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "f7fc79decb295bd4f107ce9f3569df02",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: flex-start;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"1-data-and-model-configuration\">1. Data and model configuration</h3></span><marimo-ui-element object-id='bkHC-0' random-id='b5b081b1-9c60-17c5-6840-0a64c17ecb1c'><marimo-anywidget data-initial-value='{&quot;model_id&quot;:&quot;76ae9c3e67d14f8594da92d546357ac6&quot;}' data-label='null' data-js-url='&quot;./@file/18991-1594756-U1H2JgAb.js&quot;' data-js-hash='&quot;dfa773693a134d54799b070633edbe73&quot;'></marimo-anywidget></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Using subject <strong>A96</strong> for the synthetic recovery dataset (the first selected subject in the model widget).</span></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='PKri-0' random-id='4d182cf2-7d91-9118-0979-66439180a398'><marimo-number data-initial-value='42' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Random seed&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0' data-stop='9999' data-step='1' data-debounce='false' data-full-width='false' data-disabled='false'></marimo-number></marimo-ui-element><marimo-ui-element object-id='PKri-1' random-id='7db0b80d-6f83-5c3b-ed0f-490355796034'><marimo-slider data-initial-value='50' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;EM iterations&lt;/span&gt;&lt;/span&gt;&quot;' data-start='10' data-stop='300' data-step='10' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='PKri-2' random-id='a4739542-816a-fc60-decb-93ff8baa8eb9'><marimo-slider data-initial-value='5' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Restarts&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='10' data-step='1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element></div><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Use the model widget only to choose task / subject / regressors. Run the recovery from the button below after editing the ground-truth parameters.</span></span><marimo-ui-element object-id='PKri-3' random-id='4b712e13-71ad-215b-47a3-2842b1ddbe02'><marimo-button data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Run recovery fit&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;success&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "6cc974ca7f8081811814436420accd86",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='Xref-0' random-id='b5c9d826-d24a-7fb0-32db-fea4c67de743'><marimo-dropdown data-initial-value='[&quot;A83  [7d374cb1]&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Preset from existing fit&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A83  [7d374cb1]&quot;,&quot;A86  [7d374cb1]&quot;,&quot;A87  [7d374cb1]&quot;,&quot;A89  [7d374cb1]&quot;,&quot;A92  [7d374cb1]&quot;,&quot;A93  [7d374cb1]&quot;,&quot;A95  [7d374cb1]&quot;,&quot;A96  [7d374cb1]&quot;,&quot;A83  [glmhmm]&quot;,&quot;A83  [One-hot]&quot;,&quot;A86  [One-hot]&quot;,&quot;A87  [One-hot]&quot;,&quot;A89  [One-hot]&quot;,&quot;A92  [One-hot]&quot;,&quot;A93  [One-hot]&quot;,&quot;A95  [One-hot]&quot;,&quot;A96  [One-hot]&quot;,&quot;A83  [af1d1688]&quot;,&quot;A86  [af1d1688]&quot;,&quot;A87  [af1d1688]&quot;,&quot;A89  [af1d1688]&quot;,&quot;A92  [af1d1688]&quot;,&quot;A93  [af1d1688]&quot;,&quot;A95  [af1d1688]&quot;,&quot;A96  [af1d1688]&quot;,&quot;A83  [dfe2c261]&quot;,&quot;A86  [dfe2c261]&quot;,&quot;A87  [dfe2c261]&quot;,&quot;A89  [dfe2c261]&quot;,&quot;A92  [dfe2c261]&quot;,&quot;A93  [dfe2c261]&quot;,&quot;A95  [dfe2c261]&quot;,&quot;A96  [dfe2c261]&quot;,&quot;A83  [f7f09936]&quot;,&quot;A86  [f7f09936]&quot;,&quot;A87  [f7f09936]&quot;,&quot;A89  [f7f09936]&quot;,&quot;A92  [f7f09936]&quot;,&quot;A93  [f7f09936]&quot;,&quot;A95  [f7f09936]&quot;,&quot;A96  [f7f09936]&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='Xref-1' random-id='32a8dd07-bf52-742f-e319-f7503e9a7de5'><marimo-switch data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use fit as parameter preset&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-switch></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "44d802aee92928c9437ed78fcc2751ff",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "a0e40d2027b556e689526dae62a0d8ce",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"convention-note-softmaxglmhmm-vs-dynamax\">Convention note: <code>SoftmaxGLMHMM</code> vs Dynamax</h3>\n<ul>\n<li>Task: <strong>MCDR</strong></li>\n<li>Number of classes: <strong>3</strong></li>\n<li>Our <code>SoftmaxGLMHMM</code> uses <strong><code>(K, C-1, M)</code></strong> emission weights and <strong>the last class is the reference class</strong>.</li>\n<li>In this task that means the learned explicit contrasts are <strong>Left, Center</strong>, and <strong>Right</strong> is the implicit reference with logit <code>0</code>.</li>\n<li>So the notebook simulation uses <code>logits = [eta..., 0]</code>, matching the model exactly.</li>\n<li>Dynamax <code>CategoricalRegressionHMM</code> instead uses <strong>full <code>(K, C, M)</code> softmax weights</strong> with one explicit weight vector per class.</li>\n<li>The two parameterizations are equivalent only after embedding our weights into Dynamax's full-softmax form.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "26bcdb9da9e62237f1656af1d1c53845",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: flex-start;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"2-ground-truth-parameters-k2-contrasts2\">2. Ground-truth parameters  (K=2, contrasts=2)</h3></span><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Emission weights</strong></span></span><div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: stretch;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='RGSE-0' random-id='cf891294-9c1e-c67b-daa8-e2cbb05dfebe'><marimo-anywidget data-initial-value='{&quot;model_id&quot;:&quot;77d85909c6be48e89fde77cf41e13702&quot;}' data-label='null' data-js-url='&quot;./@file/9058-1594756-wWVZNYTv.js&quot;' data-js-hash='&quot;0ee02ffc113334f00d03fffa0b836f18&quot;'></marimo-anywidget></marimo-ui-element><marimo-ui-element object-id='RGSE-1' random-id='d6133813-a2ee-734a-e563-7fb0552d1b6f'><marimo-anywidget data-initial-value='{&quot;model_id&quot;:&quot;a90d9c1d5bf44951930cdb78c78377f8&quot;}' data-label='null' data-js-url='&quot;./@file/9058-1594756-rAQhFfMJ.js&quot;' data-js-hash='&quot;0ee02ffc113334f00d03fffa0b836f18&quot;'></marimo-anywidget></marimo-ui-element></div><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Transition matrix</strong>  (rows are normalized automatically)</span></span><div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><div style='display: flex;flex: 1;flex-direction: row;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>from  to</strong></span></span><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>\u2192 0</strong></span></span><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>\u2192 1</strong></span></span></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>from 0</strong></span></span><marimo-ui-element object-id='RGSE-2' random-id='ce1f9af4-20eb-93af-6425-f29b396e49d0'><marimo-anywidget data-initial-value='{&quot;model_id&quot;:&quot;77eb7cfccc324132846c496f22241fa7&quot;}' data-label='null' data-js-url='&quot;./@file/3128-1594756-9DTn6QmU.js&quot;' data-js-hash='&quot;bf44eb9757a047446a15c828cb4c7a16&quot;'></marimo-anywidget></marimo-ui-element><marimo-ui-element object-id='RGSE-3' random-id='b69087e3-be67-984c-7146-e5cd2d69e988'><marimo-anywidget data-initial-value='{&quot;model_id&quot;:&quot;43124e0afa6f45ec9cec78fff2028a92&quot;}' data-label='null' data-js-url='&quot;./@file/3128-1594756-APDv5kwW.js&quot;' data-js-hash='&quot;bf44eb9757a047446a15c828cb4c7a16&quot;'></marimo-anywidget></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>from 1</strong></span></span><marimo-ui-element object-id='RGSE-4' random-id='b719e8f3-9ed7-9948-86d3-ad410a3b5e69'><marimo-anywidget data-initial-value='{&quot;model_id&quot;:&quot;fd8d21f478134c649325ee83d8b3c491&quot;}' data-label='null' data-js-url='&quot;./@file/3128-1594756-NLyrEDIF.js&quot;' data-js-hash='&quot;bf44eb9757a047446a15c828cb4c7a16&quot;'></marimo-anywidget></marimo-ui-element><marimo-ui-element object-id='RGSE-5' random-id='a6731974-31af-e1d8-483a-bd69f82e5639'><marimo-anywidget data-initial-value='{&quot;model_id&quot;:&quot;ec0a34a056f9456092ba6bbc2a5bea9e&quot;}' data-label='null' data-js-url='&quot;./@file/3128-1594756-ZLKv82j3.js&quot;' data-js-hash='&quot;bf44eb9757a047446a15c828cb4c7a16&quot;'></marimo-anywidget></marimo-ui-element></div></div></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "3dd02c8b910353174667f9ed9fbed887",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "f1e4f201482e8d9436f25528428ebaf3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: flex-start;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"3-optional-parameter-sweep\">3. Optional parameter sweep</h3></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='emfo-0' random-id='3428ca06-6a2b-3e65-e383-95cdabeeac87'><marimo-switch data-initial-value='false' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Run parameter sweep&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-switch></marimo-ui-element><marimo-ui-element object-id='emfo-1' random-id='d3d06ed0-1834-cad8-3640-f7c16cceee0b'><marimo-dropdown data-initial-value='[&quot;All parameters&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Sweep target&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;All parameters&quot;,&quot;Emission weights only&quot;,&quot;Transition probabilities only&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='emfo-2' random-id='1a3fd830-e247-e65f-ccb9-b066c07872a6'><marimo-number data-initial-value='0.5' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Half-range&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.05' data-stop='3.0' data-step='0.05' data-debounce='false' data-full-width='false' data-disabled='false'></marimo-number></marimo-ui-element><marimo-ui-element object-id='emfo-3' random-id='107c26fc-09ba-664e-4a03-4e49f45b5eaf'><marimo-slider data-initial-value='5' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Points per parameter&lt;/span&gt;&lt;/span&gt;&quot;' data-start='3' data-stop='9' data-step='2' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element></div><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">When enabled, the notebook reruns recovery over a symmetric range around each current parameter while keeping all other parameters fixed.</span></span></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "24f7f8479eab5cc812968bb9b91079f3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "2936eaceb1b5ec5c964b96ce1f75fdb0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Adjust the parameters above and click <marimo-ui-element object-id='PKri-3' random-id='4b712e13-71ad-215b-47a3-2842b1ddbe02'><marimo-button data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Run recovery fit&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;success&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "77a87586bc5fc42d17010e8a7fe1a132",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "d3ff58d9b284e07409313d625b535c28",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "05662538640996ae9064064b40628d85",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "6f48627618c4a0d77fbc51f2243cb8cd",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "044f25faa6b980eddafb8211a7d100f6",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "16751539f794020f875111fb3f67a307",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_8127/__marimo__cell_Vxnm_.py:123: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.\n  plt.tight_layout()\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "DnEU",
+      "code_hash": null,
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
 }

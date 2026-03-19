@@ -14,6 +14,7 @@ plots show the correct, temporally-smooth HMM quantities.
 (marginal across states) are computed from the emission weights and are used
 only for accuracy analyses — not for posterior visualisation.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -25,10 +26,11 @@ from glmhmmt.views import SubjectFitView, _LABEL_RANK
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
+
 def _emission_probs(
-    W: np.ndarray,        # (K, C-1, F)
-    X: np.ndarray,        # (T, F)
-    map_k: np.ndarray,    # (T,) int — MAP state per trial
+    W: np.ndarray,  # (K, C-1, F)
+    X: np.ndarray,  # (T, F)
+    map_k: np.ndarray,  # (T,) int — MAP state per trial
     C: int,
 ) -> np.ndarray:
     """Return MAP-state emission probabilities: softmax(W[map_k[t]] @ X[t]).
@@ -37,10 +39,10 @@ def _emission_probs(
     -------
     p_map : (T, C)
     """
-    W_map = W[map_k]                                   # (T, C-1, F)
-    logits_ce = np.einsum("tcf,tf->tc", W_map, X)     # (T, C-1)
-    logits_map = _insert_reference(logits_ce, C)       # (T, C)
-    return _stable_softmax(logits_map)                 # (T, C)
+    W_map = W[map_k]  # (T, C-1, F)
+    logits_ce = np.einsum("tcf,tf->tc", W_map, X)  # (T, C-1)
+    logits_map = _insert_reference(logits_ce, C)  # (T, C)
+    return _stable_softmax(logits_map)  # (T, C)
 
 
 def _insert_reference(logits_ce: np.ndarray, C: int) -> np.ndarray:
@@ -55,9 +57,7 @@ def _insert_reference(logits_ce: np.ndarray, C: int) -> np.ndarray:
     * C == 3 (3-AFC):  logits_ce = [logit_L, logit_C]  →  [logit_L, logit_C, 0_R]
     """
     shape_prefix = logits_ce.shape[:-1]
-    return np.concatenate(
-        [logits_ce, np.zeros((*shape_prefix, 1))], axis=-1
-    )
+    return np.concatenate([logits_ce, np.zeros((*shape_prefix, 1))], axis=-1)
 
 
 def _stable_softmax(logits: np.ndarray) -> np.ndarray:
@@ -68,6 +68,7 @@ def _stable_softmax(logits: np.ndarray) -> np.ndarray:
 
 
 # ── public builders ────────────────────────────────────────────────────────────
+
 
 def build_trial_df(
     view: SubjectFitView,
@@ -148,18 +149,11 @@ def build_trial_df(
         )
 
     # ── p_state_k  — HMM posterior, direct copy (NEVER recomputed) ───────────
-    posterior_series = [
-        pl.Series(f"p_state_{k}", view.smoothed_probs[:, k].astype(np.float64))
-        for k in range(view.K)
-    ]
+    posterior_series = [pl.Series(f"p_state_{k}", view.smoothed_probs[:, k].astype(np.float64)) for k in range(view.K)]
     # ── MAP state assignment ───────────────────────────────────────────────────
-    map_k            = view.map_states()                              # (T,) int
-    state_rank_arr   = np.array(
-        [view.state_rank_by_idx.get(int(ki), ki) for ki in map_k], dtype=np.int32
-    )
-    state_label_arr  = np.array(
-        [view.state_name_by_idx.get(int(ki), f"State {ki}") for ki in map_k]
-    )
+    map_k = view.map_states()  # (T,) int
+    state_rank_arr = np.array([view.state_rank_by_idx.get(int(ki), ki) for ki in map_k], dtype=np.int32)
+    state_label_arr = np.array([view.state_name_by_idx.get(int(ki), f"State {ki}") for ki in map_k])
 
     # ── MAP-state emission probabilities ──────────────────────────────────────
     C = view.num_classes
@@ -169,11 +163,10 @@ def build_trial_df(
     if np.any((correct_class < 0) | (correct_class >= C)):
         bad = np.unique(correct_class[(correct_class < 0) | (correct_class >= C)])
         raise ValueError(
-            f"Subject {view.subject!r}: adapter returned invalid correct_class "
-            f"indices {bad.tolist()} for C={C}."
+            f"Subject {view.subject!r}: adapter returned invalid correct_class indices {bad.tolist()} for C={C}."
         )
 
-    p_model_correct_map = p_map[np.arange(T), correct_class]    
+    p_model_correct_map = p_map[np.arange(T), correct_class]
 
     # ── marginal class probabilities (from view.p_pred if available) ──────────
     if view.p_pred is None:
@@ -189,13 +182,13 @@ def build_trial_df(
 
     # ── assemble all new columns ───────────────────────────────────────────────
     new_cols = [
-        pl.Series("subject",                   [view.subject] * T),
+        pl.Series("subject", [view.subject] * T),
         *posterior_series,
-        pl.Series("state_idx",                 map_k.astype(np.int32)),
-        pl.Series("state_rank",                state_rank_arr),
-        pl.Series("state_label",               state_label_arr),
-        pl.Series("p_model_correct",           p_model_correct_map.astype(np.float64)),
-        pl.Series("p_model_correct_marginal",  p_marginal_correct.astype(np.float64)),
+        pl.Series("state_idx", map_k.astype(np.int32)),
+        pl.Series("state_rank", state_rank_arr),
+        pl.Series("state_label", state_label_arr),
+        pl.Series("p_model_correct", p_model_correct_map.astype(np.float64)),
+        pl.Series("p_model_correct_marginal", p_marginal_correct.astype(np.float64)),
     ]
 
     if C == 2:
@@ -212,16 +205,12 @@ def build_trial_df(
 
     # overwrite/add; drop pre-existing computed cols (pL/pC/pR, subject)
     _computed_names = {s.name for s in new_cols}
-    df_out = df_out.select(
-        [c for c in df_out.columns if c not in _computed_names]
-    )
+    df_out = df_out.select([c for c in df_out.columns if c not in _computed_names])
     df_out = df_out.with_columns(new_cols)
 
     # ── correct_bool from performance ─────────────────────────────────────────
     if "performance" in df_out.columns and "correct_bool" not in df_out.columns:
-        df_out = df_out.with_columns(
-            pl.col("performance").cast(pl.Boolean).alias("correct_bool")
-        )
+        df_out = df_out.with_columns(pl.col("performance").cast(pl.Boolean).alias("correct_bool"))
 
     return df_out
 
@@ -235,21 +224,23 @@ def build_emission_weights_df(views: dict[str, SubjectFitView]) -> pl.DataFrame:
     """
     records: list[dict] = []
     for subj, view in views.items():
-        W = view.emission_weights   # (K, C-1, F)
+        W = view.emission_weights  # (K, C-1, F)
         for k in range(view.K):
-            lbl  = view.state_name_by_idx.get(k, f"State {k}")
+            lbl = view.state_name_by_idx.get(k, f"State {k}")
             rank = view.state_rank_by_idx.get(k, k)
             for c in range(W.shape[1]):
                 for fi, fname in enumerate(view.feat_names):
-                    records.append({
-                        "subject":     subj,
-                        "state_idx":   k,
-                        "state_label": lbl,
-                        "state_rank":  rank,
-                        "class_idx":   c,
-                        "feature":     fname,
-                        "weight":      float(W[k, c, fi]),
-                    })
+                    records.append(
+                        {
+                            "subject": subj,
+                            "state_idx": k,
+                            "state_label": lbl,
+                            "state_rank": rank,
+                            "class_idx": c,
+                            "feature": fname,
+                            "weight": float(W[k, c, fi]),
+                        }
+                    )
     if not records:
         return pl.DataFrame()
     return pl.DataFrame(records)
@@ -269,16 +260,20 @@ def build_posterior_df(views: dict[str, SubjectFitView]) -> pl.DataFrame:
     for subj, view in views.items():
         T = view.T
         for k in range(view.K):
-            lbl  = view.state_name_by_idx.get(k, f"State {k}")
+            lbl = view.state_name_by_idx.get(k, f"State {k}")
             rank = view.state_rank_by_idx.get(k, k)
-            frames.append(pl.DataFrame({
-                "subject":     [subj] * T,
-                "trial_idx":   list(range(T)),
-                "state_idx":   [k] * T,
-                "state_label": [lbl] * T,
-                "state_rank":  [rank] * T,
-                "probability": view.smoothed_probs[:, k].tolist(),
-            }))
+            frames.append(
+                pl.DataFrame(
+                    {
+                        "subject": [subj] * T,
+                        "trial_idx": list(range(T)),
+                        "state_idx": [k] * T,
+                        "state_label": [lbl] * T,
+                        "state_rank": [rank] * T,
+                        "probability": view.smoothed_probs[:, k].tolist(),
+                    }
+                )
+            )
     if not frames:
         return pl.DataFrame()
     return pl.concat(frames)

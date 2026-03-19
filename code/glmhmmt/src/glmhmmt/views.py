@@ -17,6 +17,7 @@ State labelling is **not** performed here.  The labelling strategy (e.g.
 engagement scoring) lives on the task adapter and is applied when building a
 view via :func:`build_views`, so this module stays task-agnostic.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -32,9 +33,17 @@ import paths
 with paths.CONFIG.open("rb") as _f:
     _cfg = tomllib.load(_f)
 
-_STATE_HEX: list[str] = _cfg.get("palettes", {}).get("states_hex", [
-    "#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02",
-])
+_STATE_HEX: list[str] = _cfg.get("palettes", {}).get(
+    "states_hex",
+    [
+        "#1B9E77",
+        "#D95F02",
+        "#7570B3",
+        "#E7298A",
+        "#66A61E",
+        "#E6AB02",
+    ],
+)
 
 _LABEL_RANK: dict[str, int] = {
     "Engaged": 0,
@@ -50,6 +59,7 @@ _LABEL_RANK: dict[str, int] = {
 
 # ── dataclass ─────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class SubjectFitView:
     """Task-agnostic view of a fitted GLM-HMM model for one subject.
@@ -64,7 +74,7 @@ class SubjectFitView:
     K :
         Number of hidden states.
     smoothed_probs :
-        HMM posterior  γ(z_t = k | y_{1:T}),  shape ``(T, K)``.
+        HMM posterior  \gamma(z_t = k | y_{1:T}),  shape ``(T, K)``.
         **This is the canonical quantity for posterior plots.**  It is saved
         directly from ``model.smoother_multisession`` and loaded verbatim —
         never recomputed.
@@ -101,19 +111,19 @@ class SubjectFitView:
 
     subject: str
     K: int
-    smoothed_probs: np.ndarray         # (T, K)
-    emission_weights: np.ndarray       # (K, C-1, F)
-    X: np.ndarray                      # (T, F)
-    y: np.ndarray                      # (T,)
+    smoothed_probs: np.ndarray  # (T, K)
+    emission_weights: np.ndarray  # (K, C-1, F)
+    X: np.ndarray  # (T, F)
+    y: np.ndarray  # (T,)
     feat_names: list[str]
     state_name_by_idx: dict[int, str]
     state_idx_order: list[int]
     state_rank_by_idx: dict[int, int]
     lapse_rates: Optional[np.ndarray] = None
     # optional
-    p_pred: Optional[np.ndarray] = None             # (T, C)
+    p_pred: Optional[np.ndarray] = None  # (T, C)
     transition_weights: Optional[np.ndarray] = None  # (K, K, D)
-    U: Optional[np.ndarray] = None                  # (T, D)
+    U: Optional[np.ndarray] = None  # (T, D)
     U_cols: list[str] = field(default_factory=list)
 
     # ── derived helpers ───────────────────────────────────────────────────────
@@ -141,6 +151,7 @@ class SubjectFitView:
 
 
 # ── factory ───────────────────────────────────────────────────────────────────
+
 
 def build_views(
     arrays_store: dict,
@@ -182,42 +193,45 @@ def build_views(
             _names = {"X_cols": list(_cols)}
             break
 
-    state_labels, state_order = adapter.label_states(
-        arrays_store, _names, K, _selected
-    )
+    state_labels, state_order = adapter.label_states(arrays_store, _names, K, _selected)
 
     views: dict[str, SubjectFitView] = {}
     for subj in _selected:
         d = arrays_store[subj]
         feat_names = list(d.get("X_cols", []))
-        slbls  = state_labels.get(subj, {k: f"State {k}" for k in range(K)})
+        _W = np.asarray(d["emission_weights"])
+        feat_names = feat_names[: _W.shape[2]]
+        slbls = state_labels.get(subj, {k: f"State {k}" for k in range(K)})
         sorder = state_order.get(subj, list(range(K)))
 
         # rank map: ordered position in sorder → LABEL_RANK (semantic)
         srank: dict[int, int] = {}
         for k in range(K):
-            lbl  = slbls.get(k, "")
+            lbl = slbls.get(k, "")
             srank[k] = _LABEL_RANK.get(lbl, sorder.index(k) if k in sorder else k)
 
-        views[subj] = SubjectFitView(
-            subject=subj,
-            K=K,
-            smoothed_probs=np.asarray(d["smoothed_probs"]),
-            emission_weights=np.asarray(d["emission_weights"]),
-            X=np.asarray(d["X"]),
-            y=np.asarray(d["y"]),
-            feat_names=feat_names,
-            state_name_by_idx={int(k): v for k, v in slbls.items()},
-            state_idx_order=[int(k) for k in sorder],
-            state_rank_by_idx={int(k): v for k, v in srank.items()},
-            lapse_rates=np.asarray(d["lapse_rates"]) if "lapse_rates" in d else None,
-            p_pred=np.asarray(d["p_pred"]) if "p_pred" in d else None,
-            transition_weights=(
-                np.asarray(d["transition_weights"])
-                if "transition_weights" in d else None
-            ),
-            U=np.asarray(d["U"]) if "U" in d else None,
-            U_cols=list(d.get("U_cols", [])),
-        )
+            views[subj] = SubjectFitView(
+                subject=subj,
+                K=K,
+                smoothed_probs=np.asarray(d["smoothed_probs"]),
+                emission_weights=_W,
+                X=np.asarray(d["X"]),
+                y=np.asarray(d["y"]),
+                feat_names=feat_names,
+                state_name_by_idx={int(k): v for k, v in slbls.items()},
+                state_idx_order=[int(k) for k in sorder],
+                state_rank_by_idx={int(k): v for k, v in srank.items()},
+                lapse_rates=np.asarray(d["lapse_rates"]) if "lapse_rates" in d else None,
+                p_pred=np.asarray(d["p_pred"]) if "p_pred" in d else None,
+                transition_weights=(np.asarray(d["transition_weights"]) if "transition_weights" in d else None),
+                U=np.asarray(d["U"]) if "U" in d else None,
+                U_cols=list(d.get("U_cols", []))[
+                    : (
+                        np.asarray(d["transition_weights"]).shape[2]
+                        if "transition_weights" in d
+                        else len(list(d.get("U_cols", [])))
+                    )
+                ],
+            )
 
     return views

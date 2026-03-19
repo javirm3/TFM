@@ -235,8 +235,36 @@ _ALL_2AFC_EMISSION_COLS: list[str] = [
     "prev_choice",# previous choice
     "wsls",       # win-stay-lose-switch
 ]
+_ALL_2AFC_TRANSITION_COLS: list[str] = [
+    "at_choice",  # EWMA of signed choice history
+    "at_correct", # EWMA of correct-weighted signed choice
+    "at_error",   # EWMA of error-weighted signed choice
+]
+
 # Frame-level stimulus columns (sf_0 … sf_N) are validated separately
 _SF_COL_PREFIX = "sf_"
+
+_PARSE_GLMHMM_ORDER = [
+    "stim_vals", "stim_strength", "net_ild",
+    "bias", "session_index",
+    "at_choice", "at_error", "at_correct",
+    "prev_choice", "wsls",
+]
+
+
+def _ordered_parse_glmhmm_covariates(covariates: list[str]) -> list[str]:
+    ordered = [c for c in _PARSE_GLMHMM_ORDER if c in covariates]
+    ordered += [c for c in covariates if c not in ordered]
+    return ordered
+
+
+def _concat_glmhmm_sessions(
+    inputs: list[np.ndarray],
+    choices: list[np.ndarray],
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    X = jnp.asarray(np.vstack(inputs).astype(np.float32))
+    y = jnp.asarray(np.concatenate([np.asarray(c).reshape(-1) for c in choices]).astype(np.int32))
+    return y, X
 
 
 
@@ -244,11 +272,12 @@ _SF_COL_PREFIX = "sf_"
 def build_sequence_from_df_2afc(
     df_sub,
     emission_cols: list[str] | None = None,
+    transition_cols: list[str] | None = None,
     clean_start: bool = True,
     drop_miss:   bool = True,
     filter_drug: bool = True,
-) -> Tuple[jnp.ndarray, jnp.ndarray, Dict]:
-    """Build ``(y, X, names)`` for a 2-class GLM-HMM.
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, Dict]:
+    """Build ``(y, X, U, names)`` for a 2-class GLM-HMM.
 
     Delegates to :func:`alexis_functions.filter_behavior` for data cleaning
     and :func:`alexis_functions.parse_glmhmm` for feature construction.
@@ -266,10 +295,10 @@ def build_sequence_from_df_2afc(
     Returns:
         y     : ``(T,)`` int32 array of choices {0, 1}.
         X     : ``(T, M)`` float32 JAX array of emission features.
-        names : dict with key ``"X_cols"`` listing the covariate names.
+        U     : ``(T, D)`` float32 JAX array of transition features.
+        names : dict with keys ``"X_cols"`` and ``"U_cols"``.
     """
-    import paths
-    from scripts.alexis_functions import parse_glmhmm, filter_behavior
+    from scripts.alexis_functions import parse_glmhmm
 
     # ── convert Polars → pandas if needed ──────────────────────────────────
     if hasattr(df_sub, "to_pandas"):
@@ -280,24 +309,33 @@ def build_sequence_from_df_2afc(
     # ── build features via parse_glmhmm ────────────────────────────────────
     if emission_cols is None:
         emission_cols = list(_ALL_2AFC_EMISSION_COLS)  # all scalar covariates
+    if transition_cols is None:
+        transition_cols = list(_ALL_2AFC_TRANSITION_COLS)
 
-    inputs, choices = parse_glmhmm(df_pd, covariates=emission_cols)
-    # Concatenate sessions into single arrays
-    X = jnp.asarray(np.vstack(inputs).astype(np.float32))
-    y = jnp.asarray(np.concatenate([c.squeeze() for c in choices]).astype(np.int32))
+    y = None
+    if emission_cols:
+        x_inputs, x_choices = parse_glmhmm(df_pd, covariates=emission_cols)
+        y, X = _concat_glmhmm_sessions(x_inputs, x_choices)
+    else:
+        X = None
 
-    # IMPORTANT: parse_glmhmm inserts columns in a fixed order (stim_vals →
-    # bias → at_choice → …), regardless of the order in `emission_cols`.
-    # We must save X_cols in that same order so weight indices stay consistent.
-    _PARSE_ORDER = [
-        "stim_vals", "stim_strength", "net_ild",
-        "bias", "session_index",
-        "at_choice", "at_error", "at_correct",
-        "prev_choice", "wsls",
-    ]
-    actual_col_order = [c for c in _PARSE_ORDER if c in emission_cols]
-    # Append any unknown cols (e.g. SF features) in their original order
-    actual_col_order += [c for c in emission_cols if c not in actual_col_order]
+    if transition_cols:
+        u_inputs, u_choices = parse_glmhmm(df_pd, covariates=transition_cols)
+        y_u, U = _concat_glmhmm_sessions(u_inputs, u_choices)
+        if y is None:
+            y = y_u
+        elif y.shape != y_u.shape or not np.array_equal(np.asarray(y), np.asarray(y_u)):
+            raise ValueError("Emission and transition parses produced inconsistent choice arrays.")
+    else:
+        if y is None:
+            raise ValueError("At least one of emission_cols or transition_cols must be non-empty.")
+        U = jnp.empty((int(y.shape[0]), 0), dtype=jnp.float32)
 
-    names = {"X_cols": actual_col_order}
-    return y, X, names
+    if X is None:
+        X = jnp.empty((int(y.shape[0]), 0), dtype=jnp.float32)
+
+    names = {
+        "X_cols": _ordered_parse_glmhmm_covariates(emission_cols),
+        "U_cols": _ordered_parse_glmhmm_covariates(transition_cols),
+    }
+    return y, X, U, names

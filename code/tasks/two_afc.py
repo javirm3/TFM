@@ -12,6 +12,7 @@ from tasks import TaskAdapter, _register
 from glmhmmt.features import (
     build_sequence_from_df_2afc,
     _ALL_2AFC_EMISSION_COLS,
+    _ALL_2AFC_TRANSITION_COLS,
     _SF_COL_PREFIX,
 )
 
@@ -57,21 +58,14 @@ class TwoAFCAdapter(TaskAdapter):
         df_sub,
         tau: float = 50.0,
         emission_cols: List[str] | None = None,
-        transition_cols: List[str] | None = None,  # ignored for 2AFC
+        transition_cols: List[str] | None = None,
     ) -> Tuple[Any, Any, Any, Dict]:
-        """Return ``(y, X, U, names)`` with an empty U (no transition features).
-
-        ``U`` has shape ``(T, 0)`` and ``names["U_cols"] = []``.
-        This makes the caller uniform: ``transition_input_dim = U.shape[1] == 0``
-        degrades glmhmmt to standard HMM transitions automatically.
-        """
-        y, X, names = build_sequence_from_df_2afc(
+        """Return ``(y, X, U, names)`` for the 2AFC task."""
+        y, X, U, names = build_sequence_from_df_2afc(
             df_sub,
             emission_cols=emission_cols,
+            transition_cols=transition_cols,
         )
-        T = y.shape[0]
-        U = jnp.empty((T, 0), dtype=jnp.float32)
-        names = {**names, "U_cols": []}
         return y, X, U, names
 
     # ── column defaults ─────────────────────────────────────────────────────
@@ -81,7 +75,7 @@ class TwoAFCAdapter(TaskAdapter):
         return [c for c in _ALL_2AFC_EMISSION_COLS if c != "stim_strength"]
 
     def default_transition_cols(self) -> List[str]:
-        return []
+        return list(_ALL_2AFC_TRANSITION_COLS)
 
     def sf_cols(self, df: pl.DataFrame) -> List[str]:
         """Return any stimulus-frame (sf_*) columns present in *df*."""
