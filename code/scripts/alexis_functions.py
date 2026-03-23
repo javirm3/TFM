@@ -525,3 +525,290 @@ def filter_behavior(df, clean_start=True, drop_miss=True, filter_drug=True):
 
     print(f'Total:{round((_ - len(df)) / 1000)}k trials')
     return df
+
+
+
+
+def check_valid_trials(df):
+    """
+    Check number of good trials per subject (responded & P > 0)
+    :param df: DataFrame with behavior data
+    :return: Dictionary with number of good trials per subject
+    """
+    valid_trials_subject = {}
+    subjects = df.Subject.unique()
+    print('Number of responded trials in data collection (with evidences):')
+    for s in subjects:
+        subdf = df[(df.Subject == int(s)) & (df.P > 0) & (df.Miss == 0)]
+        n_trials = len(subdf)
+        valid_trials_subject[s] = n_trials
+        print(f'{s}: {n_trials} trials')
+    print('\n')
+    return valid_trials_subject
+
+
+def find_left_behind(valid_trials_subject, threshold=1000):
+    """Return subjects with less than threshold good trials
+    :param good_trials_per_subject: Dictionary with number of good trials per subject
+    :param threshold: Minimum number of good trials"""
+
+    print('Subjects left behind (never learnt):')
+    left_behind = []
+    for s, n in valid_trials_subject.items():
+        if n < threshold:
+            print(f'{s}: {n} trials')
+            left_behind.append(s)
+    print('\n')
+    return left_behind
+
+
+def find_bad_subjects(psych_curves, max_lapse=2/3):
+    """
+    Find bad subjects based on psychometric performance (lapse rates)
+    :param psych_curves: Psychometric curve objects
+    :param max_lapse: Maximum allowed lapse rate (sum of lower and upper)
+    :return: Indices of bad subjects and their lapses
+    """
+
+    # Unpack spych curves parmaters
+    sensitivity = []
+    bias = []
+    lr_lower = []
+    lr_upper = []
+
+    for psych_curve in psych_curves:
+        sensitivity_subject, bias_subject, lr_lower_subject, lr_upper_subject = psych_curve.params
+        sensitivity.append(sensitivity_subject)
+        bias.append(bias_subject)
+        lr_lower.append(lr_lower_subject)
+        lr_upper.append(lr_upper_subject)
+
+    lr_lower = np.array(lr_lower)
+    lr_upper = np.array(lr_upper)
+
+    # Concatenate lr_lower and upper
+    lapses = np.vstack((lr_lower, lr_upper)).T
+    total_lapses = np.sum(lapses, axis=1)
+
+    # Find indices where either lapse was higher than max_lapse (bas subjects)
+    # indices = np.where(np.any(lapses > max_lapse, axis=1))[0]  # For lapses = 1/3
+    indices = np.where(total_lapses > max_lapse)[0]  # For lapses = 2/3
+
+    # return indices, lapses
+    return indices, total_lapses
+
+
+def cherry_pick(df_behavior, experiment, plot=False):
+    """
+    Cherrypick the best subjects for a given experiment (actually drop the bad ones)
+    :param experiment: Experiment name ('2AFC_2-6')
+    :return: Psychometric curve plots for the good subjects
+    """
+
+    from psychometric_curves import plot_pc  # Import here to avoid circular import
+
+    # Find bad subjects
+    df = df_behavior[df_behavior.Experiment == experiment]
+    subjects = df.Subject.unique().astype(list)
+    subjects = [str(int(s)) for s in subjects]  # Convert to list of strings of integers
+    good_trials_per_subject = check_valid_trials(df)  # Check valid trials per subject
+    left_behind = find_left_behind(good_trials_per_subject)  # Find subjects with less than threshold good trials
+    left_behind = [str(s) for s in left_behind]  # Convert bad_subjects to str
+    left_behind = [float(s) for s in left_behind]  # Transform bad subjects back to floats
+
+    # Remove subjects left behind from df
+    df = df[~df.Subject.isin(left_behind)]
+    animals = df.Subject.unique().astype(list)
+    animals = [str(int(s)) for s in animals]  # Convert to list of strings of integers
+    animals = [s.zfill(3) for s in animals]  # Pad with zeros to have 3 digits (needed for group #6)
+    # print(f'Remaining subjects: {animals}')
+
+    # Plot psychometric curves
+    psych_curves = plot_pc(experiment=experiment, animal=animals, kind='prob_right')
+
+    # Find bad subjects (returns indices of bad curves)
+    # indices, lapses = find_bad_subjects(psych_curves)
+    indices, total_lapses = find_bad_subjects(psych_curves)
+    # lapses = np.delete(lapses, indices, axis=0)  # Remove bad subjects from lapses
+    total_lapses = np.delete(total_lapses, indices, axis=0)  # Remove bad subjects from lapses
+    # total_lapses = np.sum(lapses, axis=1)
+
+    # Map indices back to animal IDs
+    bad_subjects = [animals[i] for i in indices]
+    print(f'Bad subjects (based on lapses): {bad_subjects}\n')
+
+    good_subjects = [animals[i] for i in range(len(animals)) if i not in indices]
+    print('Good subjects:')
+    for subj, lapse in zip(good_subjects, total_lapses):
+        print(f'{subj}: {round(lapse, 2)} lapses')
+    print('\n')
+
+    return good_subjects
+
+def plot_pc(experiment='2AFC_6', animal=None, kind='prob_right', drug=None, save=False, **kwargs):
+    """Plot psychometric curve
+    :param experiment: str, name of the experiment
+    :param animal: str, animal name
+    :param kind: str, 'prob_right' or 'prob_rep'
+    :param save: bool, whether to save the figure
+    :param format: str, file format to save the figure
+    :param transparent: bool, whether to save the figure with a transparent background
+    :return: psych_curve object with the fitted parameters and data
+    """
+
+    # Use recursion to handle multiple animals
+    if isinstance(animal, list):
+        psych_curves = []
+        for a in animal:
+            psych_curves.append(plot_pc(experiment=experiment, animal=a, kind=kind,
+                                   drug=drug, save=save, **kwargs))
+        return psych_curves
+
+    # Get the path to the data
+    experiment, folder_in = get_experiment(experiment)
+    animal = get_animal(experiment=experiment, path_session='glue_sessions', animal=animal)
+    folder_in = Path(folder_in / animal).with_suffix('.csv')
+
+    # Load behavioral data
+    df = pd.read_csv(folder_in)
+
+    # Load intersession data
+    path_intersession = Path.home() / 'PycharmProjects' / 'intersession' / experiment / (str(int(animal)) + '_intersession.csv')
+    # str(int(animal)) to remove the 0 padding in ID
+    df_intersession = pd.read_csv(path_intersession)
+
+    # Filter trials
+    df = filter_behavior(df, clean_start=True, drop_miss=True, filter_drug=False)
+    # df = df[df.P > 0]  # Only those sessions with ilds
+    # Only sessions with accuracy > X threshold?
+    # try:
+    #     df = df[df.Drug.isnull()]  # Remove drug experimental sessions
+    # except AttributeError: # As 24.05.2023 only batch 2 has drug data. Need to reparse batch 3 to add Drug column
+    #     pass
+
+    if drug is None:
+        df = df[~df.Drug.isin([0, 1])]
+    elif drug in [0, 1]:
+        df = filter_drug_sessions(df)
+        df = df[df.Drug == drug]
+
+    # Compute psychometric curve(s)
+    n_points = 100
+    # evidences = np.sort(df.evidence.unique())  # Pilot batch
+    ilds = np.sort(df.ILD.unique())
+
+    # Plot psychometric curves
+    plt.figure(constrained_layout=True, **kwargs)
+    fmt = kwargs.get('format', 'png')
+
+    if kind == 'prob_right':
+
+        # Compute left-right psychometric curve
+        # psych_curve = compute_psych_curve(df.Evidence, df.Choice)  # Pilot batch
+        psych_curve = compute_psych_curve(df.ILD, df.Choice, n_points)  # No need to filter out the misses
+
+        # Move extreme datapoints closer to the center to zoom in
+        psych_curve.xdata[0] = -20
+        psych_curve.xdata[-1] = 20
+
+        # Plot params
+        color = 'tab:orange'
+        xlabel = 'Stimulus ILD (dB)'
+        # xlabel = 'ILD (dB)'
+        ylabel = 'Prob. choose right'
+        # ylabel = 'P. right'
+
+
+        # Annotation params
+        lower_lapse = '$LR_{right}$='
+        upper_lapse = '$LR_{left}$='
+        xy = (psych_curve.xdata[0], 1)
+        xytext = (psych_curve.xdata[0], 1)
+        va = 'top'
+        ha = 'left'
+        loc = 'lower right'
+
+        filename = f'{animal}_PC_prob_right.{fmt}'
+
+    elif kind == 'prob_rep':
+
+        # Compute rep-alt psychometric curve
+        # psych_curve_rep = compute_psych_curve(df.EviRep, df.RepChoice)  # Pilot batch
+        psych_curve = compute_psych_curve(df.ILDRep, df.RepChoice, n_points)
+
+        # Move extreme datapoints closer to the center to zoom in
+        psych_curve.xdata[0] = -20
+        psych_curve.xdata[-1] = 20
+
+        # Plot params
+        color = 'tab:brown'
+        xlabel = 'Rep. stim. ILD (dB)'
+        # xlabel = 'Rep. ILD (dB)'
+        ylabel = 'Prob. choose repeat'
+        # ylabel = 'P. rep.'
+
+        # Annotate params
+        lower_lapse = '$LR_{rep}$='
+        upper_lapse = '$LR_{alt}$='
+        xy = (psych_curve.xdata[-1], 0)
+        xytext = (psych_curve.xdata[-1], 0)
+        va = 'bottom'
+        ha = 'right'
+        loc = 'upper left'
+
+        filename = f'{animal}_PC_prob_rep.{fmt}'
+
+    # Plot psychometric curve and errorbars
+    x = np.linspace(np.min(ilds), np.max(ilds), n_points)
+    plt.plot(x, psych_curve.fit, color=color, mfc=color, label='')
+
+    plt.errorbar(psych_curve.xdata, psych_curve.ydata, yerr=psych_curve.fit_error, color=color,
+                 fmt='o', mfc=color)
+
+    sensitivity, bias, lr_lower, lr_upper = psych_curve.params
+    plt.annotate('$S$=' + str(round(sensitivity, 2)) + '\n' +  # Sensitivity
+                 '$B$=' + str(round(bias, 2)) + '\n' +  # Bias
+                 lower_lapse + str(round(lr_lower, 2)) + '\n' +  # Upper lapse rate
+                 upper_lapse + str(round(lr_upper, 2)),  # Lower lapse rate
+                 xy=xy, xytext=xytext, color=color,
+                 va=va, ha=ha)
+
+    # plt.title(f'Mouse {df.Setup.unique()[0]}, {len(df)} trials')
+    plt.title(f'#{df.Setup.unique()[0]}')
+    plt.axhline(0.5, color='tab:gray', ls='--')
+    plt.axvline(0, color='tab:gray', ls='--')
+
+    # # Get fits for bias = 0 and lapses = 0
+    # # fit = b + (1 - b - p) / (1 + np.exp(-k * (np.linspace(np.min(x), np.max(x), n_points) - x0)))  # PC function
+    # fit_bias0 = lr_lower + (1 - lr_lower - lr_upper) / (1 + np.exp(- sensitivity * (np.linspace(np.min(ilds), np.max(ilds), n_points) - 0)))
+    # # plt.plot(np.linspace(np.min(ilds), np.max(ilds), n_points), fit_bias0, color='tab:olive', mfc='tab:olive', ls=':', label='fit|B=0')
+    # pc0_bias0 = lr_lower + (1 - lr_lower - lr_upper) / 2  # Value of the PC for x = 0 when bias = 0
+    # fit_lapses0 = 0 + (1 - 0 - 0) / (1 + np.exp(- sensitivity * (np.linspace(np.min(ilds), np.max(ilds), n_points) - bias)))
+    # # plt.plot(np.linspace(np.min(ilds), np.max(ilds), n_points), fit_lapses0, color='tab:cyan', mfc='tab:cyan', ls=':', label='fit|LR=0')
+    # # plt.axhline(pc0_bias0, color='tab:blue', ls=':', label='y(x=0)|B=0')
+    # pc0_lapses0 = 1 / (1 + np.exp(sensitivity * bias))  # Value of the PC for x = 0 when lapses = 0
+    # # plt.axhline(pc0_lapses0, color='tab:orange', ls=':', label='y(x=0)|LR=0')
+
+    plt.xlim([psych_curve.xdata[0] - 1, psych_curve.xdata[-1] + 1])  # To chop the extreme values
+    ilds[0] = psych_curve.xdata[0]
+    ilds[-1] = psych_curve.xdata[-1]
+    plt.xticks(ilds)
+    plt.gca().set_xticklabels(['-70', '-8', '', '', '0', '', '', '+8', '+70'])
+    # plt.gca().set_xticklabels(['-70', '', '', '', '0', '', '', '', '+70'])
+    plt.ylim([0, 1])
+    plt.yticks([0, 0.5, 1], ['0', '0.5', '1'])
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    sns.despine()
+
+    if save:
+        folder_out = Path.home() / 'OneDrive' / 'Imágenes' / 'Figures' / 'psych curves'
+        if not folder_out.exists():
+            folder_out.mkdir(parents=True, exist_ok=True)
+        os.chdir(folder_out)
+        plt.savefig(Path(folder_out / filename), **kwargs)
+        plt.close()
+
+    # return psych_curve, pc0_bias0, pc0_lapses0
+    # return psych_curve, fit_bias0, fit_lapses0
+    return psych_curve

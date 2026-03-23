@@ -130,13 +130,15 @@ states_palette_n = 3
 # for 2-state or 3-state plots respectively; all other K fall back to
 # `states_hex`.
 states_hex_k2 = [
-    "#1B9E77",   # Engaged
+    "#2BA02B",   # Engaged
     "#7f7f7f",   # Disengaged
 ]
 states_hex_k3 = [
-    "#1B9E77",   # Engaged
-    "#E7298A",   # Left disengaged / left bias
-    "#7570B3",   # Right disengaged / right bias
+    "#2BA02B",   # Engaged
+    "#1F77B4",
+    "#FF7F0F",
+    # "#E7298A",   # Left disengaged / left bias
+    # "#7570B3",   # Right disengaged / right bias
 ]
 # Colours indexed by canonical rank: 0=Engaged, 1=Disengaged, 2=Disengaged 1, …
 # All state-plots fall back to this rank-indexed list when no exact-K override

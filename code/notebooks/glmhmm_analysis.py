@@ -529,6 +529,15 @@ def _(mo):
 def _(mo):
     ui_state_show_weighted_points = mo.ui.checkbox(value=True, label="Weighted dots")
     ui_state_show_data_smooth = mo.ui.checkbox(value=True, label="Data smooth")
+    ui_state_assignment_mode = mo.ui.radio(
+        options={
+            "Predictive weights": "weighted",
+            "MAP state": "map",
+        },
+        value="Predictive weights",
+        inline=False,
+        label="State assignment",
+    )
     ui_state_model_line_mode = mo.ui.radio(
         options={
             "Smooth curve": "smooth",
@@ -540,6 +549,7 @@ def _(mo):
         label="Model line",
     )
     return (
+        ui_state_assignment_mode,
         ui_state_model_line_mode,
         ui_state_show_data_smooth,
         ui_state_show_weighted_points,
@@ -577,6 +587,7 @@ def _(
     trial_df,
     ui_psychometric_background,
     ui_psychometric_regressor,
+    ui_state_assignment_mode,
     ui_state_model_line_mode,
     ui_state_show_data_smooth,
     ui_state_show_weighted_points,
@@ -610,7 +621,21 @@ def _(
         show_data_smooth=ui_state_show_data_smooth.value,
         show_model_smooth=ui_state_model_line_mode.value != "none",
         model_line_mode=ui_state_model_line_mode.value,
+        state_assignment_mode=ui_state_assignment_mode.value,
         figure_dpi=80,
+    )
+    _fig_state_overlay, _ = plots.plot_categorical_performance_by_state(
+        df=_plot_df_state,
+        views=_views_sel,
+        model_name=f"glmhmm K={K} — all states",
+        background_style=ui_psychometric_background.value,
+        show_weighted_points=ui_state_show_weighted_points.value,
+        show_data_smooth=ui_state_show_data_smooth.value,
+        show_model_smooth=ui_state_model_line_mode.value != "none",
+        model_line_mode=ui_state_model_line_mode.value,
+        state_assignment_mode=ui_state_assignment_mode.value,
+        figure_dpi=80,
+        overlay_only=True,
     )
     _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
     if is_2afc and _reg_plot_fn is not None:
@@ -624,7 +649,22 @@ def _(
             show_data_smooth=ui_state_show_data_smooth.value,
             show_model_smooth=ui_state_model_line_mode.value != "none",
             model_line_mode=ui_state_model_line_mode.value,
+            state_assignment_mode=ui_state_assignment_mode.value,
             figure_dpi=80,
+        )
+        _fig_reg_overlay, _ = _reg_plot_fn(
+            df=_plot_df_state,
+            views=_views_sel,
+            model_name=f"glmhmm K={K}",
+            feature_col=ui_psychometric_regressor.value,
+            background_style=ui_psychometric_background.value,
+            show_weighted_points=ui_state_show_weighted_points.value,
+            show_data_smooth=ui_state_show_data_smooth.value,
+            show_model_smooth=ui_state_model_line_mode.value != "none",
+            model_line_mode=ui_state_model_line_mode.value,
+            state_assignment_mode=ui_state_assignment_mode.value,
+            figure_dpi=80,
+            overlay_only=True,
         )
         _reg_section = mo.vstack(
             [
@@ -642,6 +682,12 @@ def _(
                             _fig_reg_state,
                             f"{ui_psychometric_regressor.value} by state",
                             stem=f"regressor_by_state_{ui_psychometric_regressor.value}",
+                        ),
+                        mo.vstack([_fig_reg_overlay], align="center"),
+                        save_plot(
+                            _fig_reg_overlay,
+                            f"all states {ui_psychometric_regressor.value}",
+                            stem=f"regressor_all_states_{ui_psychometric_regressor.value}",
                         ),
                     ],
                     justify="space-between",
@@ -670,6 +716,7 @@ def _(
                             ui_psychometric_background,
                             ui_state_show_weighted_points,
                             ui_state_show_data_smooth,
+                            ui_state_assignment_mode,
                             ui_state_model_line_mode,
                         ],
                         align="start",
@@ -682,6 +729,8 @@ def _(
             mo.md("### Per-state categorical performance"),
             mo.vstack(
                 [
+                    mo.vstack([_fig_state_overlay], align="center"),
+                    save_plot(_fig_state_overlay, "all states psychometric", stem="categorical_all_states"),
                     mo.vstack([_fig_state], align="center"),
                     save_plot(_fig_state, "per-state psychometric", stem="categorical_by_state"),
                 ],
@@ -869,6 +918,7 @@ def _(
     ui_editor_subject,
     ui_psychometric_background,
     ui_psychometric_regressor,
+    ui_state_assignment_mode,
     ui_state_model_line_mode,
     ui_state_show_data_smooth,
     ui_state_show_weighted_points,
@@ -914,6 +964,7 @@ def _(
         show_data_smooth=ui_state_show_data_smooth.value,
         show_model_smooth=ui_state_model_line_mode.value != "none",
         model_line_mode=ui_state_model_line_mode.value,
+        state_assignment_mode=ui_state_assignment_mode.value,
         figure_dpi=80,
     )
     _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
@@ -930,6 +981,7 @@ def _(
             show_data_smooth=ui_state_show_data_smooth.value,
             show_model_smooth=ui_state_model_line_mode.value != "none",
             model_line_mode=ui_state_model_line_mode.value,
+            state_assignment_mode=ui_state_assignment_mode.value,
             figure_dpi=80,
         )
         _reg_section = mo.vstack(

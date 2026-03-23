@@ -7,8 +7,8 @@ app = marimo.App(width="full")
 @app.cell
 def _():
     import marimo as mo
-
-    return
+    subject_names_to_keep = []
+    return (subject_names_to_keep,)
 
 
 @app.cell
@@ -25,7 +25,7 @@ def _():
 
 
 @app.cell
-def _(filter_behavior, paths, pl):
+def _(filter_behavior, paths, pl, subject_names_to_keep):
     base_path = paths.DATA_PATH / "Alexis"
     experiment_folders = [f"2AFC_{i}" for i in range(1, 7)] + ["2AFC"]
 
@@ -48,12 +48,16 @@ def _(filter_behavior, paths, pl):
     combined_df = combined_df.with_columns(
         pl.col(col).cast(pl.Float64, strict=False)
         for col in combined_df.columns
-        if col not in ("experiment",)  # keep string cols as-is
+        if col not in ("experiment", "subject")  # keep string cols as-is
         and combined_df[col].cast(pl.Float64, strict=False).null_count() == combined_df[col].null_count()
     )
     combined_df = combined_df.filter((pl.col("Experiment").is_in(['2AFC_2', '2AFC_3', '2AFC_4'])))
     combined_df = combined_df.rename({"Subject" : "subject"})
-    combined_df = combined_df.with_columns(pl.col("subject").cast(pl.Utf8))
+    combined_df = combined_df.with_columns(pl.col("subject").cast(pl.Int64, strict=False).cast(pl.Utf8))
+    if subject_names_to_keep:
+        combined_df = combined_df.filter(
+            pl.col("subject").is_in(subject_names_to_keep)
+        )
     combined_df = combined_df.select(
         [c for c in ["subject", "Trial", "Side", "Choice", "Hit", "Punish", "Session", "ILD", "Filename", "Experiment", "Task", "P" ,"p", "Condition", "AW", "WarmUp", "Date"]
          if c in combined_df.columns]
@@ -69,10 +73,13 @@ def _(filter_behavior, paths, pl):
         )
         for subj in combined_df["subject"].unique().to_list()
     ])
-    combined_df.write_parquet(output_path)
+
+    subjects_to_keep = ["325", "326", "327", "329", "330", "332", "333", "335", "337", "419", "420", "422", "616", "617", "619", "623", "561", "807", "820", "821", "873", "875", "907", "909", "911", "000", "001", "002", "003", "004", "006", "007", "009", "014", "014", "015", "016", "017", "018", "019", "020", "022", "023", "024", "025" ]
+    combined_df_filtered = combined_df.filter(pl.col("subject").is_in(subjects_to_keep))
+    combined_df_filtered.write_parquet(output_path)
     print(f"Saved to {output_path}")
     print(combined_df.group_by("subject").agg([pl.len().alias("n_trials")]).sort("n_trials"))
-    return
+    return (combined_df_filtered,)
 
 
 app._unparsable_cell(

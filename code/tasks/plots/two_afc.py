@@ -1212,6 +1212,45 @@ def _feature_label(feature_name: str) -> str:
     return labels.get(feature_name, feature_name.replace("_", " ").title())
 
 
+def _quantile_bin_spec(values: np.ndarray, n_bins: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Return explicit quantile bin edges and midpoint centers."""
+    x = np.asarray(values, dtype=float)
+    x = x[np.isfinite(x)]
+    if x.size == 0:
+        raise ValueError("Cannot bin an empty array.")
+
+    requested_bins = max(int(n_bins), 1)
+    unique_vals = np.unique(x)
+    if unique_vals.size == 1:
+        v = float(unique_vals[0])
+        return np.asarray([v - 0.5, v + 0.5], dtype=float), np.asarray([v], dtype=float)
+
+    bin_edges = np.quantile(x, np.linspace(0.0, 1.0, requested_bins + 1))
+    bin_edges = np.unique(np.asarray(bin_edges, dtype=float))
+    if bin_edges.size < 2:
+        v = float(unique_vals[0])
+        return np.asarray([v - 0.5, v + 0.5], dtype=float), np.asarray([v], dtype=float)
+
+    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    return bin_edges, bin_centers
+
+
+def _quantile_bin_assignments(
+    values: np.ndarray,
+    n_bins: int,
+    *,
+    bin_edges: Optional[np.ndarray] = None,
+    bin_centers: Optional[np.ndarray] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Assign values to quantile bins using explicit edges and midpoint centers."""
+    if bin_edges is None or bin_centers is None:
+        bin_edges, bin_centers = _quantile_bin_spec(values, n_bins=n_bins)
+
+    bin_idx = np.digitize(np.asarray(values, dtype=float), bin_edges, right=True) - 1
+    bin_idx = np.clip(bin_idx, 0, len(bin_centers) - 1).astype(int)
+    return bin_idx, bin_centers
+
+
 def _binned_feature_summary(
     df: pd.DataFrame,
     feature_col: str,
@@ -1220,6 +1259,8 @@ def _binned_feature_summary(
     subj_col: str,
     n_bins: int = 9,
     weight_col: Optional[str] = None,
+    bin_edges: Optional[np.ndarray] = None,
+    bin_centers: Optional[np.ndarray] = None,
 ) -> Optional[Tuple[pd.DataFrame, list[float]]]:
     needed = [feature_col, choice_col, pred_col, subj_col]
     d = df.dropna(subset=[c for c in needed if c in df.columns]).copy()
@@ -1233,25 +1274,19 @@ def _binned_feature_summary(
     if d.empty:
         return None
 
-    unique_vals = np.sort(d[feature_col].unique())
-    if len(unique_vals) <= max(6, n_bins):
-        d["_x_bin"] = d[feature_col]
-        centers = (
-            d.groupby("_x_bin", observed=True)[feature_col]
-            .median()
-            .rename("center")
-            .reset_index()
-            .sort_values("center")
-        )
-    else:
-        d["_x_bin"] = pd.qcut(d[feature_col], q=n_bins, duplicates="drop")
-        centers = (
-            d.groupby("_x_bin", observed=True)[feature_col]
-            .median()
-            .rename("center")
-            .reset_index()
-            .sort_values("center")
-        )
+    bin_idx, bin_centers = _quantile_bin_assignments(
+        d[feature_col].to_numpy(dtype=float),
+        n_bins=n_bins,
+        bin_edges=bin_edges,
+        bin_centers=bin_centers,
+    )
+    d["_x_bin"] = bin_idx
+    centers = pd.DataFrame(
+        {
+            "_x_bin": np.arange(len(bin_centers), dtype=int),
+            "center": bin_centers,
+        }
+    )
 
     if weight_col is not None and weight_col in d.columns:
         rows = []
@@ -1716,6 +1751,8 @@ def _regressor_state_panel(
     background_style: str = "data",
     subject_curves: Optional[dict] = None,
     n_bins: int = 9,
+    bin_edges: Optional[np.ndarray] = None,
+    bin_centers: Optional[np.ndarray] = None,
     weight_col: Optional[str] = None,
     show_weighted_points: bool = True,
     show_data_smooth: bool = True,
@@ -1745,6 +1782,8 @@ def _regressor_state_panel(
         subj_col,
         n_bins=n_bins,
         weight_col=weight_col,
+        bin_edges=bin_edges,
+        bin_centers=bin_centers,
     )
     if summary is None:
         return None, None
@@ -2321,6 +2360,7 @@ def plot_categorical_performance_all_by_state(
     figure_dpi: float = 80.0,
     overlay_only: bool = False,
     model_line_mode: str = "smooth",
+    state_assignment_mode: str = "weighted",
 ) -> plt.Figure:
     """Per-state psychometric grid (K panels, one per state).
 
@@ -2364,8 +2404,9 @@ def plot_categorical_performance_all_by_state(
 
     df_pd = df_pd.copy()
     df_pd["_state_k"] = _arr
-    df_pd = _attach_rank_posterior_cols(df_pd, views, subj_col=subj_col)
-    df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pR_state")
+    if state_assignment_mode == "weighted":
+        df_pd = _attach_rank_posterior_cols(df_pd, views, subj_col=subj_col)
+        df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pR_state")
 
     # Resolve labels: {rank: label} merged across all subjects
     slbls: dict[int, str] = {}
@@ -2416,7 +2457,8 @@ def plot_categorical_performance_all_by_state(
     _n_panels = K + int(_include_overlay)
     if overlay_only:
         _n_panels = 1
-    fig, axes = plt.subplots(1, _n_panels, figsize=(panel_w * _n_panels, 4), sharey=True, dpi=figure_dpi)
+    _figsize = (3, 3) if overlay_only else (panel_w * _n_panels, 4)
+    fig, axes = plt.subplots(1, _n_panels, figsize=_figsize, sharey=True, dpi=figure_dpi)
     axes = np.atleast_1d(axes)
 
     if _include_overlay:
@@ -2424,14 +2466,16 @@ def plot_categorical_performance_all_by_state(
         for k in range(K):
             lbl = slbls.get(k, f"State {k}")
             color = _state_color(lbl, k, K=K)
-            _weight_col = f"_p_state_rank_{k}" if f"_p_state_rank_{k}" in df_pd.columns else None
+            _weight_col = (
+                f"_p_state_rank_{k}" if state_assignment_mode == "weighted" and f"_p_state_rank_{k}" in df_pd.columns else None
+            )
             _df_state = df_pd if _weight_col is not None else df_pd[df_pd["_state_k"] == k]
             _psych_state_panel(
                 _ax_overlay,
                 _df_state,
                 ild_col,
                 choice_col,
-                pred_col=f"_pR_state_rank_{k}",
+                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -2459,14 +2503,16 @@ def plot_categorical_performance_all_by_state(
         for k, ax in enumerate(axes[int(_include_overlay) :]):
             lbl = slbls.get(k, f"State {k}")
             color = _state_color(lbl, k, K=K)
-            _weight_col = f"_p_state_rank_{k}" if f"_p_state_rank_{k}" in df_pd.columns else None
+            _weight_col = (
+                f"_p_state_rank_{k}" if state_assignment_mode == "weighted" and f"_p_state_rank_{k}" in df_pd.columns else None
+            )
             _df_state = df_pd if _weight_col is not None else df_pd[df_pd["_state_k"] == k]
             _psych_state_panel(
                 ax,
                 _df_state,
                 ild_col,
                 choice_col,
-                pred_col=f"_pR_state_rank_{k}",
+                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -2519,6 +2565,7 @@ def plot_regressor_psychometric_by_state(
     figure_dpi: float = 80.0,
     overlay_only: bool = False,
     model_line_mode: str = "smooth",
+    state_assignment_mode: str = "weighted",
 ) -> plt.Figure:
     """Per-state partial-dependence plot for any emission regressor.
 
@@ -2551,8 +2598,13 @@ def plot_regressor_psychometric_by_state(
     else:
         raise ValueError("df must contain a 'state_rank' column (output of build_trial_df)")
     df_pd["_state_k"] = _arr
-    df_pd = _attach_rank_posterior_cols(df_pd, views, subj_col=subj_col)
-    df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pR_state")
+    if state_assignment_mode == "weighted":
+        df_pd = _attach_rank_posterior_cols(df_pd, views, subj_col=subj_col)
+        df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pR_state")
+    _global_bin_edges, _global_bin_centers = _quantile_bin_spec(
+        df_pd[feature_col].to_numpy(dtype=float),
+        n_bins=n_bins,
+    )
 
     if feature_min is None:
         feature_min = float(np.nanmin(df_pd[feature_col].to_numpy(dtype=float)))
@@ -2636,7 +2688,8 @@ def plot_regressor_psychometric_by_state(
     _n_panels = K + int(_include_overlay)
     if overlay_only:
         _n_panels = 1
-    fig, axes = plt.subplots(1, _n_panels, figsize=(3.5 * _n_panels, 4), sharey=True, dpi=figure_dpi)
+    _figsize = (3, 3) if overlay_only else (3.5 * _n_panels, 4)
+    fig, axes = plt.subplots(1, _n_panels, figsize=_figsize, sharey=True, dpi=figure_dpi)
     axes = np.atleast_1d(axes)
 
     xlabel = _feature_label(feature_col)
@@ -2646,14 +2699,16 @@ def plot_regressor_psychometric_by_state(
         for k in range(K):
             lbl = slbls.get(k, f"State {k}")
             color = _state_color(lbl, k, K=K)
-            _weight_col = f"_p_state_rank_{k}" if f"_p_state_rank_{k}" in df_pd.columns else None
+            _weight_col = (
+                f"_p_state_rank_{k}" if state_assignment_mode == "weighted" and f"_p_state_rank_{k}" in df_pd.columns else None
+            )
             _df_state = df_pd if _weight_col is not None else df_pd[df_pd["_state_k"] == k]
             _regressor_state_panel(
                 _ax_overlay,
                 _df_state,
                 feature_col,
                 choice_col,
-                pred_col=f"_pR_state_rank_{k}",
+                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else "p_pred",
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -2662,6 +2717,8 @@ def plot_regressor_psychometric_by_state(
                 background_style=background_style,
                 subject_curves=_subject_curves_by_k.get(k),
                 n_bins=n_bins,
+                bin_edges=_global_bin_edges,
+                bin_centers=_global_bin_centers,
                 weight_col=_weight_col,
                 show_weighted_points=show_weighted_points,
                 show_data_smooth=show_data_smooth,
@@ -2677,14 +2734,16 @@ def plot_regressor_psychometric_by_state(
         for k, ax in enumerate(axes[int(_include_overlay) :]):
             lbl = slbls.get(k, f"State {k}")
             color = _state_color(lbl, k, K=K)
-            _weight_col = f"_p_state_rank_{k}" if f"_p_state_rank_{k}" in df_pd.columns else None
+            _weight_col = (
+                f"_p_state_rank_{k}" if state_assignment_mode == "weighted" and f"_p_state_rank_{k}" in df_pd.columns else None
+            )
             _df_state = df_pd if _weight_col is not None else df_pd[df_pd["_state_k"] == k]
             _regressor_state_panel(
                 ax,
                 _df_state,
                 feature_col,
                 choice_col,
-                pred_col=f"_pR_state_rank_{k}",
+                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else "p_pred",
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -2692,6 +2751,8 @@ def plot_regressor_psychometric_by_state(
                 background_style=background_style,
                 subject_curves=_subject_curves_by_k.get(k),
                 n_bins=n_bins,
+                bin_edges=_global_bin_edges,
+                bin_centers=_global_bin_centers,
                 weight_col=_weight_col,
                 show_weighted_points=show_weighted_points,
                 show_data_smooth=show_data_smooth,
