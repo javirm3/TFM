@@ -108,7 +108,7 @@ def _(mo, ui_model_manager):
             self.value = value
 
     _val = ui_model_manager.value
-    _subjects = list(_val.get("subjects", []))
+    _subjects = sorted(_val.get("subjects", []), key=str)
     _selected_subject = _subjects[0] if _subjects else None
 
     ui_subject = _V(_selected_subject)

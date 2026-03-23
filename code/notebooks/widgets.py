@@ -25,6 +25,7 @@ class CoefTweakerWidget(anywidget.AnyWidget):
         const is2afc = model.get("is_2afc");
         const modelType = model.get("model_type"); // 'glm', 'glmhmm', 'glmhmmt'
         const currentTask = model.get("task");
+        const taskOptions = model.get("task_options") || [];
         
         // Tab state: "load" or "new"
         const mode = model.get("ui_mode");
@@ -57,8 +58,9 @@ class CoefTweakerWidget(anywidget.AnyWidget):
                 <div class="mm-task-selector">
                     <label class="mm-label inline">Task:</label>
                     <select id="inp-task" class="mm-input small">
-                        <option value="MCDR" ${currentTask === "MCDR" ? "selected" : ""}>MCDR</option>
-                        <option value="2AFC" ${currentTask === "2AFC" ? "selected" : ""}>2AFC</option>
+                        ${taskOptions.map(opt => `
+                            <option value="${opt.value}" ${currentTask === opt.value ? "selected" : ""}>${opt.label}</option>
+                        `).join("")}
                     </select>
                 </div>
             </div>
@@ -887,7 +889,7 @@ class CoefTweakerWidget(anywidget.AnyWidget):
             df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
             df_all = adapter.subject_filter(df_all)
             
-            subjects = df_all["subject"].unique().to_list()
+            subjects = sorted(df_all["subject"].unique().to_list(), key=str)
             self.subjects_list = subjects
             if not self.subjects:
                 self.subjects = subjects

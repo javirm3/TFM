@@ -1,9 +1,9 @@
 """
-two_afc.py
-──────────
-Plotting utilities for 2-AFC (binary) GLM-HMM results.
+nuo_auditory.py
+───────────────
+Plotting utilities for the Nuo auditory 2AFC task.
 
-This is the task-owned 2AFC plotting module exposed via
+This is the task-owned Nuo auditory plotting module exposed via
 ``TaskAdapter.get_plots()``. Its public API mirrors the task plot interface
 used by the analysis notebooks.
 
@@ -46,6 +46,16 @@ from glmhmmt.plots_common import (
 )
 from glmhmmt.model_plots import plot_transition_weights
 from glmhmmt.views import _LABEL_RANK, get_state_palette
+from tasks.nuo_auditory import NuoAuditoryAdapter
+
+_ADAPTER = NuoAuditoryAdapter()
+_SESSION_COL = _ADAPTER.session_col
+_SORT_COL = _ADAPTER.sort_col[-1] if isinstance(_ADAPTER.sort_col, list) else _ADAPTER.sort_col
+_RESPONSE_COL = _ADAPTER.behavioral_cols["response"]
+_PERFORMANCE_COL = _ADAPTER.behavioral_cols["performance"]
+_EVIDENCE_COL = _ADAPTER.psychometric_x_col
+_CONDITION_COL = "difficulty"
+_EXPERIMENT_COL = "stimulus_modality"
 
 # ── state colour palette ──────────────────────────────────────────────────────
 
@@ -1475,12 +1485,12 @@ def _attach_rank_state_model_cols(
 def _psych_panel(
     ax: plt.Axes,
     df: pd.DataFrame,
-    ild_col: str = "ILD",
-    choice_col: str = "response",
+    ild_col: str = _EVIDENCE_COL,
+    choice_col: str = _RESPONSE_COL,
     pred_col: str = "p_pred",
     subj_col: str = "subject",
     title: str = "",
-    xlabel: str = "ILD (dB)",
+    xlabel: str = "Evidence strength",
     ylabel: Optional[str] = None,
     color: str = "k",
     smooth_curve: Optional[Tuple[np.ndarray, np.ndarray]] = None,
@@ -1488,11 +1498,11 @@ def _psych_panel(
     subject_curves: Optional[dict] = None,
     tick_ilds: Optional[Sequence[float]] = None,
 ) -> None:
-    """Draw a pooled psychometric curve (P(right) vs ILD) on ax.
+    """Draw a pooled psychometric curve (P(right) vs evidence strength) on ax.
 
     Style mirrors plot_pc_across_batches:
     - Per-subject individual traces drawn with low alpha.
-    - Extreme ILD positions compressed so inner values are not squeezed.
+    - Extreme stimulus positions compressed so inner values are not squeezed.
     - Pooled mean ± SEM as error-bar markers; model as a solid black line.
     - axhline at 0.5, axvline at 0.
     """
@@ -1500,7 +1510,7 @@ def _psych_panel(
         ax.set_title(title)
         return
 
-    choice_col = _resolve_plot_col(df, choice_col, ("response", "Choice"))
+    choice_col = _resolve_plot_col(df, choice_col, (_RESPONSE_COL,))
 
     subj_agg = (
         df.groupby([subj_col, ild_col], observed=True)
@@ -1543,7 +1553,7 @@ def _psych_panel(
             xi, yi = curve
             ax.plot(xi, yi, "-", color=color, alpha=0.12, lw=1.2, zorder=2)
 
-    # model line: smooth sigmoid over dense ILD grid (if available) else aggregated p_pred
+    # model line: smooth sigmoid over a dense stimulus grid (if available)
     if smooth_curve is not None:
         ild_g, p_g = smooth_curve
         x0, x1 = float(xticks[0]), float(xticks[-1])
@@ -1591,7 +1601,7 @@ def _psych_state_panel(
     if df_state.empty:
         return None, None
 
-    choice_col = _resolve_plot_col(df_state, choice_col, ("response", "Choice"))
+    choice_col = _resolve_plot_col(df_state, choice_col, (_RESPONSE_COL,))
     empirical_smooth = None
     if weight_col is not None and weight_col in df_state.columns:
         empirical_smooth = _mean_weighted_empirical_curve(
@@ -1688,7 +1698,7 @@ def _psych_state_panel(
     # smooth sigmoid model line (if available) else aggregated p_pred
     if show_model_smooth and model_line_mode == "smooth" and smooth_curve is not None:
         ild_g, p_g = smooth_curve
-        # Clip the dense grid to the observed ILD range so the sigmoid
+        # Clip the dense grid to the observed evidence range so the sigmoid
         # doesn't extend far beyond the data and compress the visible area.
         _x0, _x1 = float(xticks[0]), float(xticks[-1])
         _clip = (ild_g >= _x0) & (ild_g <= _x1)
@@ -1726,7 +1736,7 @@ def _regressor_state_panel(
     if df_state.empty:
         return None, None
 
-    choice_col = _resolve_plot_col(df_state, choice_col, ("response", "Choice"))
+    choice_col = _resolve_plot_col(df_state, choice_col, (_RESPONSE_COL,))
     empirical_smooth = None
     if weight_col is not None and weight_col in df_state.columns:
         empirical_smooth = _mean_weighted_empirical_curve(
@@ -1829,16 +1839,17 @@ def _regressor_state_panel(
 
 
 def prepare_predictions_df(df_pred):
-    """Prepare a 2-AFC Trial-level predictions DataFrame for plotting.
+    """Prepare a Nuo auditory trial-level predictions DataFrame for plotting.
 
     Accepts a polars or pandas DataFrame that already contains the per-Trial
     model predictions (``pL``, ``pR``) produced by the fit script.
 
     Expected input columns
     ----------------------
-    Side / stimulus : int  - correct side (0 = left, 1 = right)
-    Choice / response : int  - animal's choice (0 = left, 1 = right)
-    Hit / performance : int/bool - trial correct (1) or incorrect (0)
+    stimulus             : int  - correct side (0 = left, 1 = right)
+    response             : int  - subject choice from ``last_choice``
+    performance          : int/bool - trial correct (1) or incorrect (0)
+    total_evidence_strength : float - signed auditory evidence
     pL               : float - model P(left choice)
     pR               : float - model P(right choice)
 
@@ -1846,9 +1857,7 @@ def prepare_predictions_df(df_pred):
     ------------------------------
     correct_bool    : bool  - Trial accuracy
     p_pred          : float - model P(right)  → psychometric x-axis
-    p_model_correct : float - model P(correct Side)
-    stimulus / Side : int   - canonical aliases for correct side
-    response / Choice : int - canonical aliases for animal choice
+    p_model_correct : float - model P(correct stimulus)
 
     Returns
     -------
@@ -1864,29 +1873,13 @@ def prepare_predictions_df(df_pred):
     if _is_polars:
         df = df_pred.clone()
 
-        if "stimulus" not in df.columns:
-            if "Side" in df.columns:
-                df = df.with_columns(pl.col("Side").cast(pl.Int64).alias("stimulus"))
-            else:
-                raise ValueError("No 'Side' or 'stimulus' column found.")
-        if "Side" not in df.columns:
-            df = df.with_columns(pl.col("stimulus").cast(pl.Int64).alias("Side"))
-
-        if "response" not in df.columns:
-            if "Choice" in df.columns:
-                df = df.with_columns(pl.col("Choice").cast(pl.Int64).alias("response"))
-            else:
-                raise ValueError("No 'Choice' or 'response' column found.")
-        if "Choice" not in df.columns:
-            df = df.with_columns(pl.col("response").cast(pl.Int64).alias("Choice"))
+        required = {"stimulus", _RESPONSE_COL, _PERFORMANCE_COL, _EVIDENCE_COL}
+        missing = sorted(required.difference(df.columns))
+        if missing:
+            raise ValueError(f"Missing required Nuo auditory columns: {missing}")
 
         if "correct_bool" not in df.columns:
-            if "Hit" in df.columns:
-                df = df.with_columns(pl.col("Hit").cast(pl.Boolean).alias("correct_bool"))
-            elif "performance" in df.columns:
-                df = df.with_columns(pl.col("performance").cast(pl.Boolean).alias("correct_bool"))
-            else:
-                raise ValueError("No 'Hit', 'performance', or 'correct_bool' column found.")
+            df = df.with_columns(pl.col(_PERFORMANCE_COL).cast(pl.Boolean).alias("correct_bool"))
 
         if "pL" not in df.columns or "pR" not in df.columns:
             raise ValueError("Missing 'pL' or 'pR' columns (model predictions).")
@@ -1902,29 +1895,13 @@ def prepare_predictions_df(df_pred):
         # pandas path
         df = df_pred.copy()
 
-        if "stimulus" not in df.columns:
-            if "Side" in df.columns:
-                df["stimulus"] = df["Side"].astype(int)
-            else:
-                raise ValueError("No 'Side' or 'stimulus' column found.")
-        if "Side" not in df.columns:
-            df["Side"] = df["stimulus"].astype(int)
-
-        if "response" not in df.columns:
-            if "Choice" in df.columns:
-                df["response"] = df["Choice"].astype(int)
-            else:
-                raise ValueError("No 'Choice' or 'response' column found.")
-        if "Choice" not in df.columns:
-            df["Choice"] = df["response"].astype(int)
+        required = {"stimulus", _RESPONSE_COL, _PERFORMANCE_COL, _EVIDENCE_COL}
+        missing = sorted(required.difference(df.columns))
+        if missing:
+            raise ValueError(f"Missing required Nuo auditory columns: {missing}")
 
         if "correct_bool" not in df.columns:
-            if "Hit" in df.columns:
-                df["correct_bool"] = df["Hit"].astype(bool)
-            elif "performance" in df.columns:
-                df["correct_bool"] = df["performance"].astype(bool)
-            else:
-                raise ValueError("No 'Hit', 'performance', or 'correct_bool' column found.")
+            df["correct_bool"] = df[_PERFORMANCE_COL].astype(bool)
 
         if "pL" not in df.columns or "pR" not in df.columns:
             raise ValueError("Missing 'pL' or 'pR' columns (model predictions).")
@@ -2068,27 +2045,27 @@ def plot_state_accuracy(
     views: dict,
     trial_df,
     thresh: float = 0.5,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
-    performance_col: str = "correct_bool",
-    stim_col: str = "ILD",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
+    performance_col: str = _PERFORMANCE_COL,
+    stim_col: str = _EVIDENCE_COL,
     **kwargs,
 ) -> Tuple[plt.Figure, pd.DataFrame]:
     return _plot_state_accuracy_common(
         views,
         trial_df,
         thresh=thresh,
-        performance_candidates=(performance_col, "performance"),
-        stim_candidates=(stim_col, "stimulus", "ILD"),
-        stim_label="ILD≠0",
+        performance_candidates=("correct_bool", performance_col),
+        stim_candidates=(stim_col, "stimulus"),
+        stim_label="Evidence≠0",
     )
 
 
 def plot_session_trajectories(
     views: dict,
     trial_df,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     **kwargs,
 ) -> plt.Figure:
     return _plot_session_trajectories_common(
@@ -2101,8 +2078,8 @@ def plot_session_trajectories(
 def plot_state_occupancy(
     views: dict,
     trial_df,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     **kwargs,
 ) -> plt.Figure:
     return _plot_state_occupancy_common(
@@ -2122,8 +2099,8 @@ def plot_session_deepdive(
     trial_df,
     subj: str,
     sess,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     **kwargs,
 ) -> plt.Figure:
     return _plot_session_deepdive_common(
@@ -2132,9 +2109,9 @@ def plot_session_deepdive(
         subj,
         sess,
         session_col=session_col,
-        performance_candidates=("correct_bool", "performance"),
-        stim_candidates=("ILD", "stimulus"),
-        response_candidates=("response", "Choice"),
+        performance_candidates=("correct_bool", _PERFORMANCE_COL),
+        stim_candidates=(_EVIDENCE_COL, "stimulus"),
+        response_candidates=(_RESPONSE_COL,),
     )
 
 
@@ -2146,158 +2123,112 @@ def plot_session_deepdive(
 def plot_categorical_performance_all(
     df,
     model_name: str,
-    ild_col: str = "ILD",
-    choice_col: str = "response",
+    ild_col: str = _EVIDENCE_COL,
+    choice_col: str = _RESPONSE_COL,
     pred_col: str = "p_pred",
     subj_col: str = "subject",
-    cond_col: str = "condition",
-    exp_col: str = "experiment",
+    cond_col: str = _CONDITION_COL,
+    exp_col: str = _EXPERIMENT_COL,
     views: Optional[dict] = None,
     X_cols: Optional[Sequence[str]] = None,
     ild_max: Optional[float] = None,
     background_style: str = "data",
+    n_bins: int = 9,
 ) -> plt.Figure:
-    """Overall psychometric + by-condition + by-experiment panels.
+    """Overall psychometric P(right) vs evidence strength.
 
-    2AFC equivalent of plots.plot_categorical_performance_all.
-
-    Panels
-    ------
-    a) Overall      - P(right) vs ILD, all trials pooled
-    b) By condition - separate curves per rest / saline / drug
-                      (skipped if 'condition' column absent)
-    c) By experiment - separate curves per experiment batch
-
-    Parameters
-    ----------
-    df         : Polars or pandas DataFrame with Trial-level predictions.
-                 Must contain: ILD, response/Choice (0/1), p_pred, subject.
-                 The default model overlay is ``p_pred`` because this figure
-                 shows psychometrics, i.e. P(rightward choice), not accuracy.
-    model_name : String for figure suptitle.
-    ild_max    : Optional explicit normalisation scale. When omitted, the
-                 maximum absolute ILD in ``df[ild_col]`` is used.
-
-    Returns
-    -------
-    fig
+    Unlike the Alexis psychometric summary, the Nuo non-state view is a single
+    pooled panel. Empirical means use the modeled response column and the data
+    are binned over the evidence axis before pooling across subjects.
     """
     if hasattr(df, "to_pandas"):
         df_pd = df.to_pandas()
     else:
         df_pd = df.copy()
-    ild_max = _resolve_ild_max(df_pd, ild_col, ild_max)
-    ild_ticks = (
-        sorted(pd.to_numeric(df_pd[ild_col], errors="coerce").dropna().unique()) if ild_col in df_pd.columns else []
-    )
 
-    has_cond = cond_col in df_pd.columns
-    has_exp = exp_col in df_pd.columns
-    n_panels = 1 + int(has_cond) + int(has_exp)
-
-    # Pre-compute smooth GLM sigmoid averaged over all subjects
-    _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
-
-    # Build arrays_store-compatible dict for _mean_glm_curve.
-    # Reorder axes so that state index == rank (0=Engaged, …) for consistency.
-    def _rank_ordered_as(v):
-        _order = sorted(v.state_rank_by_idx, key=lambda ki: v.state_rank_by_idx[ki])
-        return {
-            "emission_weights": v.emission_weights[_order],
-            "X_cols": v.feat_names,
-            "X": v.X,
-            "smoothed_probs": v.smoothed_probs[:, _order],
-            "lapse_rates": v.lapse_rates,
-        }
-
-    _as = {s: _rank_ordered_as(v) for s, v in views.items()} if views is not None else None
-    _smooth_all = _mean_glm_curve(_as, _all_subjects, X_cols, ild_max=ild_max) if _as is not None else None
-    _subject_curves_all = (
-        _subject_glm_curves(_as, _all_subjects, X_cols, ild_max=ild_max) if _as is not None and background_style == "model" else None
-    )
-
-    fig, axes = plt.subplots(1, n_panels, figsize=(3 * n_panels, 4), sharey=True)
-    axes = np.atleast_1d(axes)
-    ax_idx = 0
-
-    # a) Overall
-    _psych_panel(
-        axes[ax_idx],
+    summary = _binned_feature_summary(
         df_pd,
-        ild_col=ild_col,
+        feature_col=ild_col,
         choice_col=choice_col,
         pred_col=pred_col,
         subj_col=subj_col,
-        title="a) Overall psychometric",
-        xlabel="ILD (dB)",
-        ylabel="P(Right)",
-        color="#2b7bba",
-        smooth_curve=_smooth_all,
-        background_style=background_style,
-        subject_curves=_subject_curves_all,
-        tick_ilds=ild_ticks,
+        n_bins=n_bins,
     )
-    ax_idx += 1
+    if summary is None:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No valid psychometric data", ha="center", va="center")
+        ax.axis("off")
+        return fig, None
 
-    # b) By condition
-    if has_cond:
-        conds = sorted(df_pd[cond_col].dropna().unique())
-        cond_colors = {"rest": "#444444", "saline": "#1f77b4", "drug": "#d62728"}
-        for cond in conds:
-            _cond_subjs = list(df_pd[df_pd[cond_col] == cond][subj_col].unique())
-            _smooth_cond = _mean_glm_curve(_as, _cond_subjs, X_cols, ild_max=ild_max) if _as is not None else None
-            _subject_curves_cond = (
-                _subject_glm_curves(_as, _cond_subjs, X_cols, ild_max=ild_max)
-                if _as is not None and background_style == "model"
-                else None
-            )
-            _psych_panel(
-                axes[ax_idx],
-                df_pd[df_pd[cond_col] == cond],
-                ild_col=ild_col,
-                choice_col=choice_col,
-                pred_col=pred_col,
-                subj_col=subj_col,
-                title=f"b) {cond}",
-                xlabel="ILD (dB)",
-                color=cond_colors.get(cond, "k"),
-                smooth_curve=_smooth_cond,
-                background_style=background_style,
-                subject_curves=_subject_curves_cond,
-                tick_ilds=ild_ticks,
-            )
-        ax_idx += 1
+    subj_agg, _ = summary
+    agg = (
+        subj_agg.groupby("_x_bin", observed=True)
+        .agg(
+            x=("center", "median"),
+            md=("data_mean", "mean"),
+            sd=("data_mean", "std"),
+            nd=("data_mean", "count"),
+            mm=("model_mean", "mean"),
+        )
+        .reset_index(drop=True)
+        .sort_values("x")
+    )
+    x = agg["x"].to_numpy(dtype=float)
+    md = agg["md"].to_numpy(dtype=float)
+    sd = agg["sd"].fillna(0.0).to_numpy(dtype=float)
+    nd = agg["nd"].clip(lower=1).to_numpy(dtype=float)
+    mm = agg["mm"].to_numpy(dtype=float)
+    sem_d = sd / np.sqrt(nd)
 
-    # c) By experiment
-    if has_exp:
-        exps = sorted(df_pd[exp_col].dropna().unique())
-        exp_palette = sns.color_palette("Set2", len(exps))
-        for ei, exp in enumerate(exps):
-            _exp_subjs = list(df_pd[df_pd[exp_col] == exp][subj_col].unique())
-            _smooth_exp = _mean_glm_curve(_as, _exp_subjs, X_cols, ild_max=ild_max) if _as is not None else None
-            _subject_curves_exp = (
-                _subject_glm_curves(_as, _exp_subjs, X_cols, ild_max=ild_max)
-                if _as is not None and background_style == "model"
-                else None
+    fig, ax = plt.subplots(1, 1, figsize=(4, 4), sharey=True)
+    if background_style == "data":
+        for _, grp in subj_agg.groupby(subj_col, observed=True):
+            grp = grp.sort_values("center")
+            ax.plot(
+                grp["center"].to_numpy(dtype=float),
+                grp["data_mean"].to_numpy(dtype=float),
+                "-o",
+                color="#2b7bba",
+                alpha=0.15,
+                lw=1.1,
+                ms=4.0,
+                zorder=2,
             )
-            _psych_panel(
-                axes[ax_idx],
-                df_pd[df_pd[exp_col] == exp],
-                ild_col=ild_col,
-                choice_col=choice_col,
-                pred_col=pred_col,
-                subj_col=subj_col,
-                title=f"c) {exp}",
-                xlabel="ILD (dB)",
-                color=exp_palette[ei],
-                smooth_curve=_smooth_exp,
-                background_style=background_style,
-                subject_curves=_subject_curves_exp,
-                tick_ilds=ild_ticks,
+    elif background_style == "model":
+        for _, grp in subj_agg.groupby(subj_col, observed=True):
+            grp = grp.sort_values("center")
+            ax.plot(
+                grp["center"].to_numpy(dtype=float),
+                grp["model_mean"].to_numpy(dtype=float),
+                "-",
+                color="black",
+                alpha=0.12,
+                lw=1.2,
+                zorder=2,
             )
 
-    for ax in axes:
-        ax.legend(frameon=False, fontsize=8)
+    ax.plot(x, mm, "-", color="black", lw=2.3, zorder=6, label="Model")
+    ax.errorbar(
+        x,
+        md,
+        yerr=sem_d,
+        fmt="o",
+        color="#2b7bba",
+        ecolor="#2b7bba",
+        elinewidth=1.5,
+        capsize=0,
+        ms=5.8,
+        zorder=5,
+        label="Data",
+    )
+    ax.axhline(0.5, color="tab:gray", ls="--", lw=1.6)
+    ax.axvline(0.0, color="tab:gray", ls="--", lw=1.6)
+    ax.set_ylim(0, 1)
+    ax.set_yticks([0, 0.5, 1])
+    ax.set_xlabel("Evidence strength")
+    ax.set_ylabel("P(Right)")
+    ax.set_title("Overall psychometric")
+    ax.legend(frameon=False, fontsize=8)
     sns.despine(fig=fig)
     fig.suptitle(model_name, y=1.02)
     fig.tight_layout()
@@ -2308,8 +2239,8 @@ def plot_categorical_performance_all_by_state(
     df,
     views: dict,
     model_name: str,
-    ild_col: str = "ILD",
-    choice_col: str = "response",
+    ild_col: str = _EVIDENCE_COL,
+    choice_col: str = _RESPONSE_COL,
     pred_col: str = "p_pred",
     subj_col: str = "subject",
     X_cols: Optional[Sequence[str]] = None,
@@ -2326,7 +2257,7 @@ def plot_categorical_performance_all_by_state(
 
     2AFC equivalent of plots.plot_categorical_performance_by_state.
 
-    Each state gets its own panel showing P(right) vs ILD; data (markers) and
+    Each state gets its own panel showing P(right) vs evidence strength; data (markers) and
     model prediction (lines) are drawn in the state's colour.
 
     Parameters
@@ -2337,7 +2268,7 @@ def plot_categorical_performance_all_by_state(
     views  : {subj: SubjectFitView} as produced by build_views.
     model_name : string used as figure suptitle.
     ild_max : Optional explicit normalisation scale. When omitted, the
-              maximum absolute ILD in ``df[ild_col]`` is used.
+              maximum absolute evidence value in ``df[ild_col]`` is used.
 
     Returns
     -------
@@ -2389,7 +2320,7 @@ def plot_categorical_performance_all_by_state(
     _as = {s: _rank_ordered_as(v) for s, v in views.items()}
 
     ilds = sorted(df_pd[ild_col].dropna().unique())
-    panel_w = max(2, 0.3 * len(ilds))
+    panel_w, panel_h = _legacy_square_panel_size(n_cols=2)
 
     # ── K-panel grid ──────────────────────────────────────────────────────────
     _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
@@ -2416,7 +2347,7 @@ def plot_categorical_performance_all_by_state(
     _n_panels = K + int(_include_overlay)
     if overlay_only:
         _n_panels = 1
-    fig, axes = plt.subplots(1, _n_panels, figsize=(panel_w * _n_panels, 4), sharey=True, dpi=figure_dpi)
+    fig, axes = plt.subplots(1, _n_panels, figsize=(panel_w * _n_panels, panel_h), sharey=True, dpi=figure_dpi)
     axes = np.atleast_1d(axes)
 
     if _include_overlay:
@@ -2450,7 +2381,7 @@ def plot_categorical_performance_all_by_state(
         _ax_overlay.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
         _ax_overlay.set_ylim(0, 1)
         _ax_overlay.set_yticks([0, 0.5, 1])
-        _ax_overlay.set_xlabel("Stimulus ILD (dB)")
+        _ax_overlay.set_xlabel("Evidence strength")
         _ax_overlay.set_ylabel("p(right)")
         _ax_overlay.set_title("")
         _ax_overlay.legend(frameon=False, fontsize=8)
@@ -2483,7 +2414,7 @@ def plot_categorical_performance_all_by_state(
             ax.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
             ax.set_ylim(0, 1)
             ax.set_yticks([0, 0.5, 1])
-            ax.set_xlabel("ILD (dB)")
+            ax.set_xlabel("Evidence strength")
             ax.set_title(lbl)
             if k == 0:
                 ax.set_ylabel("P(Right)")
@@ -2505,7 +2436,7 @@ def plot_regressor_psychometric_by_state(
     views: dict,
     model_name: str,
     feature_col: str = "at_choice",
-    choice_col: str = "response",
+    choice_col: str = _RESPONSE_COL,
     subj_col: str = "subject",
     X_cols: Optional[Sequence[str]] = None,
     feature_min: Optional[float] = None,
@@ -2523,7 +2454,7 @@ def plot_regressor_psychometric_by_state(
     """Per-state partial-dependence plot for any emission regressor.
 
     The x-axis is the chosen regressor (for example ``at_choice``) instead of
-    ILD. Empirical points are pooled within quantile bins of that regressor,
+    the selected regressor. Empirical points are pooled within quantile bins of that regressor,
     while the model line sweeps the same regressor over a dense grid and
     marginalises over the empirical distribution of the remaining features.
     """
@@ -2636,7 +2567,8 @@ def plot_regressor_psychometric_by_state(
     _n_panels = K + int(_include_overlay)
     if overlay_only:
         _n_panels = 1
-    fig, axes = plt.subplots(1, _n_panels, figsize=(3.5 * _n_panels, 4), sharey=True, dpi=figure_dpi)
+    panel_w, panel_h = _legacy_square_panel_size(n_cols=2)
+    fig, axes = plt.subplots(1, _n_panels, figsize=(panel_w * _n_panels, panel_h), sharey=True, dpi=figure_dpi)
     axes = np.atleast_1d(axes)
 
     xlabel = _feature_label(feature_col)

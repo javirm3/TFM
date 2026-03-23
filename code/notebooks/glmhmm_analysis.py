@@ -27,6 +27,7 @@ def _():
     from glmhmmt.views import build_views
     from glmhmmt.postprocess import build_trial_df, build_emission_weights_df
     from widgets import ModelManagerWidget
+    from figure_save_utils import make_plot_saver
     from coefficient_editor_widget import CoefficientEditorWidget
     from coefficient_editor_utils import (
         apply_state_tweak_to_trial_df,
@@ -46,6 +47,7 @@ def _():
         build_views,
         fit_main,
         get_adapter,
+        make_plot_saver,
         mo,
         np,
         paths,
@@ -70,7 +72,7 @@ def _(get_adapter, paths, pl, ui_model_manager):
 def _(ModelManagerWidget, mo):
     mm_widget = ModelManagerWidget(
         model_type="glmhmm",
-        task="MCDR",
+        task="2AFC",
         K=2,
         tau=50,
     )
@@ -251,7 +253,7 @@ def _(
     OUT = paths.RESULTS / "fits" / task_name / "glmhmm" / selected_model_id
     # load feature names via adapter
     _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(adapter.sort_col)
-    _, _, _, names = adapter.load_subject(_df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value)
+    _, _, _, names = adapter.load_subject(_df_sel[0], tau=ui_tau.value, emission_cols=ui_emission_cols.value)
 
     arrays_store = {}
     _files = list(sorted(OUT.glob("*_glmhmm_arrays.npz")))
@@ -274,6 +276,18 @@ def _(
 
     # arrays_store
     return K, arrays_store, names, selected_model_id
+
+
+@app.cell
+def _(make_plot_saver, mo, paths, selected_model_id, task_name):
+    save_plot = make_plot_saver(
+        mo,
+        results_dir=paths.RESULTS,
+        config_path=paths.CONFIG,
+        task_name=task_name,
+        model_id=selected_model_id,
+    )
+    return (save_plot,)
 
 
 @app.cell
@@ -512,6 +526,27 @@ def _(mo):
 
 
 @app.cell
+def _(mo):
+    ui_state_show_weighted_points = mo.ui.checkbox(value=True, label="Weighted dots")
+    ui_state_show_data_smooth = mo.ui.checkbox(value=True, label="Data smooth")
+    ui_state_model_line_mode = mo.ui.radio(
+        options={
+            "Smooth curve": "smooth",
+            "Trial-matched line": "trial_matched",
+            "None": "none",
+        },
+        value="Smooth curve",
+        inline=False,
+        label="Model line",
+    )
+    return (
+        ui_state_model_line_mode,
+        ui_state_show_data_smooth,
+        ui_state_show_weighted_points,
+    )
+
+
+@app.cell
 def _(is_2afc, mo, views):
     _feature_names = []
     if is_2afc and views:
@@ -538,10 +573,13 @@ def _(
     mo,
     pl,
     plots,
-    plt,
+    save_plot,
     trial_df,
     ui_psychometric_background,
     ui_psychometric_regressor,
+    ui_state_model_line_mode,
+    ui_state_show_data_smooth,
+    ui_state_show_weighted_points,
     ui_subjects,
     views,
 ):
@@ -568,10 +606,12 @@ def _(
         views=_views_sel,
         model_name=f"glmhmm K={K} — per state",
         background_style=ui_psychometric_background.value,
+        show_weighted_points=ui_state_show_weighted_points.value,
+        show_data_smooth=ui_state_show_data_smooth.value,
+        show_model_smooth=ui_state_model_line_mode.value != "none",
+        model_line_mode=ui_state_model_line_mode.value,
+        figure_dpi=80,
     )
-
-    plt.savefig(fig = _fig_state, )
-
     _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
     if is_2afc and _reg_plot_fn is not None:
         _fig_reg_state, _ = _reg_plot_fn(
@@ -580,11 +620,33 @@ def _(
             model_name=f"glmhmm K={K}",
             feature_col=ui_psychometric_regressor.value,
             background_style=ui_psychometric_background.value,
+            show_weighted_points=ui_state_show_weighted_points.value,
+            show_data_smooth=ui_state_show_data_smooth.value,
+            show_model_smooth=ui_state_model_line_mode.value != "none",
+            model_line_mode=ui_state_model_line_mode.value,
+            figure_dpi=80,
         )
         _reg_section = mo.vstack(
             [
-                mo.hstack([mo.md("### Per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
-                _fig_reg_state,
+                mo.hstack(
+                    [
+                        mo.md("### Per-state psychometric by regressor"),
+                        ui_psychometric_regressor,
+                    ],
+                    justify="space-between",
+                ),
+                mo.vstack(
+                    [
+                        mo.vstack([_fig_reg_state], align="center"),
+                        save_plot(
+                            _fig_reg_state,
+                            f"{ui_psychometric_regressor.value} by state",
+                            stem=f"regressor_by_state_{ui_psychometric_regressor.value}",
+                        ),
+                    ],
+                    justify="space-between",
+                    align="center",
+                ),
             ],
             align="center",
         )
@@ -596,15 +658,36 @@ def _(
             mo.md("### Categorical plots for accuracy"),
             mo.hstack(
                 [
-                    mo.vstack([_fig_all], align="center"),
-                    mo.vstack([ui_psychometric_background], align="center"),
+                    mo.vstack(
+                        [
+                            _fig_all,
+                            save_plot(_fig_all, "overall psychometric", stem="categorical_overall"),
+                        ],
+                        align="center",
+                    ),
+                    mo.vstack(
+                        [
+                            ui_psychometric_background,
+                            ui_state_show_weighted_points,
+                            ui_state_show_data_smooth,
+                            ui_state_model_line_mode,
+                        ],
+                        align="start",
+                    ),
                 ],
                 justify="space-between",
                 align="center",
                 widths=[4, 1],
             ),
             mo.md("### Per-state categorical performance"),
-            _fig_state,
+            mo.vstack(
+                [
+                    mo.vstack([_fig_state], align="center"),
+                    save_plot(_fig_state, "per-state psychometric", stem="categorical_by_state"),
+                ],
+                justify="space-between",
+                align="center",
+            ),
             _reg_section,
         ],
         align="center",
@@ -614,7 +697,7 @@ def _(
 
 @app.cell
 def _(editor_views, mo):
-    _subjects = list(editor_views.keys())
+    _subjects = sorted(editor_views.keys(), key=str)
     mo.stop(not _subjects, mo.md("No fitted subjects available for coefficient editing."))
     ui_editor_subject = mo.ui.dropdown(
         options=_subjects,
@@ -782,9 +865,13 @@ def _(
     mo,
     np,
     plots,
+    save_plot,
     ui_editor_subject,
     ui_psychometric_background,
     ui_psychometric_regressor,
+    ui_state_model_line_mode,
+    ui_state_show_data_smooth,
+    ui_state_show_weighted_points,
 ):
     _subj = ui_editor_subject.value
     _view = editor_view
@@ -823,6 +910,11 @@ def _(
         views={_subj: _view_tweaked},
         model_name=f"{_title} — per state",
         background_style=ui_psychometric_background.value,
+        show_weighted_points=ui_state_show_weighted_points.value,
+        show_data_smooth=ui_state_show_data_smooth.value,
+        show_model_smooth=ui_state_model_line_mode.value != "none",
+        model_line_mode=ui_state_model_line_mode.value,
+        figure_dpi=80,
     )
     _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
     if _reg_plot_fn is None:
@@ -834,11 +926,28 @@ def _(
             model_name=_title,
             feature_col=ui_psychometric_regressor.value,
             background_style=ui_psychometric_background.value,
+            show_weighted_points=ui_state_show_weighted_points.value,
+            show_data_smooth=ui_state_show_data_smooth.value,
+            show_model_smooth=ui_state_model_line_mode.value != "none",
+            model_line_mode=ui_state_model_line_mode.value,
+            figure_dpi=80,
         )
         _reg_section = mo.vstack(
             [
                 mo.hstack([mo.md("### Tweaked per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
-                _fig_reg_state_tweaked,
+                mo.hstack(
+                    [
+                        mo.vstack([_fig_reg_state_tweaked], align="center"),
+                        save_plot(
+                            _fig_reg_state_tweaked,
+                            f"tweaked {ui_psychometric_regressor.value} by state",
+                            stem=f"tweaked_regressor_by_state_{ui_psychometric_regressor.value}",
+                        ),
+                    ],
+                    justify="space-between",
+                    align="center",
+                    widths=[4, 1],
+                ),
             ],
             align="center",
         )
@@ -864,14 +973,36 @@ def _(
             mo.hstack(
                 [
                     mo.vstack([_fig_all_tweaked], align="center"),
-                    mo.vstack([ui_psychometric_background], align="center"),
+                    mo.vstack(
+                        [
+                            ui_psychometric_background,
+                            save_plot(
+                                _fig_all_tweaked,
+                                "tweaked overall psychometric",
+                                stem="tweaked_categorical_overall",
+                            ),
+                        ],
+                        align="start",
+                    ),
                 ],
                 justify="space-between",
                 align="center",
                 widths=[4, 1],
             ),
             mo.md("### Tweaked per-state categorical performance"),
-            _fig_state_tweaked,
+            mo.hstack(
+                [
+                    mo.vstack([_fig_state_tweaked], align="center"),
+                    save_plot(
+                        _fig_state_tweaked,
+                        "tweaked per-state psychometric",
+                        stem="tweaked_categorical_by_state",
+                    ),
+                ],
+                justify="space-between",
+                align="center",
+                widths=[4, 1],
+            ),
             _reg_section,
             _side_section,
             coef_editor
@@ -948,7 +1079,7 @@ def _(
 def _(df_all, mo):
     # ── controls for session-trajectory & occupancy plots ─────────────────────
     ui_subjects_traj = mo.ui.multiselect(
-        options=df_all["subject"].unique().to_list(),
+        options=sorted(df_all["subject"].unique().to_list(), key=str),
         label="Subjects (session trajectories & occupancy)",
     )
     mo.vstack([mo.md("### Session trajectory & occupancy"), ui_subjects_traj])
@@ -999,7 +1130,7 @@ def _(K, mo, plots, trial_df, ui_subjects_traj, views):
 @app.cell
 def _(mo, ui_subjects, views):
     # ── Session deep-dive controls ─────────────────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in views]
+    _selected = sorted((s for s in ui_subjects.value if s in views), key=str)
     _subj_opts = _selected if _selected else ["(no fitted subjects)"]
 
     ui_session_subj = mo.ui.dropdown(

@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.20.4"
+__generated_with = "0.21.0"
 app = marimo.App(width="full")
 
 
@@ -58,7 +58,7 @@ def _(filter_behavior, paths, pl):
         [c for c in ["subject", "Trial", "Side", "Choice", "Hit", "Punish", "Session", "ILD", "Filename", "Experiment", "Task", "P" ,"p", "Condition", "AW", "WarmUp", "Date"]
          if c in combined_df.columns]
     )
-    combined_df = combined_df.with_columns(pl.col("ILD").replace({70: 25, -70 : -25 }))
+    combined_df = combined_df.with_columns(pl.col("ILD").replace({70: 20, -70 : -20 }))
     output_path = paths.DATA_PATH / "alexis_combined.parquet"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     combined_df = pl.concat([

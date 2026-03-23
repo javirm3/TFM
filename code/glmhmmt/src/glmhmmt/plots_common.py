@@ -8,7 +8,7 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.ticker import MaxNLocator
 
-from glmhmmt.views import _STATE_HEX
+from glmhmmt.views import get_state_palette
 
 try:
     import polars as pl
@@ -40,9 +40,10 @@ def _default_choice_meta(num_classes: int):
 
 
 def _state_labels_and_colors(view):
+    palette = get_state_palette(view.K)
     rank_order = view.state_idx_order
     labels = [view.state_name_by_idx.get(k, f"State {k}") for k in rank_order]
-    colors = [_STATE_HEX[view.state_rank_by_idx.get(int(k), int(k)) % len(_STATE_HEX)] for k in rank_order]
+    colors = [palette[view.state_rank_by_idx.get(int(k), int(k)) % len(palette)] for k in rank_order]
     return rank_order, labels, colors
 
 
@@ -63,12 +64,13 @@ def plot_state_accuracy(
         return fig, pd.DataFrame()
 
     first_view = views[subjects[0]]
+    palette = get_state_palette(first_view.K)
     state_labels = [first_view.state_name_by_idx.get(k, f"State {k}") for k in first_view.state_idx_order]
     cmap = {"All": "#999999"}
     for k in first_view.state_idx_order:
         lbl = first_view.state_name_by_idx.get(k, f"State {k}")
         rank = first_view.state_rank_by_idx.get(int(k), int(k))
-        cmap[lbl] = _STATE_HEX[rank % len(_STATE_HEX)]
+        cmap[lbl] = palette[rank % len(palette)]
     x_labels = ["All"] + state_labels
     if chance_level is None:
         chance_level = 100.0 / float(first_view.num_classes)
@@ -189,6 +191,7 @@ def plot_session_trajectories(
 
     for i, subj in enumerate(subjects):
         ax = axes[i, 0]
+        palette = get_state_palette(views[subj].K)
         P = np.asarray(views[subj].smoothed_probs)
         df_sub = _subject_df(trial_df, subj)
         sess_arr = np.asarray(df_sub[session_col])
@@ -211,7 +214,7 @@ def plot_session_trajectories(
 
         for k in views[subj].state_idx_order:
             rank = views[subj].state_rank_by_idx.get(int(k), int(k))
-            color = _STATE_HEX[rank % len(_STATE_HEX)]
+            color = palette[rank % len(palette)]
             valid_x = ~np.isnan(mean[:, k])
             ax.plot(
                 x[valid_x],
@@ -506,10 +509,11 @@ def plot_session_deepdive(
         )
         bottom += probs[:, k]
 
+    palette = get_state_palette(views[subj].K)
     ax1.plot(
         x,
         probs[:, engaged_k],
-        color=_STATE_HEX[0],
+        color=palette[0],
         lw=2,
         label=f"P({views[subj].state_name_by_idx.get(engaged_k, 'Engaged')})",
     )

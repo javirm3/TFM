@@ -107,8 +107,12 @@ def build_trial_df(
       names).
     * ``subject``
     * ``p_state_0`` … ``p_state_{K-1}``  — HMM posterior (direct copy)
+    * ``p_state_pred_0`` … ``p_state_pred_{K-1}``  — one-step predictive
+      state probabilities, when available
     * ``state_idx``, ``state_rank``, ``state_label``  — MAP assignment
     * ``pL`` [, ``pC``], ``pR``  — marginal class probabilities from p_pred
+    * ``pL_state_0`` …, ``pR_state_0`` …  — per-trial state-conditional
+      class probabilities ``P(y_t = c | z_t = k, x_t)``
     * ``p_model_correct``  — MAP-state emission P(correct class)
     * ``p_model_correct_marginal``  — marginal P(correct class)
     * ``correct_bool``
@@ -162,13 +166,20 @@ def build_trial_df(
 
     # ── p_state_k  — HMM posterior, direct copy (NEVER recomputed) ───────────
     posterior_series = [pl.Series(f"p_state_{k}", view.smoothed_probs[:, k].astype(np.float64)) for k in range(view.K)]
+    predictive_state_series = [
+        pl.Series(f"p_state_pred_{k}", np.asarray(view.predictive_state_probs[:, k], dtype=np.float64))
+        for k in range(view.K)
+    ]
     # ── MAP state assignment ───────────────────────────────────────────────────
     map_k = view.map_states()  # (T,) int
     state_rank_arr = np.array([view.state_rank_by_idx.get(int(ki), ki) for ki in map_k], dtype=np.int32)
     state_label_arr = np.array([view.state_name_by_idx.get(int(ki), f"State {ki}") for ki in map_k])
 
-    # ── MAP-state emission probabilities ──────────────────────────────────────
+    # ── state-conditional emission probabilities on the observed trials ──────
     C = view.num_classes
+    p_state_conditional = view.state_conditional_probs()  # (T, K, C)
+
+    # ── MAP-state emission probabilities ──────────────────────────────────────
     p_map = _emission_probs(view.emission_weights, view.X, map_k, C)  # (T, C)
 
     correct_class = adapter.get_correct_class(df_out)
@@ -196,6 +207,7 @@ def build_trial_df(
     new_cols = [
         pl.Series("subject", [view.subject] * T),
         *posterior_series,
+        *predictive_state_series,
         pl.Series("state_idx", map_k.astype(np.int32)),
         pl.Series("state_rank", state_rank_arr),
         pl.Series("state_label", state_label_arr),
@@ -203,17 +215,35 @@ def build_trial_df(
         pl.Series("p_model_correct_marginal", p_marginal_correct.astype(np.float64)),
     ]
 
+    for k in range(view.K):
+        new_cols.append(pl.Series(f"p_state_model_0_{k}", p_state_conditional[:, k, 0].astype(np.float64)))
+        if C >= 2:
+            new_cols.append(pl.Series(f"p_state_model_1_{k}", p_state_conditional[:, k, 1].astype(np.float64)))
+        if C >= 3:
+            new_cols.append(pl.Series(f"p_state_model_2_{k}", p_state_conditional[:, k, 2].astype(np.float64)))
+
     if C == 2:
         new_cols += [
             pl.Series("pL", p_marginal[:, 0].astype(np.float64)),
             pl.Series("pR", p_marginal[:, 1].astype(np.float64)),
         ]
+        for k in range(view.K):
+            new_cols += [
+                pl.Series(f"pL_state_{k}", p_state_conditional[:, k, 0].astype(np.float64)),
+                pl.Series(f"pR_state_{k}", p_state_conditional[:, k, 1].astype(np.float64)),
+            ]
     else:
         new_cols += [
             pl.Series("pL", p_marginal[:, 0].astype(np.float64)),
             pl.Series("pC", p_marginal[:, 1].astype(np.float64)),
             pl.Series("pR", p_marginal[:, 2].astype(np.float64)),
         ]
+        for k in range(view.K):
+            new_cols += [
+                pl.Series(f"pL_state_{k}", p_state_conditional[:, k, 0].astype(np.float64)),
+                pl.Series(f"pC_state_{k}", p_state_conditional[:, k, 1].astype(np.float64)),
+                pl.Series(f"pR_state_{k}", p_state_conditional[:, k, 2].astype(np.float64)),
+            ]
 
     # overwrite/add; drop pre-existing computed cols (pL/pC/pR, subject)
     _computed_names = {s.name for s in new_cols}

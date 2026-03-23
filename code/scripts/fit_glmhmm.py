@@ -122,6 +122,7 @@ def fit_subject(
 
     smoothed_probs = model.smoother_multisession(params=best_params, emissions=y, inputs=X, session_ids=session_ids)
     p_pred = model.predict_choice_probs_multisession(best_params, y, X, session_ids=session_ids)
+    predictive_state_probs = model.predict_state_probs_multisession(best_params, y, X, session_ids=session_ids)
     raw_ll = _raw_loglik_multisession(model, best_params, y, X, session_ids)
     T = int(y.shape[0])
 
@@ -134,6 +135,7 @@ def fit_subject(
         "lps": best_lps,
         "smoothed_probs": smoothed_probs,
         "p_pred": p_pred,
+        "predictive_state_probs": predictive_state_probs,
         "raw_ll": raw_ll,
         "objective_lp": float(best_lps[-1]),
         "T": T,
@@ -189,6 +191,8 @@ def save_results(result: dict, out_dir: Path) -> None:
         lps=result["lps"],
         p_pred=p_pred,
         smoothed_probs=result["smoothed_probs"],
+        predictive_state_probs=result["predictive_state_probs"],
+        initial_probs=np.asarray(result["fitted_params"].initial.probs),
         emission_weights=np.asarray(result["fitted_params"].emissions.weights),
         transition_matrix=_A,
         y=result["y"],
@@ -288,7 +292,7 @@ if __name__ == "__main__":
     parser.add_argument("--out_dir", type=str, default=None, help="Output directory. Defaults to RESULTS_PATH/glmhmm.")
     parser.add_argument("--tau", type=float, default=50.0, help="Half-life for exponential action traces.")
     parser.add_argument(
-        "--task", type=str, default="MCDR", help="Task to fit: 'MCDR' or '2AFC'. Affects data loading and features."
+        "--task", type=str, default="MCDR", help="Task to fit: 'MCDR', '2AFC', or 'nuo_auditory'. Affects data loading and features."
     )
     parser.add_argument(
         "--frozen_emissions",

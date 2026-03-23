@@ -49,6 +49,7 @@ transition_features = ["A_plus", "A_minus", "A_L", "A_C", "A_R"]
 
 [plots]
 dpi = 300
+save_format = "svg"
 style = "white"
 context = "talk"
 font_scale = 1
@@ -125,10 +126,24 @@ palette = [
 [palettes]
 states_palette = "Dark2"
 states_palette_n = 3
+# Optional exact-K overrides. If defined with enough colours, these are used
+# for 2-state or 3-state plots respectively; all other K fall back to
+# `states_hex`.
+states_hex_k2 = [
+    "#1B9E77",   # Engaged
+    "#7f7f7f",   # Disengaged
+]
+states_hex_k3 = [
+    "#1B9E77",   # Engaged
+    "#E7298A",   # Left disengaged / left bias
+    "#7570B3",   # Right disengaged / right bias
+]
 # Colours indexed by canonical rank: 0=Engaged, 1=Disengaged, 2=Disengaged 1, …
-# All state-plots in the notebook derive their colours from this list.
+# All state-plots fall back to this rank-indexed list when no exact-K override
+# is defined above.
 states_hex = [
     "#1B9E77",   # rank 0 – Engaged
+    "#7f7f7f",   # rank 1 – Disengaged
     "#D95F02",   # rank 1 – Disengaged
     "#7570B3",   # rank 2 – Disengaged 1
     "#E7298A",   # rank 3 – Disengaged 2

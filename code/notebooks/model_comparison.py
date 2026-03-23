@@ -32,7 +32,7 @@ def _():
     # Add src to sys.path to prevent namespace shadowing by the code/glmhmmt directory
     sys.path.insert(1, str(paths.CODE_DIR / "glmhmmt" / "src"))
 
-    from tasks import get_adapter
+    from tasks import get_adapter, get_task_options
     from glmhmmt.postprocess import build_trial_df
     from glmhmmt.views import build_views
 
@@ -41,6 +41,7 @@ def _():
         build_trial_df,
         build_views,
         get_adapter,
+        get_task_options,
         mo,
         np,
         paths,
@@ -51,9 +52,10 @@ def _():
 
 
 @app.cell
-def _(mo):
+def _(get_task_options, mo):
+    _task_options = get_task_options()
     ui_task = mo.ui.dropdown(
-        options=["MCDR", "2AFC"],
+        options={opt["label"]: opt["value"] for opt in _task_options},
         value="MCDR",
         label="Task",
     )

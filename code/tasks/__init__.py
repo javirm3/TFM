@@ -25,6 +25,8 @@ class TaskAdapter(ABC):
     """Abstract base for task-specific configuration & data loading."""
 
     # ── class-level attributes (override in subclass) ──────────────────────
+    task_key: str = NotImplemented      # canonical UI / CLI task name
+    task_label: str = NotImplemented    # human-readable task label
     num_classes: int = NotImplemented   # 2 or 3
     data_file: str = NotImplemented     # filename under paths.DATA_PATH
     sort_col: str = NotImplemented      # trial ordering column
@@ -35,6 +37,16 @@ class TaskAdapter(ABC):
     @abstractmethod
     def subject_filter(self, df: Any) -> Any:
         """Apply task-specific subject/session filtering to the full DataFrame."""
+
+    @abstractmethod
+    def build_feature_df(self, df_sub: Any, tau: float = 50.0) -> Any:
+        """Return a task-owned trial dataframe with design-matrix columns.
+
+        This dataframe is the explicit contract between each task and the
+        shared fitting code. It should contain the task's raw behavioral
+        columns plus any derived emission / transition regressors needed to
+        assemble ``X`` and ``U``.
+        """
 
     @abstractmethod
     def load_subject(
@@ -68,6 +80,10 @@ class TaskAdapter(ABC):
     def available_transition_cols(self) -> List[str]:
         """Ordered list of selectable transition regressors."""
         return self.default_transition_cols()
+
+    def sf_cols(self, df: Any) -> List[str]:
+        """Optional dynamic stimulus-frame columns for binary tasks."""
+        return []
 
     # ── plot module ─────────────────────────────────────────────────────────
 
@@ -146,6 +162,8 @@ def get_adapter(task: str) -> TaskAdapter:
         ``"mcdr"``, ``"MCDR"``          → MCDRAdapter
         ``"two_afc"``, ``"2afc"``,
         ``"2AFC"``, ``"two_AFC"``        → TwoAFCAdapter
+        ``"nuo_auditory"``,
+        ``"auditory_2afc"``              → NuoAuditoryAdapter
     """
     key = task.lower().replace("-", "_")
     cls = _REGISTRY.get(key)
@@ -155,7 +173,22 @@ def get_adapter(task: str) -> TaskAdapter:
     return cls()
 
 
+def get_task_options() -> list[dict[str, str]]:
+    """Return unique task options for UI selectors.
+
+    Each option is ``{"value": <task_key>, "label": <task_label>}``.
+    """
+    seen: dict[str, str] = {}
+    for cls in dict.fromkeys(_REGISTRY.values()):
+        task_key = getattr(cls, "task_key", None)
+        task_label = getattr(cls, "task_label", None)
+        if task_key and task_label and task_key not in seen:
+            seen[task_key] = task_label
+    return [{"value": key, "label": seen[key]} for key in seen]
+
+
 # Import adapters so they self-register via @_register.
 # Done at the bottom to avoid circular imports.
 from tasks import mcdr as _mcdr_mod       # noqa: E402, F401
 from tasks import two_afc as _two_afc_mod # noqa: E402, F401
+from tasks import nuo_auditory as _nuo_auditory_mod  # noqa: E402, F401

@@ -18,6 +18,7 @@ def _():
     import lecilab_behavior_analysis.plots as plots
     from pathlib import Path
     import pandas as pd
+    import polars as pl
     import numpy as np
     import matplotlib.pyplot as plt
     import seaborn as sns
@@ -25,7 +26,7 @@ def _():
     import time
     import datetime
 
-    return Path, clear_output, dft, np, pd, plots, time, utils
+    return Path, clear_output, dft, np, pd, pl, plots, time, utils
 
 
 @app.cell
@@ -55,7 +56,7 @@ def _(project, utils):
     return (animals,)
 
 
-@app.cell
+@app.cell(disabled=True)
 def _(Path, animals, clear_output, project, time, utils):
     # retrieve the data for the remaining animals
     for mouse in animals:
@@ -93,7 +94,6 @@ def _(Path, animals, clear_output, dft, pd, project, time, utils):
     print("Data read successfully.")
     df = dft.analyze_df(df)
     print("Dataframe analyzed.")
-
     return (df,)
 
 
@@ -142,6 +142,9 @@ def _(df, dft, np, pd, utils):
     vis_df["port2_holds_number"] = vis_df["port2_holds"].apply(lambda x: len(x))
     vis_df["visual_stimulus_ratio_log"] = np.sign(vis_df["visual_stimulus_ratio"]) * (np.log(abs(vis_df["visual_stimulus_ratio"])).round(4))
     vis_df['visual_stimulus_ratio_log_abs'] = vis_df['visual_stimulus_ratio_log'].abs()
+    vis_df = vis_df[["subject", "session", "trial", "date", "correct", "correct_side", "current_training_stage", "difficulty",
+                     "stimulus_modality", "water", "miss_trial", "first_choice", "last_choice", "early_pokeout", "trial_of_day","visual_stimulus_ratio","visual_stimulus_lowest"
+                     , "visual_stimulus_ratio_log"]]
     return (vis_df,)
 
 
@@ -155,6 +158,14 @@ def _(aud_df):
 @app.cell
 def _(vis_df):
     vis_df.to_parquet("visual_2AFC.parquet")
+    vis_df
+    return
+
+
+@app.cell
+def _(pl):
+    df2 = pl.read_parquet("auditory_2AFC.parquet")
+    df2
     return
 
 

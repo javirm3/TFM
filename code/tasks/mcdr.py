@@ -9,17 +9,31 @@ import numpy as np
 import polars as pl
 
 from tasks import TaskAdapter, _register
-from glmhmmt.features import (
-    build_sequence_from_df,
-    _ALL_EMISSION_COLS,
-    _ALL_TRANSITION_COLS,
-)
+
+_ALL_EMISSION_COLS: list[str] = [
+    "bias",
+    "biasL", "biasC", "biasR", "onsetL", "onsetC", "onsetR", "delay",
+    "SL", "SC", "SR",
+    "SLxdelay", "SCxdelay", "SRxdelay",
+    "SLxD", "SCxD", "SRxD",
+    "D", "DL", "DC", "DR",
+    "A_L", "A_C", "A_R",
+    "speed1", "speed2", "speed3",
+    "stim1L", "stim1C", "stim1R",
+    "stim2L", "stim2C", "stim2R",
+    "stim3L", "stim3C", "stim3R",
+    "stim4L", "stim4C", "stim4R",
+]
+
+_ALL_TRANSITION_COLS: list[str] = ["A_plus", "A_minus", "A_L", "A_C", "A_R"]
 
 
 @_register(["mcdr"])
 class MCDRAdapter(TaskAdapter):
     """Adapter for the 3-AFC MCDR rat data."""
 
+    task_key: str    = "MCDR"
+    task_label: str  = "MCDR"
     num_classes: int = 3
     data_file: str   = "df_filtered.parquet"
     sort_col: str    = "trial_idx"
@@ -46,6 +60,99 @@ class MCDRAdapter(TaskAdapter):
     def subject_filter(self, df: pl.DataFrame) -> pl.DataFrame:
         return df.filter(pl.col("subject") != "A84")
 
+    def build_feature_df(self, df_sub: pl.DataFrame, tau: float = 50.0) -> pl.DataFrame:
+        """Return the MCDR trial dataframe with all derived regressors."""
+        df_sub = df_sub.sort(self.sort_col)
+        df_sub = df_sub.with_columns(
+            [
+                ((pl.col("stimd_n") - pl.col("stimd_n").mean()) / pl.col("stimd_n").std()).alias("stimd_n_z"),
+            ]
+        )
+        df_sub = df_sub.with_columns(
+            [
+                pl.col("response").cast(pl.Int32),
+                (pl.col("x_c") == "L").cast(pl.Float32).alias("biasL"),
+                (pl.col("x_c") == "C").cast(pl.Float32).alias("biasC"),
+                (pl.col("x_c") == "R").cast(pl.Float32).alias("biasR"),
+                pl.lit(1.0).cast(pl.Float32).alias("bias"),
+                pl.col("delay_d").cast(pl.Float32).alias("delay"),
+                ((pl.col("x_c") == "L") * pl.col("onset")).cast(pl.Float32).alias("onsetL"),
+                ((pl.col("x_c") == "C") * pl.col("onset")).cast(pl.Float32).alias("onsetC"),
+                ((pl.col("x_c") == "R") * pl.col("onset")).cast(pl.Float32).alias("onsetR"),
+                ((pl.col("x_c") == "L") * pl.col("stimd_n_z")).cast(pl.Float32).alias("SL"),
+                ((pl.col("x_c") == "C") * pl.col("stimd_n_z")).cast(pl.Float32).alias("SC"),
+                ((pl.col("x_c") == "R") * pl.col("stimd_n_z")).cast(pl.Float32).alias("SR"),
+                ((pl.col("x_c") == "L") * pl.col("delay_d")).cast(pl.Float32).alias("DL"),
+                ((pl.col("x_c") == "C") * pl.col("delay_d")).cast(pl.Float32).alias("DC"),
+                ((pl.col("x_c") == "R") * pl.col("delay_d")).cast(pl.Float32).alias("DR"),
+                pl.col("ttype_n").cast(pl.Float32).alias("D"),
+                ((pl.col("x_c") == "L") * pl.col("stimd_n_z") * pl.col("ttype_n")).cast(pl.Float32).alias("SLxD"),
+                ((pl.col("x_c") == "C") * pl.col("stimd_n_z") * pl.col("ttype_n")).cast(pl.Float32).alias("SCxD"),
+                ((pl.col("x_c") == "R") * pl.col("stimd_n_z") * pl.col("ttype_n")).cast(pl.Float32).alias("SRxD"),
+                ((pl.col("x_c") == "L") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SLxdelay"),
+                ((pl.col("x_c") == "C") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SCxdelay"),
+                ((pl.col("x_c") == "R") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SRxdelay"),
+                (
+                    (((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0)) | (pl.col("offset") == 0))
+                    & (pl.col("x_c") == "L")
+                ).cast(pl.Float32).alias("stim1L"),
+                (
+                    (((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0)) | (pl.col("offset") == 0))
+                    & (pl.col("x_c") == "C")
+                ).cast(pl.Float32).alias("stim1C"),
+                (
+                    (((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0)) | (pl.col("offset") == 0))
+                    & (pl.col("x_c") == "R")
+                ).cast(pl.Float32).alias("stim1R"),
+                (
+                    (((pl.col("onset") < pl.col("timepoint_2")) & (pl.col("offset") > pl.col("timepoint_1"))) | (pl.col("offset") == 0))
+                    & (pl.col("x_c") == "L")
+                ).cast(pl.Float32).alias("stim2L"),
+                (
+                    (((pl.col("onset") < pl.col("timepoint_2")) & (pl.col("offset") > pl.col("timepoint_1"))) | (pl.col("offset") == 0))
+                    & (pl.col("x_c") == "C")
+                ).cast(pl.Float32).alias("stim2C"),
+                (
+                    (((pl.col("onset") < pl.col("timepoint_2")) & (pl.col("offset") > pl.col("timepoint_1"))) | (pl.col("offset") == 0))
+                    & (pl.col("x_c") == "R")
+                ).cast(pl.Float32).alias("stim2R"),
+                (
+                    (((pl.col("onset") < pl.col("timepoint_3")) & (pl.col("offset") > pl.col("timepoint_2"))) | (pl.col("offset") == 0))
+                    & (pl.col("x_c") == "L")
+                ).cast(pl.Float32).alias("stim3L"),
+                (
+                    (((pl.col("onset") < pl.col("timepoint_3")) & (pl.col("offset") > pl.col("timepoint_2"))) | (pl.col("offset") == 0))
+                    & (pl.col("x_c") == "C")
+                ).cast(pl.Float32).alias("stim3C"),
+                (
+                    (((pl.col("onset") < pl.col("timepoint_3")) & (pl.col("offset") > pl.col("timepoint_2"))) | (pl.col("offset") == 0))
+                    & (pl.col("x_c") == "R")
+                ).cast(pl.Float32).alias("stim3R"),
+                ((pl.col("onset") < pl.col("timepoint_4")) & (pl.col("offset") > pl.col("timepoint_3")) & (pl.col("x_c") == "L")).cast(pl.Float32).alias("stim4L"),
+                ((pl.col("onset") < pl.col("timepoint_4")) & (pl.col("offset") > pl.col("timepoint_3")) & (pl.col("x_c") == "C")).cast(pl.Float32).alias("stim4C"),
+                ((pl.col("onset") < pl.col("timepoint_4")) & (pl.col("offset") > pl.col("timepoint_3")) & (pl.col("x_c") == "R")).cast(pl.Float32).alias("stim4R"),
+                pl.col("performance").shift(1).fill_null(0).cast(pl.Float32).over(self.session_col).alias("previous_outcome"),
+                pl.col("response").shift(1).fill_null(0.0).eq(0).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).over(self.session_col).alias("A_L"),
+                pl.col("response").shift(1).fill_null(0.0).eq(1).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).over(self.session_col).alias("A_C"),
+                pl.col("response").shift(1).fill_null(0.0).eq(2).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).over(self.session_col).alias("A_R"),
+                (1 / (pl.col("timepoint_3") - pl.col("timepoint_4"))).cast(pl.Float32).alias("speed3"),
+                (1 / (pl.col("timepoint_3") - pl.col("timepoint_2"))).cast(pl.Float32).alias("speed2"),
+                (1 / (pl.col("timepoint_2") - pl.col("timepoint_1"))).cast(pl.Float32).alias("speed1"),
+            ]
+        )
+        df_sub = df_sub.with_columns(
+            [
+                pl.col("previous_outcome").ewm_mean(half_life=tau, adjust=False).over(self.session_col).alias("A_plus"),
+                (1.0 - pl.col("previous_outcome")).ewm_mean(half_life=tau, adjust=False).over(self.session_col).alias("A_minus"),
+            ]
+        )
+        return df_sub.with_columns(
+            [
+                ((pl.col(c) - pl.col(c).mean()) / pl.col(c).std()).cast(pl.Float32).alias(c)
+                for c in ["speed1", "speed2", "speed3"]
+            ]
+        )
+
     def load_subject(
         self,
         df_sub,
@@ -53,13 +160,21 @@ class MCDRAdapter(TaskAdapter):
         emission_cols: List[str] | None = None,
         transition_cols: List[str] | None = None,
     ) -> Tuple[Any, Any, Any, Dict]:
-        """Return ``(y, X, U, names)`` via :func:`build_sequence_from_df`."""
-        y, X, U, names, _ = build_sequence_from_df(
-            df_sub,
-            tau=tau,
-            emission_cols=emission_cols,
-            transition_cols=transition_cols,
-        )
+        """Return ``(y, X, U, names)`` from the MCDR feature dataframe."""
+        feature_df = self.build_feature_df(df_sub, tau=tau)
+        ecols = emission_cols if emission_cols is not None else list(_ALL_EMISSION_COLS)
+        ucols = transition_cols if transition_cols is not None else list(_ALL_TRANSITION_COLS)
+        bad_e = [c for c in ecols if c not in _ALL_EMISSION_COLS]
+        bad_u = [c for c in ucols if c not in _ALL_TRANSITION_COLS]
+        if bad_e:
+            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {_ALL_EMISSION_COLS}")
+        if bad_u:
+            raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {_ALL_TRANSITION_COLS}")
+
+        y = jnp.asarray(feature_df["response"].to_numpy().astype(np.int32))
+        X = jnp.asarray(feature_df.select(ecols).to_numpy().astype(np.float32)) if ecols else jnp.empty((len(y), 0), dtype=jnp.float32)
+        U = jnp.asarray(feature_df.select(ucols).to_numpy().astype(np.float32)) if ucols else jnp.empty((len(y), 0), dtype=jnp.float32)
+        names = {"X_cols": list(ecols), "U_cols": list(ucols)}
         return y, X, U, names
 
     # ── column defaults ─────────────────────────────────────────────────────

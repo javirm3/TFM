@@ -263,10 +263,15 @@ _PARSE_GLMHMM_ORDER = [
 ]
 
 
-def _ordered_parse_glmhmm_covariates(covariates: list[str]) -> list[str]:
+def _ordered_2afc_covariates(covariates: list[str]) -> list[str]:
     ordered = [c for c in _PARSE_GLMHMM_ORDER if c in covariates]
     ordered += [c for c in covariates if c not in ordered]
     return ordered
+
+
+def _ordered_parse_glmhmm_covariates(covariates: list[str]) -> list[str]:
+    """Backward-compatible alias for the 2AFC covariate ordering helper."""
+    return _ordered_2afc_covariates(covariates)
 
 
 def _concat_glmhmm_sessions(
@@ -276,6 +281,121 @@ def _concat_glmhmm_sessions(
     X = jnp.asarray(np.vstack(inputs).astype(np.float32))
     y = jnp.asarray(np.concatenate([np.asarray(c).reshape(-1) for c in choices]).astype(np.int32))
     return y, X
+
+
+def build_sequence_from_df_binary(
+    df_sub: pl.DataFrame,
+    emission_cols: list[str] | None = None,
+    transition_cols: list[str] | None = None,
+    session_col: str = "session",
+    trial_col: str = "trial",
+    response_col: str = "response",
+    action_choice_col: str | None = None,
+    performance_col: str = "performance",
+    stim_value_col: str = "ILD",
+    include_action_trace: bool = True,
+    tau_choice: float = 1.58,
+    tau_error: float = 2.22,
+    tau_correct: float = 0.95,
+    tau_reward: float | None = None,
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, Dict]:
+    """Build ``(y, X, U, names)`` for a binary task directly from a Polars df.
+
+    This is the dataframe-native alternative to the Alexis parser path. It
+    assumes the input already contains task-normalised columns and computes the
+    binary regressors with Polars expressions and session-local ``ewm_mean``.
+    """
+    _ecols = emission_cols if emission_cols is not None else _ALL_2AFC_EMISSION_COLS
+    _ucols = transition_cols if transition_cols is not None else _ALL_2AFC_TRANSITION_COLS
+
+    _bad_e = [c for c in _ecols if c not in _ALL_2AFC_EMISSION_COLS]
+    _bad_u = [c for c in _ucols if c not in _ALL_2AFC_TRANSITION_COLS]
+    if _bad_e:
+        raise ValueError(f"Unknown emission_cols: {_bad_e}. Available: {_ALL_2AFC_EMISSION_COLS}")
+    if _bad_u:
+        raise ValueError(f"Unknown transition_cols: {_bad_u}. Available: {_ALL_2AFC_TRANSITION_COLS}")
+
+    trace_cols = {"at_choice", "at_error", "at_correct", "reward_trace", "wsls"}
+    requested_cols = set(_ecols) | set(_ucols)
+    if not include_action_trace and requested_cols & trace_cols:
+        raise ValueError(
+            "Action-trace regressors were requested, but include_action_trace=False. "
+            f"Requested trace cols: {sorted(requested_cols & trace_cols)}"
+        )
+
+    tau_reward = tau_correct if tau_reward is None else tau_reward
+    action_choice_col = action_choice_col or response_col
+
+    df_sub = df_sub.sort([session_col, trial_col])
+
+    stim_scale = float(df_sub.select(pl.col(stim_value_col).abs().max()).item() or 0.0)
+    if stim_scale <= 0:
+        stim_scale = 1.0
+
+    choice_signed_expr = (
+        pl.when(pl.col("_action_choice") == 1)
+        .then(pl.lit(1.0))
+        .when(pl.col("_action_choice") == 0)
+        .then(pl.lit(-1.0))
+        .otherwise(pl.lit(0.0))
+        .cast(pl.Float32)
+    )
+
+    df_sub = df_sub.with_columns(
+        [
+            pl.col(response_col).cast(pl.Int32).alias("_response"),
+            pl.col(action_choice_col).cast(pl.Int32).alias("_action_choice"),
+            pl.col(performance_col).cast(pl.Float32).alias("_reward"),
+            (pl.col(stim_value_col).cast(pl.Float32) / pl.lit(stim_scale)).alias("stim_vals"),
+            pl.lit(1.0).cast(pl.Float32).alias("bias"),
+        ]
+    )
+    df_sub = df_sub.with_columns(
+        [
+            pl.col("stim_vals").abs().cast(pl.Float32).alias("stim_strength"),
+            choice_signed_expr.alias("_choice_signed"),
+            pl.col("_choice_signed").shift(1).fill_null(0.0).over(session_col).cast(pl.Float32).alias("_prev_choice_signed"),
+            (pl.col("_choice_signed") * pl.col("_reward")).shift(1).fill_null(0.0).over(session_col).cast(pl.Float32).alias("_prev_correct_signed"),
+            (pl.col("_choice_signed") * (1.0 - pl.col("_reward"))).shift(1).fill_null(0.0).over(session_col).cast(pl.Float32).alias("_prev_error_signed"),
+            pl.col("_action_choice").shift(1).fill_null(0).over(session_col).cast(pl.Float32).alias("prev_choice"),
+            pl.col("_reward").shift(1).fill_null(0.0).over(session_col).cast(pl.Float32).alias("prev_reward"),
+            pl.col("stim_vals").abs().shift(1).fill_null(0.0).over(session_col).cast(pl.Float32).alias("prev_abs_stim"),
+            pl.col("_reward").shift(1).fill_null(0.0).cum_sum().over(session_col).cast(pl.Float32).alias("_cumulative_reward_raw"),
+        ]
+    )
+    df_sub = df_sub.with_columns(
+        [
+            pl.when(pl.col("_cumulative_reward_raw").max().over(session_col) > 0)
+            .then(pl.col("_cumulative_reward_raw") / pl.col("_cumulative_reward_raw").max().over(session_col))
+            .otherwise(pl.lit(0.0))
+            .cast(pl.Float32)
+            .alias("cumulative_reward"),
+        ]
+    )
+
+    if include_action_trace:
+        df_sub = df_sub.with_columns(
+            [
+                pl.col("_prev_choice_signed").ewm_mean(half_life=tau_choice, adjust=False).over(session_col).cast(pl.Float32).alias("at_choice"),
+                pl.col("_prev_correct_signed").ewm_mean(half_life=tau_correct, adjust=False).over(session_col).cast(pl.Float32).alias("at_correct"),
+                pl.col("_prev_error_signed").ewm_mean(half_life=tau_error, adjust=False).over(session_col).cast(pl.Float32).alias("at_error"),
+                pl.col("prev_reward").ewm_mean(half_life=tau_reward, adjust=False).over(session_col).cast(pl.Float32).alias("reward_trace"),
+                pl.when(pl.col("prev_reward") > 0)
+                .then(pl.col("_prev_choice_signed"))
+                .otherwise(-pl.col("_prev_choice_signed"))
+                .cast(pl.Float32)
+                .alias("wsls"),
+            ]
+        )
+
+    y = df_sub["_response"].to_numpy().astype(np.int32)
+    X = jnp.asarray(df_sub.select(_ecols).to_numpy().astype(np.float32)) if _ecols else jnp.empty((len(y), 0), dtype=jnp.float32)
+    U = jnp.asarray(df_sub.select(_ucols).to_numpy().astype(np.float32)) if _ucols else jnp.empty((len(y), 0), dtype=jnp.float32)
+    names = {
+        "X_cols": _ordered_2afc_covariates(list(_ecols)),
+        "U_cols": _ordered_2afc_covariates(list(_ucols)),
+    }
+    return jnp.asarray(y), X, U, names
 
 
 
@@ -346,7 +466,7 @@ def build_sequence_from_df_2afc(
         X = jnp.empty((int(y.shape[0]), 0), dtype=jnp.float32)
 
     names = {
-        "X_cols": _ordered_parse_glmhmm_covariates(emission_cols),
-        "U_cols": _ordered_parse_glmhmm_covariates(transition_cols),
+        "X_cols": _ordered_2afc_covariates(emission_cols),
+        "U_cols": _ordered_2afc_covariates(transition_cols),
     }
     return y, X, U, names

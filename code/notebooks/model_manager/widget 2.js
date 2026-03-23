@@ -93,6 +93,7 @@ function render({ model, el }) {
     const is2afc           = model.get("is_2afc");
     const modelType        = model.get("model_type");
     const currentTask      = model.get("task");
+    const taskOptions      = model.get("task_options") || [];
     const mode             = model.get("ui_mode");
     const KList            = model.get("k_options");
     const currentK         = model.get("K");
@@ -112,13 +113,14 @@ function render({ model, el }) {
     let html = `
       <div class="mm-container" id="${containerId}">
         <div class="mm-header">
-          <div class="mm-task-selector">
-            <label class="mm-label inline">Task:</label>
-            <select id="inp-task" class="mm-input small">
-              <option value="MCDR" ${currentTask === "MCDR" ? "selected" : ""}>MCDR</option>
-              <option value="2AFC" ${currentTask === "2AFC" ? "selected" : ""}>2AFC</option>
-            </select>
-          </div>
+            <div class="mm-task-selector">
+              <label class="mm-label inline">Task:</label>
+              <select id="inp-task" class="mm-input small">
+                ${taskOptions.map(opt => `
+                  <option value="${opt.value}" ${currentTask === opt.value ? "selected" : ""}>${opt.label}</option>
+                `).join("")}
+              </select>
+            </div>
         </div>
         <div class="mm-tabs">
           <button class="mm-tab ${mode === 'new'  ? 'active' : ''}" data-mode="new">New Fit</button>

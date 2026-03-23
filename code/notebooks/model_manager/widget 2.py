@@ -20,7 +20,7 @@ import traitlets
 # Make sure sibling packages (paths, tasks) are importable from notebooks/
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 import paths
-from tasks import get_adapter
+from tasks import get_adapter, get_task_options
 
 # ── Regressor group registries ───────────────────────────────────────────────
 # Shape: list of {"key": str, "label": str, "members": {"L"|"C"|"R"|"N": col}}
@@ -52,6 +52,8 @@ _2AFC_EMISSION_GROUPS: list[dict] = [
     {"key": "prev_choice",   "label": "prev choice",     "members": {"N": "prev_choice"}},
     {"key": "wsls",          "label": "WSLS",            "members": {"N": "wsls"}},
 ]
+
+_BINARY_TASK_KEYS = {"2AFC", "NUO_AUDITORY"}
 
 _MCDR_TRANSITION_GROUPS: list[dict] = [
     {"key": "A_plus",  "label": "A+",         "members": {"N": "A_plus"}},
@@ -145,6 +147,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
     ui_mode    = traitlets.Unicode("new").tag(sync=True)      # "new" | "load"
     model_type = traitlets.Unicode("glmhmm").tag(sync=True)  # "glm" | "glmhmm" | "glmhmmt"
     task       = traitlets.Unicode("MCDR").tag(sync=True)
+    task_options = traitlets.List(traitlets.Dict()).tag(sync=True)
     is_2afc    = traitlets.Bool(False).tag(sync=True)
 
     existing_models      = traitlets.List(traitlets.Unicode()).tag(sync=True)
@@ -179,6 +182,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.task_options = get_task_options()
         self._update_options()
 
     # ── observers ─────────────────────────────────────────────────────────────
@@ -227,7 +231,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
         if "transition_cols" in cfg:
             self.transition_cols = cfg["transition_cols"]
         if "subjects" in cfg:
-            self.subjects = cfg["subjects"]
+            self.subjects = sorted(cfg["subjects"], key=str)
         if "tau" in cfg:
             self.tau = int(cfg["tau"])
         k = _get_K_from_config(cfg)
@@ -245,7 +249,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
             adapter = get_adapter(self.task)
             df_all  = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
             df_all  = adapter.subject_filter(df_all)
-            subjects = df_all["subject"].unique().to_list()
+            subjects = sorted(df_all["subject"].unique().to_list(), key=str)
             self.subjects  = subjects
             self.K         = 2
             self.tau       = 50
@@ -270,7 +274,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
 
     def _refresh_groups(self) -> None:
         """Rebuild emission_groups / transition_groups from current *_options traits."""
-        if self.task.upper() == "2AFC":
+        if self.task.upper() in _BINARY_TASK_KEYS:
             e_reg = _2AFC_EMISSION_GROUPS
             t_reg: list[dict] = []
         else:
@@ -330,7 +334,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
 
             df_all   = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
             df_all   = adapter.subject_filter(df_all)
-            subjects = df_all["subject"].unique().to_list()
+            subjects = sorted(df_all["subject"].unique().to_list(), key=str)
 
             self.subjects_list = subjects
             if not self.subjects:

@@ -6,8 +6,10 @@ This module is the **single source of truth** for:
   fitted GLM-HMM model.
 * :data:`_LABEL_RANK` — canonical mapping from semantic state label to integer
   rank (Engaged = 0, Disengaged variants = 1, 2, …).
-* :data:`_STATE_HEX` — palette of rank-indexed hex colours loaded from
-  ``config.toml``; every plotting function uses this for consistent colouring.
+* :data:`_STATE_HEX` — default rank-indexed hex palette loaded from
+  ``config.toml``.
+* :func:`get_state_palette` — choose a K-specific palette from
+  ``config.toml`` when one is defined, else fall back to :data:`_STATE_HEX`.
 * :func:`build_views` — factory that combines ``arrays_store`` with a
   :class:`~tasks.TaskAdapter` to produce a ``{subject: SubjectFitView}`` dict.
 
@@ -36,14 +38,19 @@ with paths.CONFIG.open("rb") as _f:
 _STATE_HEX: list[str] = _cfg.get("palettes", {}).get(
     "states_hex",
     [
-        "#1B9E77",
-        "#D95F02",
+        "#66A61E",
+        "#7f7f7f",
         "#7570B3",
         "#E7298A",
         "#66A61E",
         "#E6AB02",
     ],
 )
+
+_STATE_HEX_BY_K: dict[int, list[str]] = {
+    2: list(_cfg.get("palettes", {}).get("states_hex_k2", [])),
+    3: list(_cfg.get("palettes", {}).get("states_hex_k3", [])),
+}
 
 _LABEL_RANK: dict[str, int] = {
     "Engaged": 0,
@@ -55,6 +62,15 @@ _LABEL_RANK: dict[str, int] = {
     "Disengaged C": 3,
     **{f"Disengaged {i}": i for i in range(1, 10)},
 }
+
+
+def get_state_palette(K: Optional[int] = None) -> list[str]:
+    """Return the configured state palette for ``K`` or the default palette."""
+    if K is not None:
+        palette = _STATE_HEX_BY_K.get(int(K), [])
+        if len(palette) >= int(K):
+            return list(palette)
+    return list(_STATE_HEX)
 
 
 # ── dataclass ─────────────────────────────────────────────────────────────────
@@ -74,7 +90,7 @@ class SubjectFitView:
     K :
         Number of hidden states.
     smoothed_probs :
-        HMM posterior  \gamma(z_t = k | y_{1:T}),  shape ``(T, K)``.
+        HMM posterior  γ(z_t = k | y_{1:T}),  shape ``(T, K)``.
         **This is the canonical quantity for posterior plots.**  It is saved
         directly from ``model.smoother_multisession`` and loaded verbatim —
         never recomputed.
@@ -100,6 +116,17 @@ class SubjectFitView:
         Marginal model predictions shape ``(T, C)``.  Pre-computed during
         fitting; if absent, :func:`~glmhmmt.postprocess.build_trial_df` will
         recompute it.
+    predictive_state_probs :
+        One-step-ahead predictive state probabilities shape ``(T, K)``,
+        i.e. ``p(z_t = k | y_{1:t-1}, x_{1:t})``. Unlike ``smoothed_probs``,
+        these do not use the current choice ``y_t`` and are therefore the
+        right quantity for empirical state-conditioned choice summaries.
+    initial_probs :
+        Initial state distribution shape ``(K,)``.
+    transition_matrix :
+        Homogeneous transition matrix shape ``(K, K)`` when available.
+    transition_bias :
+        Input-driven transition bias shape ``(K, K)`` — GLM-HMM-t only.
     transition_weights :
         Input-driven transition weight tensor, shape ``(K, K, D)`` —
         GLM-HMM-t only.
@@ -119,9 +146,13 @@ class SubjectFitView:
     state_name_by_idx: dict[int, str]
     state_idx_order: list[int]
     state_rank_by_idx: dict[int, int]
+    predictive_state_probs: np.ndarray  # (T, K)
     lapse_rates: Optional[np.ndarray] = None
     # optional
     p_pred: Optional[np.ndarray] = None  # (T, C)
+    initial_probs: Optional[np.ndarray] = None  # (K,)
+    transition_matrix: Optional[np.ndarray] = None  # (K, K) or (T-1, K, K)
+    transition_bias: Optional[np.ndarray] = None  # (K, K)
     transition_weights: Optional[np.ndarray] = None  # (K, K, D)
     U: Optional[np.ndarray] = None  # (T, D)
     U_cols: list[str] = field(default_factory=list)
@@ -148,6 +179,22 @@ class SubjectFitView:
             if rank == 0:
                 return k
         return self.state_idx_order[0]
+
+    def state_conditional_probs(self) -> np.ndarray:
+        """Return per-trial emission class probabilities for every state.
+
+        Shape is ``(T, K, C)`` where entry ``[t, k, c]`` equals
+        ``P(y_t = c | z_t = k, x_t)`` evaluated on the observed design row
+        ``X[t]``. This is the trial-matched model quantity needed when
+        comparing posterior-weighted empirical summaries against model
+        predictions within a latent state.
+        """
+        logits_ce = np.einsum("kcf,tf->tkc", self.emission_weights, self.X)  # (T, K, C-1)
+        zeros = np.zeros((self.T, self.K, 1), dtype=logits_ce.dtype)
+        logits = np.concatenate([logits_ce, zeros], axis=-1)  # (T, K, C)
+        logits = logits - logits.max(axis=-1, keepdims=True)
+        exp_logits = np.exp(logits)
+        return exp_logits / exp_logits.sum(axis=-1, keepdims=True)
 
 
 # ── factory ───────────────────────────────────────────────────────────────────
@@ -210,28 +257,42 @@ def build_views(
             lbl = slbls.get(k, "")
             srank[k] = _LABEL_RANK.get(lbl, sorder.index(k) if k in sorder else k)
 
-            views[subj] = SubjectFitView(
-                subject=subj,
-                K=K,
-                smoothed_probs=np.asarray(d["smoothed_probs"]),
-                emission_weights=_W,
-                X=np.asarray(d["X"]),
-                y=np.asarray(d["y"]),
-                feat_names=feat_names,
-                state_name_by_idx={int(k): v for k, v in slbls.items()},
-                state_idx_order=[int(k) for k in sorder],
-                state_rank_by_idx={int(k): v for k, v in srank.items()},
-                lapse_rates=np.asarray(d["lapse_rates"]) if "lapse_rates" in d else None,
-                p_pred=np.asarray(d["p_pred"]) if "p_pred" in d else None,
-                transition_weights=(np.asarray(d["transition_weights"]) if "transition_weights" in d else None),
-                U=np.asarray(d["U"]) if "U" in d else None,
-                U_cols=list(d.get("U_cols", []))[
-                    : (
-                        np.asarray(d["transition_weights"]).shape[2]
-                        if "transition_weights" in d
-                        else len(list(d.get("U_cols", [])))
-                    )
-                ],
+        if "predictive_state_probs" not in d:
+            raise KeyError(
+                f"Subject {subj!r}: missing 'predictive_state_probs' in fitted arrays. "
+                "Re-run the fit/export pipeline with the updated code."
             )
+        predictive_state_probs = np.asarray(d["predictive_state_probs"])
+        if predictive_state_probs.shape != np.asarray(d["smoothed_probs"]).shape:
+            raise ValueError(
+                f"Subject {subj!r}: predictive_state_probs has shape {predictive_state_probs.shape}, "
+                f"expected {np.asarray(d['smoothed_probs']).shape}."
+            )
+        transition_weights = np.asarray(d["transition_weights"]) if "transition_weights" in d else None
+        u_cols = list(d.get("U_cols", []))
+        if transition_weights is not None:
+            u_cols = u_cols[: transition_weights.shape[2]]
+
+        views[subj] = SubjectFitView(
+            subject=subj,
+            K=K,
+            smoothed_probs=np.asarray(d["smoothed_probs"]),
+            emission_weights=_W,
+            X=np.asarray(d["X"]),
+            y=np.asarray(d["y"]),
+            feat_names=feat_names,
+            state_name_by_idx={int(k): v for k, v in slbls.items()},
+            state_idx_order=[int(k) for k in sorder],
+            state_rank_by_idx={int(k): v for k, v in srank.items()},
+            lapse_rates=np.asarray(d["lapse_rates"]) if "lapse_rates" in d else None,
+            p_pred=np.asarray(d["p_pred"]) if "p_pred" in d else None,
+            predictive_state_probs=predictive_state_probs,
+            initial_probs=np.asarray(d["initial_probs"]) if "initial_probs" in d else None,
+            transition_matrix=np.asarray(d["transition_matrix"]) if "transition_matrix" in d else None,
+            transition_bias=np.asarray(d["transition_bias"]) if "transition_bias" in d else None,
+            transition_weights=transition_weights,
+            U=np.asarray(d["U"]) if "U" in d else None,
+            U_cols=u_cols,
+        )
 
     return views

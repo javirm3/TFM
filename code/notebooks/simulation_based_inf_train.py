@@ -233,7 +233,7 @@ def _(mo, paths, pd):
         _fit_df = pd.read_csv(_file)
         fits_list.append(_fit_df)
     fits_df = pd.concat(fits_list)
-    dropdown_subj = mo.ui.dropdown(options=fits_df["subject"].unique())
+    dropdown_subj = mo.ui.dropdown(options=sorted(fits_df["subject"].unique(), key=str))
     dropdown_subj
     return dropdown_subj, fits_df
 

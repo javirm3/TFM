@@ -1,0 +1,4 @@
+interface:
+  display_name: "GLM-HMM Task Adapter"
+  short_description: "Add or update a glmhmmt task adapter"
+  default_prompt: "Use $glmhmmt-task-adapter to add or update a task adapter, its task-owned plots, and the docs for this repo."

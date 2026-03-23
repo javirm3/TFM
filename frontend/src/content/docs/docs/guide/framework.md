@@ -43,6 +43,7 @@ code/
 raw data
   -> preprocessing notebook
   -> parquet dataset
+  -> TaskAdapter.build_feature_df()
   -> TaskAdapter.load_subject()
   -> (y, X, U, names)
   -> fitting script / notebook
@@ -69,6 +70,7 @@ Put code here if it depends on task semantics:
 
 - file names and filtering rules
 - column mappings
+- feature-dataframe and design-matrix construction
 - state naming rules
 - psychometrics
 - performance plots by stimulus or condition
@@ -113,7 +115,7 @@ uv run marimo edit notebooks/glmhmmt_analysis.py
 The important boundary is:
 
 - shared model code lives in `glmhmmt`
-- task semantics live behind `TaskAdapter`
+- task semantics and design matrices live behind `TaskAdapter`
 - task-specific plots live in `tasks.plots.*`
 
 That boundary is what lets you add a new task without rewriting the package.

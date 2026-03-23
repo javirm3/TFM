@@ -126,6 +126,8 @@ def fit_subject(
         params=best_params, emissions=y, inputs=inputs_all, session_ids=session_ids)
     p_pred = model.predict_choice_probs_multisession(
         best_params, y, inputs_all, session_ids=session_ids)
+    predictive_state_probs = model.predict_state_probs_multisession(
+        best_params, y, inputs_all, session_ids=session_ids)
     T = int(y.shape[0])
 
     return {
@@ -137,6 +139,7 @@ def fit_subject(
         "lps": best_lps,
         "smoothed_probs": smoothed_probs,
         "p_pred": p_pred,
+        "predictive_state_probs": predictive_state_probs,
         "T": T,
         "names": names,
         "y": np.asarray(y),
@@ -175,6 +178,8 @@ def save_results(result: dict, out_dir: Path) -> None:
         lps=result["lps"],
         p_pred=p_pred,
         smoothed_probs=result["smoothed_probs"],
+        predictive_state_probs=result["predictive_state_probs"],
+        initial_probs=np.asarray(result["fitted_params"].initial.probs),
         emission_weights=np.asarray(result["fitted_params"].emissions.weights),
         transition_bias=np.asarray(result["fitted_params"].transitions.bias),
         transition_weights=np.asarray(
@@ -273,7 +278,7 @@ if __name__ == "__main__":
     parser.add_argument("--tau", type=float, default=50.0,
                         help="Half-life for exponential action traces.")
     parser.add_argument("--task", type=str, default="MCDR",
-                        help="Task to fit: 'MCDR' or '2AFC'.")
+                        help="Task to fit: 'MCDR', '2AFC', or 'nuo_auditory'.")
     parser.add_argument(
         "--frozen_emissions",
         type=str,

@@ -171,6 +171,9 @@ def save_results(result: dict, out_dir: Path, tau: float):
         y=result["y"],
         X=result["X"],
         smoothed_probs=np.ones((result["T"], 1)),  # K=1, prob=1 everywhere
+        predictive_state_probs=np.ones((result["T"], 1)),  # K=1 predictive state mass is also 1 everywhere
+        initial_probs=np.ones(1),
+        transition_matrix=np.ones((1, 1)),
         X_cols=result["names"]["X_cols"] if "X_cols" in result["names"] else [],
         lapse_rates=result.get("lapse_rates", np.zeros(2)),
         success=result["success"],
@@ -206,7 +209,7 @@ def generate_model_id(task, tau, emission_cols, lapse: bool = False):
         "tau": float(tau),
         "emission_cols": cols
     }
-    if task == "2AFC":
+    if get_adapter(task).num_classes == 2:
         config["lapse"] = lapse
     config_str = json.dumps(config, sort_keys=True)
     return hashlib.md5(config_str.encode()).hexdigest()[:8]
@@ -295,7 +298,7 @@ if __name__ == "__main__":
     parser.add_argument("--subjects", nargs="+", default=None)
     parser.add_argument("--out_dir", type=str, default=None)
     parser.add_argument("--tau", type=float, default=50.0) 
-    parser.add_argument("--task", type=str, default="MCDR", choices=["MCDR", "2AFC"])
+    parser.add_argument("--task", type=str, default="MCDR", choices=["MCDR", "2AFC", "nuo_auditory"])
     parser.add_argument("--num_classes", type=int, default=3)
     parser.add_argument("--model_alias", type=str, default=None)
     parser.add_argument("--lapse", action="store_true", default=False,

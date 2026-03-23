@@ -55,4 +55,5 @@ its task-owned plotting module.
 - **[Quickstart →](/docs/guide/quickstart)** — install and fit your first model
 - **[Framework guide →](/docs/guide/framework)** — understand the repository layout and data flow
 - **[Adding a task →](/docs/guide/tasks)** — add a new experimental task cleanly
+- **[Adapter + skill workflow →](/docs/guide/tasks)** — build a new task and update the reusable Codex skill in the same pass
 - **[API Reference →](/docs/api/model)** — detailed class and function docs

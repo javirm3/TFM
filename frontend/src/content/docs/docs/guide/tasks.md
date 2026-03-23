@@ -21,6 +21,7 @@ Each adapter should define:
 - `sort_col`
 - `session_col`
 - `subject_filter(df)`
+- `build_feature_df(df_sub, tau)`
 - `load_subject(df_sub, tau, emission_cols, transition_cols)`
 - `default_emission_cols()`
 - `default_transition_cols()`
@@ -43,6 +44,9 @@ class MyTaskAdapter(TaskAdapter):
 
     def subject_filter(self, df):
         return df
+
+    def build_feature_df(self, df_sub, tau=50.0):
+        ...
 
     def load_subject(self, df_sub, tau=50.0, emission_cols=None, transition_cols=None):
         ...
@@ -88,10 +92,25 @@ self-registers via the decorator.
 ## Workflow after adding the task
 
 1. preprocess raw data into a parquet dataset
-2. implement the adapter
+2. implement the task-owned feature dataframe and adapter
 3. implement the task plot module
 4. run the generic fit scripts with `--task my_task`
 5. open the generic analysis notebooks and select the new task
+
+## Install the companion skill
+
+The skill is versioned in this repository and can be installed from its GitHub
+path:
+
+- [https://github.com/javirm3/TFM/tree/main/.agents/skills/glmhmmt-task-adapter](https://github.com/javirm3/TFM/tree/main/.agents/skills/glmhmmt-task-adapter)
+
+If you are using Codex with the skill installer, install from that path and
+restart Codex so the new skill is picked up. After that, ask Codex to use
+`$glmhmmt-task-adapter` when adding a new task.
+
+This repo-hosted skill is the public version. Keep it stable and generic. Any
+personal feedback loop you use while developing new adapters should stay in
+your local Codex skills directory, not in the published installable skill.
 
 ## Design check
 

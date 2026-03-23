@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.20.4"
+__generated_with = "0.21.0"
 app = marimo.App(width="medium")
 
 
@@ -20,6 +20,7 @@ def _():
     from scripts.fit_glm import main as fit_main, generate_model_id
     from tasks import get_adapter
     from widgets import ModelManagerWidget
+    from figure_save_utils import make_plot_saver
     from coefficient_editor_widget import CoefficientEditorWidget
     from coefficient_editor_utils import (
         apply_state_tweak_to_trial_df,
@@ -37,6 +38,7 @@ def _():
         fit_main,
         generate_model_id,
         get_adapter,
+        make_plot_saver,
         mo,
         np,
         paths,
@@ -47,35 +49,21 @@ def _():
 
 
 @app.cell
-def _(mo):
-    ui_task = mo.ui.dropdown(
-        options=["2AFC", "MCDR"],
-        value="MCDR",
-        label="Task:",
-    )
-    ui_task
-    return (ui_task,)
-
-
-@app.cell
-def _(get_adapter, paths, pl, ui_task):
-    adapter = get_adapter(ui_task.value)
+def _(get_adapter, paths, pl, ui_model_manager):
+    task_name = ui_model_manager.value.get("task", "MCDR")
+    adapter = get_adapter(task_name)
     df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
     df_all = adapter.subject_filter(df_all)
     plots = adapter.get_plots()
-    return adapter, df_all, plots
+    return adapter, df_all, plots, task_name
 
 
 @app.cell
-def _(ModelManagerWidget, df_all, mo, ui_task):
-
-    _subjects = [str(s) for s in df_all["subject"].unique().to_list()]
-
+def _(ModelManagerWidget, mo):
     mm_widget = ModelManagerWidget(
         model_type="glm",
-        task=ui_task.value,
-        subjects=_subjects,
-        tau=5,
+        task="MCDR",
+        tau=50,
         lapse=False,
         lapse_max=0.2,
     )
@@ -84,8 +72,22 @@ def _(ModelManagerWidget, df_all, mo, ui_task):
 
 
 @app.cell
-def _(df_all, pl, plt, sns):
+def _(df_all, mo, pl, plt, sns):
     import pandas as pd
+
+    _required_cols = {
+        "ttype_n",
+        "stim_d",
+        "timepoint_2",
+        "timepoint_3",
+        "stimd_n",
+        "onset",
+        "performance",
+    }
+    mo.stop(
+        not _required_cols.issubset(set(df_all.columns)),
+        mo.md("Task-specific MCDR onset diagnostic is unavailable for this task."),
+    )
 
     df_plot = (
         df_all.filter(pl.col("ttype_n") == 1)
@@ -134,14 +136,13 @@ def _(df_all, pl, plt, sns):
 
 
 @app.cell
-def _(adapter, ui_model_manager, ui_task):
+def _(adapter, ui_model_manager):
     class _V:
         def __init__(self, value):
             self.value = value
 
     _val = ui_model_manager.value
     is_2afc = adapter.num_classes == 2
-    task_name = ui_task.value
 
     ui_existing = _V(None if _val.get("existing_model") in ("", "__default__") else _val.get("existing_model"))
     ui_alias = _V(_val.get("alias", ""))
@@ -152,7 +153,6 @@ def _(adapter, ui_model_manager, ui_task):
     ui_emission_cols = _V(_val.get("emission_cols", []))
     return (
         is_2afc,
-        task_name,
         ui_alias,
         ui_emission_cols,
         ui_existing,
@@ -182,17 +182,18 @@ def _(
     ])
     return (current_hash,)
 
+
 @app.cell
 def _(
     fit_main,
     mo,
+    task_name,
     ui_alias,
     ui_emission_cols,
     ui_lapse,
     ui_lapse_max,
     ui_model_manager,
     ui_subjects,
-    ui_task,
     ui_tau,
 ):
     _clicks = ui_model_manager.value.get("run_fit_clicks", 0)
@@ -204,7 +205,7 @@ def _(
             out_dir=None,
             tau=ui_tau.value,
             emission_cols=ui_emission_cols.value,
-            task=ui_task.value,
+            task=task_name,
             model_alias=ui_alias.value if ui_alias.value else None,
             lapse=ui_lapse.value,
             lapse_max=ui_lapse_max.value,
@@ -223,11 +224,11 @@ def _(
     np,
     paths,
     pl,
+    task_name,
     ui_alias,
     ui_emission_cols,
     ui_existing,
     ui_subjects,
-    ui_task,
     ui_tau,
 ):
     if ui_existing.value:
@@ -237,10 +238,10 @@ def _(
     else:
         selected_model_id = current_hash 
 
-    OUT = paths.RESULTS / "fits" / ui_task.value / "glm" / selected_model_id
+    OUT = paths.RESULTS / "fits" / task_name / "glm" / selected_model_id
 
     # Feature names from adapter (uniform for both tasks)
-    _df_sel = df_all.filter(pl.col("subject").is_in(selected))
+    _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value))
     if len(_df_sel) > 0:
         _df_sel = _df_sel.sort(adapter.sort_col)
         _, _, _, names = adapter.load_subject(
@@ -272,7 +273,19 @@ def _(
             arrays_store[_subj] = _d
 
     mo.md(f"Loaded {len(arrays_store)} subjects from `{selected_model_id}`")
-    return (arrays_store,)
+    return arrays_store, selected_model_id
+
+
+@app.cell
+def _(make_plot_saver, mo, paths, selected_model_id, task_name):
+    save_plot = make_plot_saver(
+        mo,
+        results_dir=paths.RESULTS,
+        config_path=paths.CONFIG,
+        task_name=task_name,
+        model_id=selected_model_id,
+    )
+    return (save_plot,)
 
 
 @app.cell
@@ -287,7 +300,7 @@ def _(adapter, arrays_store, mo, ui_subjects):
 
     state_labels = {s: v.state_name_by_idx for s, v in views.items()}
     state_order  = {s: v.state_idx_order   for s, v in views.items()}
-    return K, build_emission_weights_df, build_trial_df, views
+    return K, build_emission_weights_df, build_trial_df, build_views, views
 
 
 @app.cell
@@ -318,16 +331,14 @@ def _(
     _sort_col = adapter.sort_col
     _ses_col  = adapter.session_col
     _bcols    = adapter.behavioral_cols
-    print(_bcols["stimulus"])
     _trial_frames = []
     for _subj, _view in views.items():
         _df_sub = (
             df_all
             .filter(pl.col("subject") == _subj)
             .sort(_sort_col)
-            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
+            # .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
         )
-        print(_df_sub.columns)
         if _df_sub.height != _view.T:
             print(f"⚠️  {_subj}: row mismatch ({_df_sub.height} vs {_view.T}), skipping")
             continue
@@ -359,49 +370,7 @@ def _(K, arrays_store, mo, paths, plots, ui_subjects, views):
 
 
 @app.cell
-def _(arrays_store):
-    arrays_store
-    return
-
-
-@app.cell
-def _(mo):
-    ui_psychometric_background = mo.ui.radio(
-        options={
-            "Data traces": "data",
-            "Model curves": "model",
-            "None": "none",
-        },
-        value="data",
-        inline=False,
-        label="Psychometric background",
-    )
-    ui_psychometric_background
-    return (ui_psychometric_background,)
-
-
-@app.cell
-def _(is_2afc, mo, views):
-    _feature_names = []
-    if is_2afc and views:
-        for _view in views.values():
-            for _feat in list(getattr(_view, "feat_names", []) or []):
-                if _feat not in _feature_names:
-                    _feature_names.append(_feat)
-    if not _feature_names:
-        _feature_names = ["at_choice"]
-    _default_feature = "at_choice" if "at_choice" in _feature_names else _feature_names[0]
-    ui_psychometric_regressor = mo.ui.dropdown(
-        options={_feat.replace("_", " ").title(): _feat for _feat in _feature_names},
-        value=_default_feature,
-        label="Regressor",
-    )
-    ui_psychometric_regressor
-    return (ui_psychometric_regressor,)
-
-
-@app.cell
-def _(K, is_2afc, mo, pl, plots, trial_df, ui_psychometric_background, ui_psychometric_regressor, ui_subjects, views):
+def _(is_2afc, mo, pl, plots, save_plot, trial_df, ui_subjects, views):
     _selected = [s for s in ui_subjects.value if s in views]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
@@ -414,42 +383,34 @@ def _(K, is_2afc, mo, pl, plots, trial_df, ui_psychometric_background, ui_psycho
     _perf_kwargs = {"views": _views_sel} if is_2afc else {}
     _fig_all, _ = plots.plot_categorical_performance_all(
         _plot_df_all,
-        f"glmhmm K={K}",
-        background_style=ui_psychometric_background.value,
+        "glm",
+        # background_style=ui_psychometric_background.value,
         **_perf_kwargs,
     )
     _plot_df_state = plots.prepare_predictions_df(_trial_df_sel)
     _fig_state, _ = plots.plot_categorical_performance_by_state(
         df=_plot_df_state,
         views=_views_sel,
-        model_name=f"glmhmm K={K} — per state",
-        background_style=ui_psychometric_background.value,
+        model_name="glm — per state",
+        # background_style=ui_psychometric_background.value,
     )
-    _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
-    if is_2afc and _reg_plot_fn is not None:
-        _fig_reg_state, _ = _reg_plot_fn(
-            df=_plot_df_state,
-            views=_views_sel,
-            model_name=f"glmhmm K={K}",
-            feature_col=ui_psychometric_regressor.value,
-            background_style=ui_psychometric_background.value,
-        )
-        _reg_section = mo.vstack(
-            [
-                mo.hstack([mo.md("### Per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
-                _fig_reg_state,
-            ],
-            align="center",
-        )
-    else:
-        _reg_section = mo.md("This task does not expose a regressor psychometric plot.")
     mo.vstack(
         [
             mo.md("### Categorical plots for accuracy"),
-            mo.hstack([mo.vstack([_fig_all], align="center"), mo.vstack([ui_psychometric_background], align="center")], justify="space-between", align="center", widths=[4,1]),
-            mo.md("### Per-state categorical performance"),
-            _fig_state,
-            _reg_section,
+            mo.hstack(
+                [
+                    mo.vstack([_fig_all], align="center"),
+                    mo.vstack(
+                        [
+                            save_plot(_fig_all, "overall psychometric", stem="categorical_overall"),
+                        ],
+                        align="start",
+                    ),
+                ],
+                justify="space-between",
+                align="center",
+                widths=[4, 1],
+            ),
         ],
         align="center",
     )
@@ -458,7 +419,7 @@ def _(K, is_2afc, mo, pl, plots, trial_df, ui_psychometric_background, ui_psycho
 
 @app.cell
 def _(editor_views, mo):
-    _subjects = list(editor_views.keys())
+    subjects = list(editor_views.keys())
     mo.stop(not _subjects, mo.md("No fitted subjects available for coefficient editing."))
     ui_editor_subject = mo.ui.dropdown(
         options=_subjects,
@@ -486,10 +447,7 @@ def _(editor_views, mo, ui_editor_subject):
 
 
 @app.cell
-def _(
-    adapter,
-    mo,
-):
+def _(adapter, mo):
     if adapter.num_classes != 2:
         ui_editor_side = None
     else:
@@ -505,8 +463,8 @@ def _(
 
 @app.cell
 def _(
-    adapter,
     CoefficientEditorWidget,
+    adapter,
     build_editor_payload,
     editor_views,
     mo,
@@ -576,7 +534,6 @@ def _(
     coef_editor_stored_reference_class_idx = _payload["stored_reference_class_idx"]
     return (
         coef_editor,
-        coef_editor_panel,
         coef_editor_explicit_class_indices,
         coef_editor_reference_class_idx,
         coef_editor_stored_class_indices,
@@ -630,9 +587,9 @@ def _(
     mo,
     np,
     plots,
-    ui_psychometric_background,
-    ui_psychometric_regressor,
+    save_plot,
     ui_editor_subject,
+    ui_psychometric_background,
 ):
     _subj = ui_editor_subject.value
     _view = editor_view
@@ -672,24 +629,6 @@ def _(
         model_name=f"{_title} — per state",
         background_style=ui_psychometric_background.value,
     )
-    _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
-    if _reg_plot_fn is None:
-        _reg_section = mo.md("This task does not expose a regressor psychometric plot.")
-    else:
-        _fig_reg_state_tweaked, _ = _reg_plot_fn(
-            df=_plot_df_tweaked,
-            views={_subj: _view_tweaked},
-            model_name=_title,
-            feature_col=ui_psychometric_regressor.value,
-            background_style=ui_psychometric_background.value,
-        )
-        _reg_section = mo.vstack(
-            [
-                mo.hstack([mo.md("### Tweaked per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
-                _fig_reg_state_tweaked,
-            ],
-            align="center",
-        )
     _side_plot_fn = getattr(plots, "plot_categorical_strat_by_side", None)
     if _side_plot_fn is None:
         _side_section = mo.md("This task does not expose a side-stratified categorical plot.")
@@ -709,15 +648,45 @@ def _(
     mo.vstack(
         [
             mo.md("### Tweaked categorical plots"),
-            mo.hstack([mo.vstack([_fig_all_tweaked], align="center"), mo.vstack([ui_psychometric_background], align="center")], justify="space-between", align="center", widths=[4,1]),
+            mo.hstack(
+                [
+                    mo.vstack([_fig_all_tweaked], align="center"),
+                    mo.vstack(
+                        [
+                            ui_psychometric_background,
+                            save_plot(
+                                _fig_all_tweaked,
+                                "tweaked overall psychometric",
+                                stem="tweaked_categorical_overall",
+                            ),
+                        ],
+                        align="start",
+                    ),
+                ],
+                justify="space-between",
+                align="center",
+                widths=[4,1],
+            ),
             mo.md("### Tweaked per-state categorical performance"),
-            _fig_state_tweaked,
-            _reg_section,
+            mo.hstack(
+                [
+                    mo.vstack([_fig_state_tweaked], align="center"),
+                    save_plot(
+                        _fig_state_tweaked,
+                        "tweaked per-state psychometric",
+                        stem="tweaked_categorical_by_state",
+                    ),
+                ],
+                justify="space-between",
+                align="center",
+                widths=[4, 1],
+            ),
             _side_section,
         ],
         align="center",
     )
     return
+
 
 if __name__ == "__main__":
     app.run()

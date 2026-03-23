@@ -640,11 +640,13 @@ class SoftmaxGLMHMM(HMM):
         self._m_step_jit = jit(self.m_step)
         self._smoother_jit = jit(self.smoother)
         self._predict_jit = jit(self.predict_choice_probs)
+        self._predict_state_jit = jit(self.predict_state_probs)
 
         # Batched (vmap) versions used by the multisession helpers.
         self._batched_e_step_jit = jit(jax.vmap(self.e_step, in_axes=(None, 0, 0)))
         self._batched_smoother_jit = jit(jax.vmap(self.smoother, in_axes=(None, 0, 0)))
         self._batched_predict_jit = jit(jax.vmap(self.predict_choice_probs, in_axes=(None, 0, 0)))
+        self._batched_predict_state_jit = jit(jax.vmap(self.predict_state_probs, in_axes=(None, 0, 0)))
 
     @property
     def inputs_shape(self) -> Tuple[int, ...]:
@@ -727,6 +729,32 @@ class SoftmaxGLMHMM(HMM):
         pred_z = jnp.vstack([pi, jnp.einsum("tk,tkj->tj", alpha[:-1], A)])
 
         return jnp.einsum("tk,tkc->tc", pred_z, p_y_given_z)
+
+    def predict_state_probs(self, params, emissions, inputs):
+        """Compute one-step-ahead predictive state probabilities.
+
+        Returns ``p(z_t = k | y_{1:t-1}, x_{1:t})`` for every timestep.
+
+        Args:
+            params: Fitted model parameters (`ParamsSoftmaxGLMHMM`).
+            emissions: Integer array of shape `(T,)`.
+            inputs: Float array of shape `(T, D)`.
+
+        Returns:
+            Float array of shape `(T, K)` with one-step-ahead predictive
+            state probabilities.
+        """
+        filt = self.filter(params=params, emissions=emissions, inputs=inputs)
+        alpha = filt.filtered_probs
+
+        T, K = alpha.shape
+        A = self.transition_component._compute_transition_matrices(params.transitions, inputs)  # (T-1, K, K)
+
+        if A.ndim == 2:  # homogeneous transitions
+            A = jnp.broadcast_to(A[None, :, :], (T - 1, K, K))
+
+        pi = params.initial.probs  # (K,)
+        return jnp.vstack([pi, jnp.einsum("tk,tkj->tj", alpha[:-1], A)])
 
     def e_step(self, params, emissions, inputs=None):
         """Run the E-step with padding-sentinel masking.
@@ -928,4 +956,22 @@ class SoftmaxGLMHMM(HMM):
         sessions = self._split_by_session(emissions, inputs, session_ids)
         e_pad, i_pad, lengths = self._pad_sessions(sessions)
         probs_batch = np.asarray(self._batched_predict_jit(params, e_pad, i_pad))  # (S, T_max, C)
+        return np.concatenate([probs_batch[i, :T_s] for i, T_s in enumerate(lengths)], axis=0)
+
+    def predict_state_probs_multisession(self, params, emissions, inputs, session_ids):
+        """Compute one-step-ahead predictive state probabilities for all sessions.
+
+        Args:
+            params: Fitted model parameters (`ParamsSoftmaxGLMHMM`).
+            emissions: Integer array of shape `(T_total,)`.
+            inputs: Float array of shape `(T_total, D)`.
+            session_ids: Array of shape `(T_total,)`.
+
+        Returns:
+            Float array of shape `(T_total, K)` with one-step-ahead predictive
+            state probabilities.
+        """
+        sessions = self._split_by_session(emissions, inputs, session_ids)
+        e_pad, i_pad, lengths = self._pad_sessions(sessions)
+        probs_batch = np.asarray(self._batched_predict_state_jit(params, e_pad, i_pad))  # (S, T_max, K)
         return np.concatenate([probs_batch[i, :T_s] for i, T_s in enumerate(lengths)], axis=0)
