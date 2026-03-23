@@ -90,7 +90,13 @@ function renderFrozenTable(numStates, selectedFeatures, frozenEmissions) {
 
   const frozen = frozenEmissions || {};
   const head = selectedFeatures
-    .map((feature) => `<th class="mm-freeze-th">${feature}</th>`)
+    .map(
+      (feature) => `
+        <th class="mm-freeze-th" title="${feature}">
+          <span class="mm-freeze-head-text">${feature}</span>
+        </th>
+      `
+    )
     .join("");
 
   const rows = Array.from({ length: numStates }, (_, stateIdx) => {

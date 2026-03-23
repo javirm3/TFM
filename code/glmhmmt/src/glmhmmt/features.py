@@ -232,14 +232,24 @@ _ALL_2AFC_EMISSION_COLS: list[str] = [
     "at_choice",  # EWMA of signed choice history
     "at_error",   # EWMA of error-weighted signed choice
     "at_correct", # EWMA of correct-weighted signed choice
+    "reward_trace",
     "prev_choice",# previous choice
     "wsls",       # win-stay-lose-switch
+    "prev_reward",
+    "cumulative_reward",
+    "prev_abs_stim",
 ]
+_AVAILABLE_2AFC_EMISSION_COLS: list[str] = list(_ALL_2AFC_EMISSION_COLS)
 _ALL_2AFC_TRANSITION_COLS: list[str] = [
     "at_choice",  # EWMA of signed choice history
     "at_correct", # EWMA of correct-weighted signed choice
     "at_error",   # EWMA of error-weighted signed choice
+    "reward_trace",  # EWMA of reward history (unsigned Hit)
+    "prev_abs_stim",
+    "prev_reward",
+    "cumulative_reward",
 ]
+_AVAILABLE_2AFC_TRANSITION_COLS: list[str] = list(_ALL_2AFC_TRANSITION_COLS)
 
 # Frame-level stimulus columns (sf_0 … sf_N) are validated separately
 _SF_COL_PREFIX = "sf_"
@@ -247,8 +257,9 @@ _SF_COL_PREFIX = "sf_"
 _PARSE_GLMHMM_ORDER = [
     "stim_vals", "stim_strength", "net_ild",
     "bias", "session_index",
-    "at_choice", "at_error", "at_correct",
+    "at_choice", "at_error", "at_correct", "reward_trace",
     "prev_choice", "wsls",
+    "prev_reward", "cumulative_reward", "prev_abs_stim",
 ]
 
 

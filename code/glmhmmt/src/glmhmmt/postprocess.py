@@ -148,6 +148,18 @@ def build_trial_df(
             ]
         )
 
+    # ── add emission-feature columns from the fitted design matrix ───────────
+    # This keeps trial_df aligned with the exact regressors used to build X,
+    # so downstream plotting can access columns such as `at_choice`.
+    X_arr = np.asarray(view.X, dtype=np.float64)
+    feature_cols = []
+    for fi, fname in enumerate(list(view.feat_names or [])):
+        if fi >= X_arr.shape[1] or fname in df_out.columns:
+            continue
+        feature_cols.append(pl.Series(fname, X_arr[:, fi]))
+    if feature_cols:
+        df_out = df_out.with_columns(feature_cols)
+
     # ── p_state_k  — HMM posterior, direct copy (NEVER recomputed) ───────────
     posterior_series = [pl.Series(f"p_state_{k}", view.smoothed_probs[:, k].astype(np.float64)) for k in range(view.K)]
     # ── MAP state assignment ───────────────────────────────────────────────────

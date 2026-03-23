@@ -892,13 +892,20 @@ class CoefTweakerWidget(anywidget.AnyWidget):
             if not self.subjects:
                 self.subjects = subjects
                 
-            ecols = adapter.default_emission_cols() + adapter.sf_cols(df_all) if self.is_2afc else adapter.default_emission_cols()
-            self.emission_cols_options = ecols
+            available_ecols = (
+                adapter.available_emission_cols() + adapter.sf_cols(df_all)
+                if self.is_2afc else adapter.available_emission_cols()
+            )
+            default_ecols = (
+                adapter.default_emission_cols() + adapter.sf_cols(df_all)
+                if self.is_2afc else adapter.default_emission_cols()
+            )
+            self.emission_cols_options = available_ecols
             if not self.emission_cols:
-                self.emission_cols = ecols[:10] if self.model_type == 'glm' else ecols
+                self.emission_cols = default_ecols[:10] if self.model_type == 'glm' else default_ecols
                 
             tcols = adapter.default_transition_cols()
-            self.transition_cols_options = tcols
+            self.transition_cols_options = adapter.available_transition_cols()
             if not self.transition_cols:
                 self.transition_cols = tcols
                 

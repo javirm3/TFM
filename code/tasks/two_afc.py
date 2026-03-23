@@ -13,6 +13,8 @@ from glmhmmt.features import (
     build_sequence_from_df_2afc,
     _ALL_2AFC_EMISSION_COLS,
     _ALL_2AFC_TRANSITION_COLS,
+    _AVAILABLE_2AFC_EMISSION_COLS,
+    _AVAILABLE_2AFC_TRANSITION_COLS,
     _SF_COL_PREFIX,
 )
 
@@ -76,6 +78,12 @@ class TwoAFCAdapter(TaskAdapter):
 
     def default_transition_cols(self) -> List[str]:
         return list(_ALL_2AFC_TRANSITION_COLS)
+
+    def available_emission_cols(self) -> List[str]:
+        return list(_AVAILABLE_2AFC_EMISSION_COLS)
+
+    def available_transition_cols(self) -> List[str]:
+        return list(_AVAILABLE_2AFC_TRANSITION_COLS)
 
     def sf_cols(self, df: pl.DataFrame) -> List[str]:
         """Return any stimulus-frame (sf_*) columns present in *df*."""

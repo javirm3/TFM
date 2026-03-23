@@ -9,3 +9,7 @@
 
 *__pycache__/
 *indre-notebook
+code/nuo task/*
+!code/nuo task/lecilab-behavior-analysis-main/
+code/nuo task/lecilab-behavior-analysis-main/*
+!code/nuo task/lecilab-behavior-analysis-main/preprocessing.py

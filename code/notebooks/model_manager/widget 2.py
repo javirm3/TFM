@@ -48,6 +48,7 @@ _2AFC_EMISSION_GROUPS: list[dict] = [
     {"key": "at_choice",     "label": "action (choice)", "members": {"N": "at_choice"}},
     {"key": "at_error",      "label": "action (error)",  "members": {"N": "at_error"}},
     {"key": "at_correct",    "label": "action (correct)","members": {"N": "at_correct"}},
+    {"key": "reward_trace",  "label": "reward trace",    "members": {"N": "reward_trace"}},
     {"key": "prev_choice",   "label": "prev choice",     "members": {"N": "prev_choice"}},
     {"key": "wsls",          "label": "WSLS",            "members": {"N": "wsls"}},
 ]
@@ -251,11 +252,17 @@ class ModelManagerWidget(anywidget.AnyWidget):
             self.lapse     = False
             self.lapse_max = 0.2
             is_2afc = adapter.num_classes == 2
-            ecols = (
+            available_ecols = (
+                adapter.available_emission_cols() + adapter.sf_cols(df_all)
+                if is_2afc else adapter.available_emission_cols()
+            )
+            default_ecols = (
                 adapter.default_emission_cols() + adapter.sf_cols(df_all)
                 if is_2afc else adapter.default_emission_cols()
             )
-            self.emission_cols  = ecols[:10] if self.model_type == "glm" else ecols
+            self.emission_cols_options = available_ecols
+            self.emission_cols = default_ecols[:10] if self.model_type == "glm" else default_ecols
+            self.transition_cols_options = adapter.available_transition_cols()
             self.transition_cols = adapter.default_transition_cols()
             self._refresh_groups()
         except Exception as e:
@@ -329,20 +336,24 @@ class ModelManagerWidget(anywidget.AnyWidget):
             if not self.subjects:
                 self.subjects = subjects
 
-            ecols = (
+            available_ecols = (
+                adapter.available_emission_cols() + adapter.sf_cols(df_all)
+                if self.is_2afc else adapter.available_emission_cols()
+            )
+            default_ecols = (
                 adapter.default_emission_cols() + adapter.sf_cols(df_all)
                 if self.is_2afc else adapter.default_emission_cols()
             )
-            self.emission_cols_options = ecols
+            self.emission_cols_options = available_ecols
             if not self.emission_cols:
-                self.emission_cols = ecols[:10] if self.model_type == "glm" else ecols
+                self.emission_cols = default_ecols[:10] if self.model_type == "glm" else default_ecols
 
             tcols = adapter.default_transition_cols()
-            self.transition_cols_options = tcols
+            self.transition_cols_options = adapter.available_transition_cols()
             if not self.transition_cols:
                 self.transition_cols = tcols
 
-            default_ecols = ecols[:10] if self.model_type == "glm" else ecols
+            default_ecols = default_ecols[:10] if self.model_type == "glm" else default_ecols
             default_info = {
                 "id":         "__default__",
                 "name":       "Default",

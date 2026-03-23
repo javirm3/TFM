@@ -322,13 +322,15 @@
     overflow-x: auto;
     border: 2px solid #e5e7eb;
     border-radius: 8px;
+    max-width: 100%;
 }
 
 .mm-freeze-table {
     width: 100%;
-    min-width: max-content;
+    min-width: 0;
     border-collapse: collapse;
     font-size: 13px;
+    table-layout: fixed;
 }
 
 .mm-freeze-table thead {
@@ -345,7 +347,9 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: #374151;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .mm-freeze-row:hover {
@@ -357,16 +361,24 @@
     padding: 8px 10px;
     border-bottom: 1px solid #e5e7eb;
     vertical-align: middle;
+    min-width: 0;
 }
 
 .mm-freeze-state {
     font-weight: 700;
     white-space: nowrap;
     color: #374151;
+    width: 112px;
+}
+
+.mm-freeze-head-text {
+    display: block;
+    line-height: 1.35;
 }
 
 .mm-freeze-input {
-    width: 96px;
+    width: 100%;
+    min-width: 0;
     padding: 6px 8px;
     border-radius: 6px;
     border: 1px solid #d1d5db;

@@ -188,18 +188,22 @@ def get_experiment(experiment=None, path_session='glue_sessions'):
 
     return experiment, path_experiment
 
-def get_action_trace(df, max_trial_lag=10, tau_choice=1.58, tau_error=2.22, tau_correct=0.95):
+def get_action_trace(df, max_trial_lag=10, tau_choice=1.58, tau_error=2.22, tau_correct=0.95, tau_reward=None):
     """
-    Computes the action trace for each trial in the DataFrame. The action trace is an exponentially weighted sum of past
-    choices, where more recent choices have a greater influence. The weights decay exponentially with a time constant
-    tau. Output is normalized between -1 and +1.
+    Compute exponentially weighted history traces for each trial.
+    Signed action traces are normalized between -1 and +1. ``reward_trace`` is
+    the exponentially weighted sum of past rewards (``Hit``) and is
+    independent of choice side.
     :param df: DataFrame containing the data with a column of interest (0=left; 1=right)
     :param max_trial_lag: Number of past trials to consider
     :param tau_choice: Decay constant for choice action trace. Fitted from data (mean across subjects)
     :param tau_error: Decay constant for error action trace. Fitted from data (mean across subjects)
     :param tau_correct: Decay constant for correct action trace. Fitted from data (mean across subjects)
-    :return: List of action trace values for each trial for choices, errors and correct trials
+    :param tau_reward: Decay constant for reward trace. Defaults to tau_correct
+    :return: Lists of trace values for choices, errors, correct trials and rewards
     """
+    if tau_reward is None:
+        tau_reward = tau_correct
 
     lags = np.arange(1, max_trial_lag + 1)  # Lags from 1 to k
 
@@ -207,36 +211,43 @@ def get_action_trace(df, max_trial_lag=10, tau_choice=1.58, tau_error=2.22, tau_
     weights_choice = np.exp(-lags / tau_choice)
     weights_error = np.exp(-lags / tau_error)
     weights_correct = np.exp(-lags / tau_correct)
+    weights_reward = np.exp(-lags / tau_reward)
 
     # Fixed normalizers
     Z_choice = np.sum(weights_choice)
     Z_error = np.sum(weights_error)
     Z_correct = np.sum(weights_correct)
+    Z_reward = np.sum(weights_reward)
 
     # Precompute signed choice
     signed_choice = 2 * df['Choice'].to_numpy() - 1  # Map 0→-1, 1→+1
     r_minus = signed_choice * df['Punish'].to_numpy()
     r_plus = signed_choice * df['Hit'].to_numpy()
+    reward = df['Hit'].to_numpy()
 
     at_choice = []  # Action trace for choices
     at_error = []  # Action trace for error choices
     at_correct = []  # Action trace for correct choices
+    reward_trace = []  # Reward trace for correct outcomes, independent of side
 
     for t in range(len(df)):
         past_choice = signed_choice[max(0, t - max_trial_lag):t]
         past_rminus = r_minus[max(0, t - max_trial_lag):t]
         past_rplus = r_plus[max(0, t - max_trial_lag):t]
+        past_reward = reward[max(0, t - max_trial_lag):t]
 
         # Slice the weights to match available history and reverse
         w_choice = weights_choice[:len(past_choice)][::-1]
         w_error = weights_error[:len(past_rminus)][::-1]
         w_correct = weights_correct[:len(past_rplus)][::-1]
+        w_reward = weights_reward[:len(past_reward)][::-1]
 
         at_choice.append(np.sum(past_choice * w_choice) / Z_choice)
         at_error.append(np.sum(past_rminus * w_error) / Z_error)
         at_correct.append(np.sum(past_rplus * w_correct) / Z_correct)
+        reward_trace.append(np.sum(past_reward * w_reward) / Z_reward)
 
-    return at_choice, at_error, at_correct
+    return at_choice, at_error, at_correct, reward_trace
 
 def make_session_index_dm(df, column='Date'):
     """
@@ -336,16 +347,23 @@ def parse_glmhmm(df, covariates=None):
         'stim_vals',
         'stim_strength',
         'net_ild',
-        'action_trace',
-        'action_trace_error',
-        'action_trace_correct',
+        'at_choice',
+        'at_error',
+        'at_correct',
+        'reward_trace',
         'bias',
-        'session_index'
+        'session_index',
+        'prev_choice',
+        'wsls',
+        'prev_reward',
+        'cumulative_reward',
+        'prev_abs_stim'
     :return: inputs, choices
     """
 
     accepted_covariates = ['stim_vals', 'stim_strength', 'net_ild', 'at_choice', 'at_error', 'at_correct', 'bias',
-                           'session_index', 'prev_choice', 'wsls']
+                           'session_index', 'prev_choice', 'wsls', 'reward_trace', 'prev_reward',
+                           'cumulative_reward', 'prev_abs_stim']
     if covariates is None:
         covariates = ['stim_vals', 'bias', 'at_choice']  # Default model
     else:
@@ -393,18 +411,36 @@ def parse_glmhmm(df, covariates=None):
             dm_session_index_sess = dm_session_index.iloc[df_session.index.values, :]
             session_cols.append(dm_session_index_sess)
 
-        if any(x in covariates for x in ['at_choice', 'at_error', 'at_correct']):
-            at_choice, at_error, at_correct = get_action_trace(df_session)
+        if any(x in covariates for x in ['at_choice', 'at_error', 'at_correct', 'reward_trace']):
+            at_choice, at_error, at_correct, reward_trace = get_action_trace(df_session)
             if 'at_choice' in covariates:
                 session_cols.append(np.array(at_choice))
             if 'at_error' in covariates:
                 session_cols.append(np.array(at_error))
             if 'at_correct' in covariates:
                 session_cols.append(np.array(at_correct))
+            if 'reward_trace' in covariates:
+                session_cols.append(np.array(reward_trace))
 
         if 'prev_choice' in covariates:
             prev_choice = df_session.Choice.shift(1).fillna(0).values
             session_cols.append(prev_choice)
+
+        if 'prev_reward' in covariates:
+            prev_reward = df_session.Hit.shift(1).fillna(0).values
+            session_cols.append(prev_reward)
+
+        if 'cumulative_reward' in covariates:
+            cumulative_reward = df_session.Hit.cumsum().shift(1).fillna(0).values
+            max_cumulative_reward = np.max(cumulative_reward)
+            if max_cumulative_reward > 0:
+                cumulative_reward = cumulative_reward / max_cumulative_reward
+            session_cols.append(cumulative_reward)
+
+        if 'prev_abs_stim' in covariates:
+            prev_abs_stim = df_session.ILD.abs().shift(1).fillna(0).values
+            prev_abs_stim = prev_abs_stim / abs(df.ILD).max()  # Normalize to [0, 1]
+            session_cols.append(prev_abs_stim)
 
         if 'wsls' in covariates:
             wsls = df_session.Side.shift(1).fillna(0).replace({0: -1, 1: 1}).values

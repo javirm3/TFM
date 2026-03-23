@@ -61,6 +61,14 @@ class TaskAdapter(ABC):
     def default_transition_cols(self) -> List[str]:
         """Ordered list of transition regressor names for UI initialisation."""
 
+    def available_emission_cols(self) -> List[str]:
+        """Ordered list of selectable emission regressors."""
+        return self.default_emission_cols()
+
+    def available_transition_cols(self) -> List[str]:
+        """Ordered list of selectable transition regressors."""
+        return self.default_transition_cols()
+
     # ── plot module ─────────────────────────────────────────────────────────
 
     @abstractmethod

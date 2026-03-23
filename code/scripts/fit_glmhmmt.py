@@ -115,6 +115,13 @@ def fit_subject(
             best_params = fp
             best_lps = np.asarray(lps)
 
+    if best_params is None:
+        raise ValueError(
+            "GLMHMM-T fitting did not produce valid parameters. "
+            "All restarts ended with non-finite log-probabilities. "
+            "Check the selected regressors for scaling issues."
+        )
+
     smoothed_probs = model.smoother_multisession(
         params=best_params, emissions=y, inputs=inputs_all, session_ids=session_ids)
     p_pred = model.predict_choice_probs_multisession(

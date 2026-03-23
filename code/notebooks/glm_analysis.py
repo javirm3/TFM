@@ -365,7 +365,43 @@ def _(arrays_store):
 
 
 @app.cell
-def _(K, is_2afc, mo, pl, plots, trial_df, ui_subjects, views):
+def _(mo):
+    ui_psychometric_background = mo.ui.radio(
+        options={
+            "Data traces": "data",
+            "Model curves": "model",
+            "None": "none",
+        },
+        value="data",
+        inline=False,
+        label="Psychometric background",
+    )
+    ui_psychometric_background
+    return (ui_psychometric_background,)
+
+
+@app.cell
+def _(is_2afc, mo, views):
+    _feature_names = []
+    if is_2afc and views:
+        for _view in views.values():
+            for _feat in list(getattr(_view, "feat_names", []) or []):
+                if _feat not in _feature_names:
+                    _feature_names.append(_feat)
+    if not _feature_names:
+        _feature_names = ["at_choice"]
+    _default_feature = "at_choice" if "at_choice" in _feature_names else _feature_names[0]
+    ui_psychometric_regressor = mo.ui.dropdown(
+        options={_feat.replace("_", " ").title(): _feat for _feat in _feature_names},
+        value=_default_feature,
+        label="Regressor",
+    )
+    ui_psychometric_regressor
+    return (ui_psychometric_regressor,)
+
+
+@app.cell
+def _(K, is_2afc, mo, pl, plots, trial_df, ui_psychometric_background, ui_psychometric_regressor, ui_subjects, views):
     _selected = [s for s in ui_subjects.value if s in views]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
@@ -379,9 +415,44 @@ def _(K, is_2afc, mo, pl, plots, trial_df, ui_subjects, views):
     _fig_all, _ = plots.plot_categorical_performance_all(
         _plot_df_all,
         f"glmhmm K={K}",
+        background_style=ui_psychometric_background.value,
         **_perf_kwargs,
     )
-    _fig_all
+    _plot_df_state = plots.prepare_predictions_df(_trial_df_sel)
+    _fig_state, _ = plots.plot_categorical_performance_by_state(
+        df=_plot_df_state,
+        views=_views_sel,
+        model_name=f"glmhmm K={K} — per state",
+        background_style=ui_psychometric_background.value,
+    )
+    _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
+    if is_2afc and _reg_plot_fn is not None:
+        _fig_reg_state, _ = _reg_plot_fn(
+            df=_plot_df_state,
+            views=_views_sel,
+            model_name=f"glmhmm K={K}",
+            feature_col=ui_psychometric_regressor.value,
+            background_style=ui_psychometric_background.value,
+        )
+        _reg_section = mo.vstack(
+            [
+                mo.hstack([mo.md("### Per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
+                _fig_reg_state,
+            ],
+            align="center",
+        )
+    else:
+        _reg_section = mo.md("This task does not expose a regressor psychometric plot.")
+    mo.vstack(
+        [
+            mo.md("### Categorical plots for accuracy"),
+            mo.hstack([mo.vstack([_fig_all], align="center"), mo.vstack([ui_psychometric_background], align="center")], justify="space-between", align="center", widths=[4,1]),
+            mo.md("### Per-state categorical performance"),
+            _fig_state,
+            _reg_section,
+        ],
+        align="center",
+    )
     return
 
 
@@ -559,6 +630,8 @@ def _(
     mo,
     np,
     plots,
+    ui_psychometric_background,
+    ui_psychometric_regressor,
     ui_editor_subject,
 ):
     _subj = ui_editor_subject.value
@@ -591,12 +664,32 @@ def _(
     _fig_all_tweaked, _ = plots.plot_categorical_performance_all(
         _plot_df_tweaked,
         _title,
+        background_style=ui_psychometric_background.value,
     )
     _fig_state_tweaked, _ = plots.plot_categorical_performance_by_state(
         df=_plot_df_tweaked,
         views={_subj: _view_tweaked},
         model_name=f"{_title} — per state",
+        background_style=ui_psychometric_background.value,
     )
+    _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
+    if _reg_plot_fn is None:
+        _reg_section = mo.md("This task does not expose a regressor psychometric plot.")
+    else:
+        _fig_reg_state_tweaked, _ = _reg_plot_fn(
+            df=_plot_df_tweaked,
+            views={_subj: _view_tweaked},
+            model_name=_title,
+            feature_col=ui_psychometric_regressor.value,
+            background_style=ui_psychometric_background.value,
+        )
+        _reg_section = mo.vstack(
+            [
+                mo.hstack([mo.md("### Tweaked per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
+                _fig_reg_state_tweaked,
+            ],
+            align="center",
+        )
     _side_plot_fn = getattr(plots, "plot_categorical_strat_by_side", None)
     if _side_plot_fn is None:
         _side_section = mo.md("This task does not expose a side-stratified categorical plot.")
@@ -616,9 +709,10 @@ def _(
     mo.vstack(
         [
             mo.md("### Tweaked categorical plots"),
-            _fig_all_tweaked,
+            mo.hstack([mo.vstack([_fig_all_tweaked], align="center"), mo.vstack([ui_psychometric_background], align="center")], justify="space-between", align="center", widths=[4,1]),
             mo.md("### Tweaked per-state categorical performance"),
             _fig_state_tweaked,
+            _reg_section,
             _side_section,
         ],
         align="center",

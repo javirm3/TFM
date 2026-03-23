@@ -466,15 +466,14 @@ def plot_session_deepdive(
         if name in X_idx and name not in trace_sources:
             trace_sources[name] = (X_sess, X_idx[name])
 
-    cum_acc = np.full(T, np.nan)
-    cum_n, cum_s = 0, 0.0
+    rolling_acc = np.full(T, np.nan)
+    window = 20
     nz = np.abs(stim) > 0
     for ti in range(T):
-        if nz[ti]:
-            cum_s += hits[ti]
-            cum_n += 1
-        if cum_n > 0:
-            cum_acc[ti] = 100.0 * cum_s / cum_n
+        start = max(0, ti - window + 1)
+        window_mask = nz[start : ti + 1]
+        if np.any(window_mask):
+            rolling_acc[ti] = 100.0 * hits[start : ti + 1][window_mask].mean()
 
     if choice_colors is None or choice_labels is None:
         choice_colors, choice_labels = _default_choice_meta(views[subj].num_classes)
@@ -535,7 +534,7 @@ def plot_session_deepdive(
     ax1.set_title(f"Subject {subj}  —  session {sess}  ({T} trials)")
 
     ax1r = ax1.twinx()
-    ax1r.plot(x, cum_acc, color="black", lw=1.8, linestyle="-", alpha=0.7, label="Cumul. accuracy")
+    ax1r.plot(x, rolling_acc, color="black", lw=1.8, linestyle="-", alpha=0.7, label="Rolling accuracy (5 trials)")
     ax1r.axhline(100.0 / float(views[subj].num_classes), color="grey", lw=0.9, linestyle="--", alpha=0.5)
     ax1r.set_ylim(0, 105)
     ax1r.set_ylabel("Accuracy (%)", color="black")

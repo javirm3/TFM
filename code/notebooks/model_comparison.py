@@ -33,10 +33,21 @@ def _():
     sys.path.insert(1, str(paths.CODE_DIR / "glmhmmt" / "src"))
 
     from tasks import get_adapter
+    from glmhmmt.postprocess import build_trial_df
     from glmhmmt.views import build_views
 
     sns.set_style("white")
-    return build_views, get_adapter, mo, np, paths, pl, plt, sns
+    return (
+        build_trial_df,
+        build_views,
+        get_adapter,
+        mo,
+        np,
+        paths,
+        pl,
+        plt,
+        sns,
+    )
 
 
 @app.cell
@@ -90,9 +101,9 @@ def _(get_adapter, mo, paths, ui_task):
 
 @app.cell
 def _(adapter, mo, paths, pl):
-    _df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
-    _df = adapter.subject_filter(_df)
-    _all_subjects = _df["subject"].unique().sort().to_list()
+    df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+    df_all = adapter.subject_filter(df_all)
+    _all_subjects = df_all["subject"].unique().sort().to_list()
 
     ui_subjects = mo.ui.multiselect(
         options=_all_subjects,
@@ -108,7 +119,7 @@ def _(adapter, mo, paths, pl):
         mo.hstack([ui_subjects]),
         mo.hstack([mo.md("K range:"), ui_K_range]),
     ])
-    return ui_K_range, ui_subjects
+    return df_all, ui_K_range, ui_subjects
 
 
 @app.cell
@@ -201,6 +212,142 @@ def _(pl, results_long, ui_K_range, ui_subjects):
 
 
 @app.cell
+def _(adapter, df_all, mo, pl):
+    _enum_dtype = getattr(pl, "Enum", None)
+    if getattr(adapter, "num_classes", None) == 3:
+        _preferred = [
+            "stimd_n",
+            "stimd_c",
+            "ttype_n",
+            "ttype_c",
+            "condition",
+            "Condition",
+            "Experiment",
+            adapter.session_col,
+        ]
+        _default_candidates = ["stimd_n", "stimd_c", "ttype_n", "ttype_c"]
+    else:
+        _preferred = [
+            "ILD",
+            "ild",
+            "stim_vals",
+            "stim_d",
+            "stim_strength",
+            "condition",
+            "Condition",
+            "Experiment",
+            adapter.session_col,
+        ]
+        _default_candidates = ["ILD", "ild", "stim_vals", "stim_d", "stim_strength"]
+    _seen = set()
+    _options = []
+    for _col in _preferred:
+        if _col in df_all.columns and _col not in _seen:
+            _options.append(_col)
+            _seen.add(_col)
+    for _col, _dtype in df_all.schema.items():
+        if _col in _seen or _col == "subject":
+            continue
+        if _dtype in tuple(
+            _dt for _dt in (pl.Utf8, pl.Categorical, _enum_dtype, pl.Boolean, pl.Int8, pl.Int16, pl.Int32, pl.Int64)
+            if _dt is not None
+        ):
+            _options.append(_col)
+            _seen.add(_col)
+
+    _default = next((_col for _col in _default_candidates if _col in _options), None)
+    if _default is None:
+        _default = "condition" if "condition" in _options else (_options[0] if _options else None)
+    ui_ce_condition = mo.ui.dropdown(
+        options=_options,
+        value=_default,
+        label="Cross-entropy grouping",
+    )
+    mo.hstack([ui_ce_condition])
+    return (ui_ce_condition,)
+
+
+@app.cell
+def _(mo, results_filtered):
+    _baseline_options = results_filtered["model_label"].unique().sort().to_list()
+    _baseline_value = _baseline_options[0] if _baseline_options else None
+    ui_bic_baseline = mo.ui.dropdown(
+        options=_baseline_options,
+        value=_baseline_value,
+        label="BIC baseline model",
+    )
+    mo.hstack([ui_bic_baseline])
+    return (ui_bic_baseline,)
+
+
+@app.cell
+def _(pl, results_filtered, ui_bic_baseline):
+    if results_filtered.is_empty() or ui_bic_baseline.value is None:
+        results_plot = results_filtered.with_columns(
+            pl.lit(None, dtype=pl.Float64).alias("bic_delta")
+        )
+    else:
+        _baseline_bic = (
+            results_filtered
+            .filter(pl.col("model_label") == ui_bic_baseline.value)
+            .group_by("subject")
+            .agg(pl.first("bic").alias("bic_baseline"))
+        )
+        results_plot = (
+            results_filtered
+            .join(_baseline_bic, on="subject", how="left")
+            .with_columns(((pl.col("bic") - pl.col("bic_baseline"))/pl.col("bic_baseline")).alias("bic_delta"))
+        )
+    results_plot
+    return (results_plot,)
+
+
+@app.cell
+def _(np):
+    def observed_choice_index(adapter, trial_df):
+        _resp = np.asarray(trial_df["response"]).astype(object)
+        _out = np.full(len(_resp), -1, dtype=int)
+
+        if adapter.num_classes == 2:
+            for _i, _val in enumerate(_resp):
+                if _val is None:
+                    continue
+                try:
+                    _f = float(_val)
+                    if _f in (0.0, 1.0):
+                        _out[_i] = int(_f)
+                    elif _f in (-1.0, 1.0):
+                        _out[_i] = 1 if _f > 0 else 0
+                except (TypeError, ValueError):
+                    _s = str(_val).strip().upper()
+                    if _s in {"L", "LEFT"}:
+                        _out[_i] = 0
+                    elif _s in {"R", "RIGHT"}:
+                        _out[_i] = 1
+        else:
+            for _i, _val in enumerate(_resp):
+                if _val is None:
+                    continue
+                try:
+                    _f = float(_val)
+                    if _f in (0.0, 1.0, 2.0):
+                        _out[_i] = int(_f)
+                    elif _f in (1.0, 2.0, 3.0):
+                        _out[_i] = int(_f) - 1
+                except (TypeError, ValueError):
+                    _s = str(_val).strip().upper()
+                    if _s in {"L", "LEFT"}:
+                        _out[_i] = 0
+                    elif _s in {"C", "CENTER", "CENTRE"}:
+                        _out[_i] = 1
+                    elif _s in {"R", "RIGHT"}:
+                        _out[_i] = 2
+        return _out
+
+    return (observed_choice_index,)
+
+
+@app.cell
 def _(pl, results_filtered):
     agg = (
         results_filtered.group_by(["model_kind", "model_alias", "model_label", "K"])
@@ -288,11 +435,11 @@ def _():
                 current_y += y_range * 0.075
 
 
-    return add_sig_bars, ttest_rel
+    return (add_sig_bars,)
 
 
 @app.cell
-def _(add_sig_bars, np, plt, results_filtered, sns):
+def _(add_sig_bars, np, plt, results_plot, sns, ui_bic_baseline):
     from matplotlib.colors import to_rgb, to_hex
 
     _MODEL_STYLES = {
@@ -305,7 +452,7 @@ def _(add_sig_bars, np, plt, results_filtered, sns):
         rgb = np.array(to_rgb(color))
         return to_hex(np.clip(rgb * factor, 0, 1))
 
-    raw = results_filtered.to_pandas()
+    raw = results_plot.to_pandas()
 
     _label_df = raw[["model_kind", "model_label"]].drop_duplicates()
     hue_order = _label_df["model_label"].tolist()
@@ -322,7 +469,7 @@ def _(add_sig_bars, np, plt, results_filtered, sns):
 
     fig_cmp, (ax_ll, ax_bic) = plt.subplots(1, 2, figsize=(8, 4.8), constrained_layout=False)
 
-    for ax, ycol in [(ax_ll, "ll_per_trial"), (ax_bic, "bic")]:
+    for ax, ycol in [(ax_ll, "ll_per_trial"), (ax_bic, "bic_delta")]:
         sns.boxplot(
             data=raw,
             x="K",
@@ -361,15 +508,16 @@ def _(add_sig_bars, np, plt, results_filtered, sns):
 
     add_sig_bars(
         ax_bic, raw,
-        x_col="K", y_col="bic", hue_col="model_label",
+        x_col="K", y_col="bic_delta", hue_col="model_label",
         order=K_order, hue_order=hue_order, pair_col="subject",
     )
 
     ax_ll.set_ylabel("Log-likelihood / trial")
     ax_ll.set_title("LL / trial (higher = better)")
 
-    ax_bic.set_ylabel("BIC")
-    ax_bic.set_title("BIC (lower = better)")
+    ax_bic.axhline(0, color="grey", lw=0.9, linestyle="--", alpha=0.7)
+    ax_bic.set_ylabel("ΔBIC vs baseline")
+    ax_bic.set_title(f"ΔBIC vs {ui_bic_baseline.value} (lower = better)")
 
     handles, labels = ax_ll.get_legend_handles_labels()
     _legend_handles = []
@@ -395,24 +543,208 @@ def _(add_sig_bars, np, plt, results_filtered, sns):
     sns.despine(fig=fig_cmp)
     fig_cmp.tight_layout(rect=(0, 0.12, 1, 1))
     fig_cmp
-    return (raw,)
+    return
 
 
 @app.cell
-def _(raw, ttest_rel):
-    sub = raw[raw["K"] == 2]
-    g1 = "GLMHMM (3 covs 2 states)"
-    g2 = "GLMHMM (3 covs 2 states frozen stim)"
+def _(
+    build_trial_df,
+    df_all,
+    load_fit_bundle,
+    np,
+    observed_choice_index,
+    pl,
+    results_filtered,
+    ui_ce_condition,
+    ui_subjects,
+    ui_task,
+):
+    _cond_col = ui_ce_condition.value
+    mo_delim = 1e-12
 
-    pair_df = (
-        sub[sub["model_label"].isin([g1, g2])]
-        .pivot(index="subject", columns="model_label", values="ll_per_trial")
-        .dropna()
+    if results_filtered.is_empty() or _cond_col is None:
+        ce_by_subject_condition = pl.DataFrame(
+            schema={
+                "subject": pl.Utf8,
+                "condition": pl.Utf8,
+                "model_kind": pl.Utf8,
+                "model_alias": pl.Utf8,
+                "model_label": pl.Utf8,
+                "K": pl.Int64,
+                "cross_entropy": pl.Float64,
+                "n_trials": pl.Int64,
+            }
+        )
+    else:
+        _model_specs = (
+            results_filtered
+            .select(["model_kind", "model_alias", "model_label", "K"])
+            .unique()
+            .sort(["model_kind", "model_alias", "K"])
+            .iter_rows(named=True)
+        )
+        _frames = []
+        for _spec in _model_specs:
+            _adapter_fit, _arrays_store, _names, _views = load_fit_bundle(
+                ui_task.value,
+                _spec["model_kind"],
+                _spec["model_alias"],
+                int(_spec["K"]),
+                ui_subjects.value,
+            )
+            if not _views:
+                continue
+
+            _prob_cols = _adapter_fit.probability_columns
+            _bcols = _adapter_fit.behavioral_cols
+            _sort_col = _adapter_fit.sort_col
+            _ses_col = _adapter_fit.session_col
+
+            for _subj, _view in _views.items():
+                _df_sub = (
+                    df_all
+                    .filter(pl.col("subject") == _subj)
+                    .sort(_sort_col)
+                    .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
+                )
+                if _df_sub.height != _view.T or _cond_col not in _df_sub.columns:
+                    continue
+
+                _trial_df = build_trial_df(_view, _adapter_fit, _df_sub, _bcols)
+                _choice_idx = observed_choice_index(_adapter_fit, _trial_df)
+                _probs = np.column_stack([np.asarray(_trial_df[_c], dtype=float) for _c in _prob_cols])
+                _valid = (
+                    (_choice_idx >= 0)
+                    & (_choice_idx < _probs.shape[1])
+                    & np.all(np.isfinite(_probs), axis=1)
+                )
+                if not np.any(_valid):
+                    continue
+
+                _picked = _probs[np.arange(len(_choice_idx)), np.clip(_choice_idx, 0, _probs.shape[1] - 1)]
+                _ce = np.full(len(_choice_idx), np.nan, dtype=float)
+                _ce[_valid] = -np.log(np.clip(_picked[_valid], mo_delim, 1.0))
+
+                _ce_df = _trial_df.select(["subject", _cond_col]).with_columns([
+                    pl.lit(_spec["model_kind"]).alias("model_kind"),
+                    pl.lit(_spec["model_alias"]).alias("model_alias"),
+                    pl.lit(_spec["model_label"]).alias("model_label"),
+                    pl.lit(int(_spec["K"])).alias("K"),
+                    pl.Series("cross_entropy", _ce),
+                ])
+                _ce_df = (
+                    _ce_df
+                    .filter(pl.col("cross_entropy").is_finite())
+                    .with_columns(pl.col(_cond_col).cast(pl.Utf8).alias("condition"))
+                    .drop(_cond_col)
+                )
+                if _ce_df.height > 0:
+                    _frames.append(_ce_df)
+
+        if _frames:
+            ce_by_subject_condition = (
+                pl.concat(_frames, how="diagonal")
+                .group_by(["subject", "condition", "model_kind", "model_alias", "model_label", "K"])
+                .agg([
+                    pl.mean("cross_entropy").alias("cross_entropy"),
+                    pl.len().alias("n_trials"),
+                ])
+                .sort(["K", "condition", "model_kind", "model_alias", "subject"])
+            )
+        else:
+            ce_by_subject_condition = pl.DataFrame(
+                schema={
+                    "subject": pl.Utf8,
+                    "condition": pl.Utf8,
+                    "model_kind": pl.Utf8,
+                    "model_alias": pl.Utf8,
+                    "model_label": pl.Utf8,
+                    "K": pl.Int64,
+                    "cross_entropy": pl.Float64,
+                    "n_trials": pl.Int64,
+                }
+            )
+
+    ce_by_subject_condition
+    return (ce_by_subject_condition,)
+
+
+@app.cell
+def _(ce_by_subject_condition, mo, plt, sns):
+    mo.stop(ce_by_subject_condition.is_empty(), mo.md("No trial-level cross-entropy data could be built for the current selection."))
+
+    _ce_raw = ce_by_subject_condition.to_pandas()
+    _K_order = sorted(_ce_raw["K"].unique())
+    _cond_order = sorted(_ce_raw["condition"].dropna().unique())
+    _labels = _ce_raw["model_label"].drop_duplicates().tolist()
+    _base_colors = sns.color_palette("tab20", n_colors=max(1, len(_labels)))
+    _palette = {_label: _base_colors[_i] for _i, _label in enumerate(_labels)}
+
+    _fig_ce, _axes = plt.subplots(
+        len(_K_order),
+        1,
+        figsize=(max(7, 1.4 * len(_cond_order)), 3.8 * max(1, len(_K_order))),
+        squeeze=False,
     )
 
-    pair_df[g1]
-    ttest_rel(pair_df[g1], pair_df[g2])
+    for _row, _K in enumerate(_K_order):
+        _ax = _axes[_row, 0]
+        _sub = _ce_raw[_ce_raw["K"] == _K]
+        sns.boxplot(
+            data=_sub,
+            x="condition",
+            y="cross_entropy",
+            hue="model_label",
+            order=_cond_order,
+            hue_order=_labels,
+            palette=_palette,
+            width=0.8,
+            showfliers=False,
+            boxprops={"alpha": 0.45},
+            ax=_ax,
+        )
+        sns.stripplot(
+            data=_sub,
+            x="condition",
+            y="cross_entropy",
+            hue="model_label",
+            order=_cond_order,
+            hue_order=_labels,
+            palette=_palette,
+            dodge=True,
+            jitter=0.18,
+            alpha=0.75,
+            size=3.5,
+            ax=_ax,
+            legend=False,
+        )
+        _ax.set_title(f"Cross-entropy by condition (K={_K})")
+        _ax.set_xlabel("Condition")
+        _ax.set_ylabel("Cross-entropy")
+        _ax.tick_params(axis="x", rotation=20)
+        if _ax.get_legend() is not None:
+            _ax.get_legend().remove()
+        sns.despine(ax=_ax)
 
+    _handles, _legend_labels = _axes[0, 0].get_legend_handles_labels()
+    _handles_out = []
+    _labels_out = []
+    for _h, _l in zip(_handles, _legend_labels):
+        if _l in _labels and _l not in _labels_out:
+            _handles_out.append(_h)
+            _labels_out.append(_l)
+    if _handles_out:
+        _fig_ce.legend(
+            _handles_out,
+            _labels_out,
+            title="Model",
+            loc="lower center",
+            bbox_to_anchor=(0.5, -0.01),
+            ncol=min(3, max(1, len(_labels_out))),
+            frameon=False,
+        )
+    _fig_ce.tight_layout(rect=(0, 0.08, 1, 1))
+    _fig_ce
     return
 
 
@@ -488,7 +820,7 @@ def _(build_views, get_adapter, np, paths):
     def load_fit_bundle(task_name, model_kind, alias, K, subjects):
         adapter = get_adapter(task_name)
         fit_dir = paths.RESULTS / "fits" / task_name / model_kind / alias
-        suffix = {"glm": "glm", "glmhmm": "glmhmm", "glmhmmt": "glmhmmt"}[model_kind]
+        suffix = {"glm": "glm", "glmhmm": "glmhmm", "glmhmm-t": "glmhmmt"}[model_kind]
 
         arrays_store = {}
         for _subj in subjects:
