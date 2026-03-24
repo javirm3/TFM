@@ -12,7 +12,6 @@ import seaborn as sns
 import os
 from dynamax.utils.plotting import gradient_cmap
 from glmhmmt.model import SoftmaxGLMHMM
-from glmhmmt.features import build_sequence_from_df
 from tasks import get_adapter
 
 adapter = get_adapter("mcdr")
@@ -30,7 +29,7 @@ colors = sns.xkcd_palette(color_names)
 cmap = gradient_cmap(colors)    
 
 df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
-y, X, U, names, _ = build_sequence_from_df(df.filter(pl.col("subject") == "A89"))
+y, X, U, names = adapter.load_subject(df.filter(pl.col("subject") == "A89"))
 
 num_states= 2        # nº estados
 emission_dim = 3          # 3 choices

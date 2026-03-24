@@ -63,6 +63,15 @@ class TaskAdapter(ABC):
         ``names`` must contain ``"X_cols"`` and ``"U_cols"``.
         """
 
+    @abstractmethod
+    def build_design_matrices(
+        self,
+        feature_df: Any,
+        emission_cols: List[str] | None = None,
+        transition_cols: List[str] | None = None,
+    ) -> Tuple[Any, Any, Any, Dict]:
+        """Return ``(y, X, U, names)`` from a task-owned feature dataframe."""
+
     # ── column defaults  ────────────────────────────────────────────────────
 
     @abstractmethod
@@ -84,6 +93,10 @@ class TaskAdapter(ABC):
     def sf_cols(self, df: Any) -> List[str]:
         """Optional dynamic stimulus-frame columns for binary tasks."""
         return []
+
+    def cv_balance_labels(self, feature_df: Any):
+        """Return per-trial labels used for CV balancing, or ``None`` if unsupported."""
+        return None
 
     # ── plot module ─────────────────────────────────────────────────────────
 

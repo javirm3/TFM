@@ -210,8 +210,7 @@ Create `tasks/my_task.py`:
 import polars as pl
 import numpy as np
 import paths
-from tasks.base import TaskAdapter
-from glmhmmt.features import build_sequence_from_df   # or build_sequence_from_df_2afc
+from tasks import TaskAdapter
 
 DATA = paths.DATA_PATH / "my_task.parquet"
 # DATA = paths.DATA_PATH / "my_task" / "*.parquet"  # uncomment if partitioned
@@ -233,6 +232,21 @@ class MyTask(TaskAdapter):
                   .select("subject").unique()
                   .collect()["subject"].sort().to_list())
 
+    def build_feature_df(self, df_sub, tau=50.0):
+        return df_sub.with_columns(...)
+
+    def build_design_matrices(
+        self,
+        feature_df,
+        emission_cols=None,
+        transition_cols=None,
+    ):
+        y = ...
+        X = ...
+        U = ...
+        names = {"X_cols": [...], "U_cols": [...]}
+        return y, X, U, names
+
     def load_subject(self, subject, cfg):
         df = (pl.scan_parquet(DATA)
                 .filter(pl.col("subject") == subject)
@@ -242,15 +256,18 @@ class MyTask(TaskAdapter):
         # any task-specific filtering NOT already in the parquet goes here
         df = df.filter(pl.col("block_type") == "test")
 
-        y, X, U, names, _ = build_sequence_from_df(
+        feature_df = self.build_feature_df(
             df,
             tau=cfg.get("tau", 50.0),
+        )
+        y, X, U, names = self.build_design_matrices(
+            feature_df,
             emission_cols=cfg.get("emission_cols"),
             transition_cols=cfg.get("transition_cols"),
         )
         return dict(
             y=np.asarray(y), X=np.asarray(X), U=np.asarray(U),
-            session_ids=df["session"].to_numpy(), names=names,
+            session_ids=feature_df["session"].to_numpy(), names=names,
         )
 ```
 

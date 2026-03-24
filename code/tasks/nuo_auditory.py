@@ -154,6 +154,19 @@ class NuoAuditoryAdapter(TaskAdapter):
     ) -> Tuple[Any, Any, Any, Dict]:
         """Return ``(y, X, U, names)`` for one subject."""
         feature_df = self.build_feature_df(df_sub, tau=tau)
+        return self.build_design_matrices(
+            feature_df,
+            emission_cols=emission_cols,
+            transition_cols=transition_cols,
+        )
+
+    def build_design_matrices(
+        self,
+        feature_df,
+        emission_cols: List[str] | None = None,
+        transition_cols: List[str] | None = None,
+    ) -> Tuple[Any, Any, Any, Dict]:
+        """Return ``(y, X, U, names)`` for one subject."""
         ecols = emission_cols if emission_cols is not None else self.default_emission_cols()
         ucols = transition_cols if transition_cols is not None else self.default_transition_cols()
         bad_e = [c for c in ecols if c not in _NUO_AUDITORY_EMISSION_COLS]

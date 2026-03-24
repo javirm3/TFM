@@ -168,6 +168,8 @@ function render({ model, el }) {
     const currentTransition = model.get("transition_cols");
     const currentFrozen    = model.get("frozen_emissions") || {};
     const currentTau       = model.get("tau");
+    const currentCvMode    = model.get("cv_mode");
+    const currentCvRepeats = model.get("cv_repeats");
     const currentLapse     = model.get("lapse");
     const currentLapseMax  = model.get("lapse_max");
     const currentAlias     = model.get("alias");
@@ -224,6 +226,7 @@ function render({ model, el }) {
                   <th>K</th>
                   <th>Regressors</th>
                   ${showTransitionRegressors ? "<th>Transition Regressors</th>" : ""}
+                  <th>CV</th>
                   <th>Tau</th>
                   <th>Actions</th>
                 </tr>
@@ -243,6 +246,7 @@ function render({ model, el }) {
                       <td>${info.K}</td>
                       <td class="mm-wrap">${info.regressors}</td>
                       ${showTransitionRegressors ? `<td class="mm-wrap">${info.transition_regressors || ""}</td>` : ""}
+                      <td>${info.cv || "none"}</td>
                       <td>${info.tau}</td>
                       <td class="mm-actions-cell">
                         ${isDefault ? "" : `<button class="mm-btn-delete-row" data-delete-model="${info.id}">Delete</button>`}
@@ -317,6 +321,29 @@ function render({ model, el }) {
         <div class="mm-section">
           <label class="mm-label">Frozen Emission Weights</label>
           ${renderFrozenTable(currentK, currentEmission, currentFrozen)}
+        </div>
+        `;
+      }
+
+      if (modelType !== "glm" && is2afc) {
+        html += `
+        <div class="mm-section">
+          <label class="mm-label">Cross-validation</label>
+          <div class="mm-flex-row">
+            <div class="mm-col half-col">
+              <label class="mm-label inline">Mode</label>
+              <select id="inp-cv-mode" class="mm-input small">
+                <option value="none" ${currentCvMode === "none" ? "selected" : ""}>none</option>
+                <option value="balanced_holdout" ${currentCvMode === "balanced_holdout" ? "selected" : ""}>balanced_holdout</option>
+              </select>
+            </div>
+            <div class="mm-col half-col">
+              <label class="mm-label inline">Repeats</label>
+              <input type="number" class="mm-num-input" id="inp-cv-repeats"
+                     min="1" step="1" value="${currentCvRepeats}"
+                     ${currentCvMode === "none" ? "disabled" : ""}>
+            </div>
+          </div>
         </div>
         `;
       }
@@ -517,6 +544,16 @@ function render({ model, el }) {
     // Task selector
     bind("#inp-task", "change", (e) => {
       model.set("task", e.target.value);
+      model.save_changes();
+    });
+
+    bind("#inp-cv-mode", "change", (e) => {
+      model.set("cv_mode", e.target.value);
+      model.save_changes();
+    });
+    bind("#inp-cv-repeats", "change", (e) => {
+      const val = parseInt(e.target.value, 10);
+      model.set("cv_repeats", Number.isFinite(val) && val > 0 ? val : 1);
       model.save_changes();
     });
 

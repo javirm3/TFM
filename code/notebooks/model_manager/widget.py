@@ -173,6 +173,8 @@ class ModelManagerWidget(anywidget.AnyWidget):
     K         = traitlets.Int(2).tag(sync=True)
 
     tau       = traitlets.Int(50).tag(sync=True)
+    cv_mode   = traitlets.Unicode("none").tag(sync=True)
+    cv_repeats = traitlets.Int(5).tag(sync=True)
 
     lapse     = traitlets.Bool(False).tag(sync=True)
     lapse_max = traitlets.Float(0.2).tag(sync=True)
@@ -283,6 +285,8 @@ class ModelManagerWidget(anywidget.AnyWidget):
             self.subjects = sorted(cfg["subjects"], key=str)
         if "tau" in cfg:
             self.tau = int(cfg["tau"])
+        self.cv_mode = str(cfg.get("cv_mode", "none"))
+        self.cv_repeats = int(cfg.get("cv_repeats", 5))
         k = _get_K_from_config(cfg)
         if isinstance(k, int):
             self.K = k
@@ -307,6 +311,8 @@ class ModelManagerWidget(anywidget.AnyWidget):
             self.subjects  = subjects
             self.K         = 2
             self.tau       = 50
+            self.cv_mode   = "none"
+            self.cv_repeats = 5
             self.lapse     = False
             self.lapse_max = 0.2
             is_2afc = adapter.num_classes == 2
@@ -355,12 +361,15 @@ class ModelManagerWidget(anywidget.AnyWidget):
         return Path(name).name == name and "/" not in name and "\\" not in name
 
     def _build_current_config(self, model_name: str) -> dict[str, Any]:
+        cv_mode = str(self.cv_mode)
         cfg: dict[str, Any] = {
             "task": self.task,
             "model_id": model_name,
             "alias": model_name,
             "subjects": list(self.subjects),
             "tau": int(self.tau),
+            "cv_mode": cv_mode,
+            "cv_repeats": int(self.cv_repeats) if cv_mode != "none" else 0,
             "emission_cols": list(self.emission_cols),
         }
         if self.model_type == "glm":
@@ -387,6 +396,10 @@ class ModelManagerWidget(anywidget.AnyWidget):
         if saved.get("subjects", []) != list(self.subjects):
             return False
         if int(saved.get("tau", -1)) != int(self.tau):
+            return False
+        if str(saved.get("cv_mode", "none")) != str(self.cv_mode):
+            return False
+        if self.cv_mode != "none" and int(saved.get("cv_repeats", 0)) != int(self.cv_repeats):
             return False
         if saved.get("emission_cols", []) != list(self.emission_cols):
             return False
@@ -517,6 +530,9 @@ class ModelManagerWidget(anywidget.AnyWidget):
                     continue
                 display_name = _get_display_name(cfg)
                 n_subjects   = _count_fitted_subjects(d)
+                cv_mode = str(cfg.get("cv_mode", "none"))
+                cv_repeats = int(cfg.get("cv_repeats", 0))
+                cv_label = f"{cv_mode}×{cv_repeats}" if cv_mode != "none" and cv_repeats > 0 else cv_mode
                 info_list.append({
                     "id":       display_name,
                     "name":     display_name,
@@ -524,6 +540,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
                     "subjects": n_subjects if n_subjects > 0 else len(cfg.get("subjects", [])),
                     "K":        _get_K_from_config(cfg),
                     "tau":      cfg.get("tau", ""),
+                    "cv":       cv_label,
                     "regressors": ", ".join(cfg.get("emission_cols", [])),
                     "transition_regressors": ", ".join(cfg.get("transition_cols", [])),
                 })
@@ -538,7 +555,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
         # ── adapter-derived options ───────────────────────────────────────────
         default_info: dict = {
             "id": "__default__", "name": "Default",
-            "subjects": "?", "K": 2, "tau": 50, "regressors": "", "transition_regressors": "",
+            "subjects": "?", "K": 2, "tau": 50, "cv": "none", "regressors": "", "transition_regressors": "",
         }
         try:
             adapter = get_adapter(self.task)
@@ -576,6 +593,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
                 "subjects":   len(subjects),
                 "K":          2,
                 "tau":        50,
+                "cv":         "none",
                 "regressors": ", ".join(default_ecols),
                 "transition_regressors": ", ".join(tcols),
             }

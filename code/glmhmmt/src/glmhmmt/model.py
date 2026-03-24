@@ -96,7 +96,7 @@ def _resolve_frozen(
             `{state_idx: {feature_name: fixed_value}}`.
         feature_names: Ordered list of emission feature names matching the
             columns of `X` (i.e. `names["X_cols"]` from
-            `build_sequence_from_df`).  The position of a name in this list
+            the adapter design-matrix build. The position of a name in this list
             is its column index in `W`.
         num_states: Number of HMM hidden states `K`.
         num_classes: Number of choice categories `C` (output classes).
@@ -151,7 +151,7 @@ def make_freeze_bijector(
         frozen: Per-state feature freeze spec, see `_resolve_frozen`.
             Example: `{0: {"SL": 0.0, "SC": 0.0, "SR": 0.0}}`.
         feature_names: Ordered emission feature names matching the columns of
-            `X`.  Pass `names["X_cols"]` from `build_sequence_from_df`.
+            `X`. Pass `names["X_cols"]` from the adapter design-matrix build.
         num_states: Number of HMM hidden states `K`.
         num_classes: Number of choice categories `C`.
         input_dim: Number of emission features `M`.
@@ -237,7 +237,7 @@ class SoftmaxGLMHMMEmissions(HMMEmissions):
             Example: `{0: {"SL": 0.0, "SC": 0.0, "SR": 0.0}}`.
         emission_feature_names: Ordered names of the emission features matching
             the columns of `X`.  Pass `names["X_cols"]` from
-            `build_sequence_from_df`.  **Required** when `frozen` is set.
+            the adapter design-matrix build. **Required** when `frozen` is set.
         m_step_optimizer: Optimizer used in the gradient M-step.
             Default `optax.adam(1e-2)`.
         m_step_num_iters: Number of gradient steps per M-step call.
@@ -253,7 +253,7 @@ class SoftmaxGLMHMMEmissions(HMMEmissions):
     Example:
 
         ```python
-        y, X, U, names, _ = build_sequence_from_df(df_sub)
+        y, X, U, names = adapter.load_subject(df_sub)
 
         emissions = SoftmaxGLMHMMEmissions(
             num_states=3, num_classes=3,
@@ -288,7 +288,7 @@ class SoftmaxGLMHMMEmissions(HMMEmissions):
         if self.frozen and not self.emission_feature_names:
             raise ValueError(
                 "emission_feature_names must be provided when frozen is set. "
-                "Pass names['X_cols'] from build_sequence_from_df."
+                "Pass names['X_cols'] from the adapter design-matrix build."
             )
 
     @property
@@ -537,7 +537,7 @@ class SoftmaxGLMHMM(HMM):
         transition_matrix_stickiness: Extra weight on the diagonal of the Dirichlet prior to encourage self-transitions.  Only used when `transition_input_dim == 0`.  Default `0.0`.
         weight_scale: Standard deviation of the random normal weight initialisation for emission and transition weights.  Default `1.0`.
         frozen_emissions: Per-state emission feature freeze specification of the form `{state_idx: {feature_name: fixed_value}}`.  Feature names must appear in `emission_feature_names`; frozen entries are enforced by a bijector so they receive no gradient updates. Example: `{0: {"SL": 0.0, "SC": 0.0, "SR": 0.0}}`.
-        emission_feature_names: Ordered names of the `X` columns — pass `names["X_cols"]` from `build_sequence_from_df`. **Required** when `frozen_emissions` is set.
+        emission_feature_names: Ordered names of the `X` columns — pass `names["X_cols"]` from the adapter design-matrix build. **Required** when `frozen_emissions` is set.
         m_step_optimizer: Optimizer shared by emission and transition M-steps. Default `optax.adam(1e-2)`.
         m_step_num_iters: Number of gradient steps per M-step call.Default `100`.
 
@@ -551,9 +551,7 @@ class SoftmaxGLMHMM(HMM):
         import tomllib
         import jax.random as jr
         import jax.numpy as jnp
-        from glmhmmt.features import build_sequence_from_df
-
-        y, X, U, names, _ = build_sequence_from_df(df_sub, tau=50.0)
+        y, X, U, names = adapter.load_subject(df_sub, tau=50.0)
         inputs = jnp.concatenate([X, U], axis=1)
 
         # --- plain fit ---

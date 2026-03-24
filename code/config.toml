@@ -10,7 +10,7 @@ tau = 50
 # See SoftmaxGLMHMM and SoftmaxGLMHMMEmissions docstrings for full API docs.
 [glmhmm]
 # Ordered emission feature names — index = column index in W (K × C-1 × M).
-# Must match emission_cols passed to build_sequence_from_df.
+# Must match emission_cols passed through the task adapter design-matrix build.
 emission_features = [
     "biasL", "biasR",
     "onsetL", "onsetC", "onsetR",

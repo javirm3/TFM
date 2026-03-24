@@ -9,7 +9,6 @@ import jax.numpy as jnp
 import seaborn as sns
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
-# from glmhmmt.features import build_sequence_from_df
 from tasks import get_adapter
 
 sns.set_style("white")
@@ -20,7 +19,7 @@ adapter = get_adapter("mcdr")
 plots = adapter.get_plots()
 
 
-def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
+def build_glm_cat_sequence(df_sub: pl.DataFrame, tau = 50):
     # ttype_n levels: 0, 1, 2, 3  → dummies ttype_1..ttype_3 (ref = 0)
     # stimd_n levels: 1, 2, 3, 4  → per-side dummies SL_2..SL_4, SC_2..SC_4, SR_2..SR_4 (ref = 1)
     TTYPE_LEVELS = [1, 2, 3]
@@ -87,7 +86,7 @@ def build_sequence_from_df(df_sub: pl.DataFrame, tau = 50):
     return jnp.asarray(y), jnp.asarray(X), jnp.asarray(U), names, jnp.concatenate([A_plus, A_minus], axis=1)
 
 df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
-y, X, U, names, _ = build_sequence_from_df(df.filter(pl.col("subject") == "A89"))
+y, X, U, names, _ = build_glm_cat_sequence(df.filter(pl.col("subject") == "A89"))
 
 y_np = np.asarray(y)        # (T,)  int {0,1,2}
 X_np = np.asarray(X)        # (T, M)

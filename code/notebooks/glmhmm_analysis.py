@@ -101,6 +101,8 @@ def _(mo, task_name, ui_model_manager):
         _val["tau"],
         _val["emission_cols"],
         _val.get("frozen_emissions", {}),
+        _val.get("cv_mode", "none"),
+        _val.get("cv_repeats", 0),
     )
     ui_existing = _V(None if _val.get("existing_model") in ("", "__default__") else _val.get("existing_model"))
     ui_alias = _V(_val.get("alias", ""))
@@ -109,6 +111,8 @@ def _(mo, task_name, ui_model_manager):
     ui_tau = _V(_val["tau"])
     ui_emission_cols = _V(_val["emission_cols"])
     ui_frozen_emissions = _V(_val.get("frozen_emissions", {}))
+    ui_cv_mode = _V(_val.get("cv_mode", "none"))
+    ui_cv_repeats = _V(_val.get("cv_repeats", 5))
     fit_clicks = _val.get("run_fit_clicks", 0)
 
     mo.vstack(
@@ -129,6 +133,8 @@ def _(mo, task_name, ui_model_manager):
         ui_frozen_emissions,
         ui_subjects,
         ui_tau,
+        ui_cv_mode,
+        ui_cv_repeats,
     )
 
 
@@ -156,6 +162,8 @@ def _(
     ui_frozen_emissions,
     ui_subjects,
     ui_tau,
+    ui_cv_mode,
+    ui_cv_repeats,
 ):
     _last_fit_click = get_last_fit_click()
     mo.stop(
@@ -164,7 +172,8 @@ def _(
     )
     set_last_fit_click(fit_clicks)
 
-    _n_restarts = 5
+    _n_restarts = 1 if ui_cv_mode.value != "none" else 5
+    _cv_repeats = int(ui_cv_repeats.value) if ui_cv_mode.value != "none" else 0
 
     _selected_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
     _OUT = paths.RESULTS / "fits" / task_name / "glmhmm" / _selected_id
@@ -181,17 +190,37 @@ def _(
             return f"{_base} complete"
         return _base
 
-    _total_progress = max(1, len(ui_subjects.value) * _n_restarts)
+    _total_progress = max(
+        1,
+        len(ui_subjects.value) * (_cv_repeats if ui_cv_mode.value != "none" else _n_restarts),
+    )
     mm_widget.is_running = True
     try:
         with mo.status.progress_bar(
             total=_total_progress,
             title=f"Fitting GLM-HMM K={ui_K.value}",
-            subtitle=f"{len(ui_subjects.value)} subjects × {_n_restarts} restart(s)",
+            subtitle=(
+                f"{len(ui_subjects.value)} subjects × {_cv_repeats} CV repeat(s)"
+                if ui_cv_mode.value != "none"
+                else f"{len(ui_subjects.value)} subjects × {_n_restarts} restart(s)"
+            ),
             completion_title="Fit complete",
             completion_subtitle=f"Saved under {_selected_id}",
         ) as _bar:
             def _on_progress(info: dict) -> None:
+                if info.get("event") == "cv_repeat_start":
+                    _bar.update(
+                        increment=0,
+                        title=_progress_title(info),
+                        subtitle=f"CV repeat {info['cv_repeat_index']}/{info['cv_repeat_total']}",
+                    )
+                    return
+                if info.get("event") == "cv_repeat_complete":
+                    _bar.update(
+                        title=_progress_title(info),
+                        subtitle=f"CV repeat {info['cv_repeat_index']}/{info['cv_repeat_total']} complete",
+                    )
+                    return
                 if info.get("event") == "restart_start":
                     _bar.update(
                         increment=0,
@@ -213,6 +242,8 @@ def _(
                 emission_cols=ui_emission_cols.value,
                 frozen_emissions=ui_frozen_emissions.value or None,
                 task=task_name,
+                cv_mode=ui_cv_mode.value,
+                cv_repeats=_cv_repeats,
                 n_restarts=_n_restarts,
                 verbose=False,
                 progress_callback=_on_progress,
@@ -236,6 +267,7 @@ def _(
     adapter,
     current_hash,
     df_all,
+    mo,
     np,
     paths,
     pl,
@@ -246,8 +278,14 @@ def _(
     ui_existing,
     ui_subjects,
     ui_tau,
+    ui_cv_mode,
 ):
     K = ui_K.value
+
+    mo.stop(
+        ui_cv_mode.value != "none",
+        mo.md("This analysis notebook expects a single full-data fit with arrays. CV fits save summary metrics only."),
+    )
 
     selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
     OUT = paths.RESULTS / "fits" / task_name / "glmhmm" / selected_model_id

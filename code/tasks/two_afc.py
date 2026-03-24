@@ -179,6 +179,19 @@ class TwoAFCAdapter(TaskAdapter):
             tau=tau,
             include_stim_strength=include_stim_strength,
         )
+        return self.build_design_matrices(
+            feature_df,
+            emission_cols=emission_cols,
+            transition_cols=transition_cols,
+        )
+
+    def build_design_matrices(
+        self,
+        feature_df,
+        emission_cols: List[str] | None = None,
+        transition_cols: List[str] | None = None,
+    ) -> Tuple[Any, Any, Any, Dict]:
+        """Return ``(y, X, U, names)`` for the 2AFC task."""
         ecols = self._resolved_emission_cols(feature_df, emission_cols)
         ucols = transition_cols if transition_cols is not None else self.default_transition_cols()
         allowed_ecols = set(self.available_emission_cols()) | {
@@ -201,6 +214,12 @@ class TwoAFCAdapter(TaskAdapter):
             "U_cols": list(ucols),
         }
         return y, X, U, names
+
+    def cv_balance_labels(self, feature_df: pl.DataFrame):
+        """Return signed-ILD balance labels for CV splits."""
+        if "ILD" not in feature_df.columns:
+            return None
+        return feature_df["ILD"].cast(pl.Float64)
 
     # ── column defaults ─────────────────────────────────────────────────────
 
