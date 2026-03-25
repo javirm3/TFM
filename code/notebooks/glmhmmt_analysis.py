@@ -47,6 +47,7 @@ def _():
         apply_state_tweak_to_view,
         build_editor_payload,
         build_trial_and_weights_df,
+        build_trial_df,
         build_views,
         fit_main,
         get_adapter,
@@ -55,6 +56,7 @@ def _():
         mo,
         np,
         paths,
+        pd,
         pl,
         plt,
         resolve_selected_model_id,
@@ -133,14 +135,14 @@ def _(mo, task_name, ui_model_manager):
         fit_clicks,
         ui_K,
         ui_alias,
+        ui_cv_mode,
+        ui_cv_repeats,
         ui_emission_cols,
         ui_existing,
         ui_frozen_emissions,
         ui_subjects,
         ui_tau,
         ui_transition_cols,
-        ui_cv_mode,
-        ui_cv_repeats,
     )
 
 
@@ -157,14 +159,14 @@ def _(
     task_name,
     ui_K,
     ui_alias,
+    ui_cv_mode,
+    ui_cv_repeats,
     ui_emission_cols,
     ui_existing,
     ui_frozen_emissions,
     ui_subjects,
     ui_tau,
     ui_transition_cols,
-    ui_cv_mode,
-    ui_cv_repeats,
 ):
     _last_fit_click = get_last_fit_click()
     mo.stop(
@@ -266,13 +268,10 @@ def _(
 
 
 @app.cell
-def _(current_hash, mo, paths, pl, plt, sns, task_name, ui_alias, ui_cv_mode, ui_existing):
+def _(mo, paths, pd, pl, plt, selected_model_id, sns, task_name, ui_cv_mode):
     import json
-    import pandas as pd
 
     mo.stop(ui_cv_mode.value == "none", mo.md(""))
-
-    selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
     out_dir = paths.RESULTS / "fits" / task_name / "glmhmmt" / selected_model_id
     repeat_files = sorted(out_dir.glob("*_cv_repeats.parquet"))
     mo.stop(not repeat_files, mo.md("No CV repeat diagnostics found yet."))
@@ -347,13 +346,7 @@ def _(current_hash, mo, paths, pl, plt, sns, task_name, ui_alias, ui_cv_mode, ui
         "test_ll_per_trial",
         "test_acc",
     ]
-    return mo.vstack(
-        [
-            mo.md("### CV Diagnostics"),
-            mo.ui.table(repeats_pd[summary_cols]),
-            mo.as_html(fig),
-        ]
-    )
+    return
 
 
 @app.cell
@@ -362,7 +355,6 @@ def _(
     current_hash,
     df_all,
     load_fit_arrays,
-    mo,
     paths,
     resolve_selected_model_id,
     task_name,
@@ -371,9 +363,7 @@ def _(
     ui_emission_cols,
     ui_existing,
     ui_subjects,
-    ui_tau,
     ui_transition_cols,
-    ui_cv_mode,
 ):
     K = ui_K.value
 
@@ -444,13 +434,7 @@ def _(K, adapter, arrays_store, build_views, ui_scoring_key):
 
 
 @app.cell
-def _(
-    adapter,
-    build_trial_and_weights_df,
-    df_all,
-    mo,
-    views,
-):
+def _(adapter, build_trial_and_weights_df, df_all, mo, views):
     trial_df, weights_df = build_trial_and_weights_df(
         df_all,
         views=views,
@@ -458,7 +442,7 @@ def _(
         min_session_length=2,
     )
     mo.stop(trial_df.height == 0, mo.md("No subjects with matching data lengths."))
-    return trial_df, weights_df
+    return (trial_df,)
 
 
 @app.cell
@@ -544,64 +528,6 @@ def _(K, arrays_store, mo, plots, state_labels, ui_subjects):
 
 
 @app.cell
-def _(arrays_store, mo, ui_subjects):
-    # ── trial-window slider (shared across all posterior plots) ──────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    _T_max = (
-        max(arrays_store[s]["smoothed_probs"].shape[0] for s in _selected)
-        if _selected else 200
-    )
-    ui_trial_range = mo.ui.range_slider(
-        start=0,
-        stop=_T_max - 1,
-        value=[0, min(_T_max - 1, 199)],
-        label="Trial window",
-        step=1,
-    )
-    mo.vstack([mo.md("### Trial window"), ui_trial_range])
-    return (ui_trial_range,)
-
-
-@app.cell
-def _(
-    K,
-    arrays_store,
-    is_2afc,
-    mo,
-    plots,
-    state_labels,
-    ui_subjects,
-    ui_trial_range,
-    views,
-):
-    # ── posterior state probabilities ─────────────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
-    _t0, _t1 = ui_trial_range.value
-    if is_2afc:
-        _fig_p = plots.plot_posterior_probs(
-            views={s: views[s] for s in _selected},
-            K=K,
-            t0=_t0,
-            t1=_t1,
-        )
-    else:
-        _fig_p = plots.plot_posterior_probs(
-            arrays_store=arrays_store,
-            state_labels=state_labels,
-            K=K,
-            subjects=_selected,
-            t0=_t0,
-            t1=_t1,
-        )
-    mo.vstack([
-        mo.md(f"### Posterior state probabilities  (K={K})"),
-        ui_trial_range,
-        _fig_p,
-    ], align="center")
-    return
-
-@app.cell
 def _(mo):
     ui_psychometric_background = mo.ui.radio(
         options={
@@ -609,7 +535,7 @@ def _(mo):
             "Model curves": "model",
             "None": "none",
         },
-        value="data",
+        value="Data traces",
         inline=False,
         label="Psychometric background",
     )
@@ -626,7 +552,7 @@ def _(mo):
             "Predictive weights": "weighted",
             "MAP state": "map",
         },
-        value="weighted",
+        value="Predictive weights",
         inline=False,
         label="State assignment",
     )
@@ -636,7 +562,7 @@ def _(mo):
             "Trial-matched line": "trial_matched",
             "None": "none",
         },
-        value="smooth",
+        value="Smooth curve",
         inline=False,
         label="Model line",
     )
@@ -660,7 +586,7 @@ def _(is_2afc, mo, views):
         _feature_names = ["at_choice"]
     _default_feature = "at_choice" if "at_choice" in _feature_names else _feature_names[0]
     ui_psychometric_regressor = mo.ui.dropdown(
-        options={_feat.replace("_", " ").title(): _feat for _feat in _feature_names},
+        options=_feature_names,
         value=_default_feature,
         label="Regressor",
     )
@@ -676,7 +602,6 @@ def _(
     pl,
     plots,
     save_plot,
-    task_name,
     trial_df,
     ui_psychometric_background,
     ui_psychometric_regressor,
@@ -917,6 +842,7 @@ def _(
 @app.cell
 def _(
     adapter,
+    build_trial_df,
     df_all,
     editor_views,
     mo,
@@ -925,7 +851,6 @@ def _(
 ):
     _subj = ui_editor_subject.value
     _view = editor_views[_subj]
-    from glmhmmt.postprocess import build_trial_df
 
     _df_sub = select_subject_behavior_df(
         df_all,
@@ -958,13 +883,13 @@ def _(
     np,
     plots,
     save_plot,
+    ui_editor_subject,
     ui_psychometric_background,
     ui_psychometric_regressor,
     ui_state_assignment_mode,
     ui_state_model_line_mode,
     ui_state_show_data_smooth,
     ui_state_show_weighted_points,
-    ui_editor_subject,
 ):
     _subj = ui_editor_subject.value
     _view = editor_view

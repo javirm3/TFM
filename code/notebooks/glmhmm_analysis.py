@@ -526,72 +526,6 @@ def _(K, arrays_store, mo, plots, state_labels, ui_subjects):
 
 
 @app.cell
-def _(mo, ui_subjects, views):
-    # ── trial-window slider (shared across all posterior plots) ──────────────
-    _selected = [s for s in ui_subjects.value if s in views]
-    _T_max = max((views[s].T for s in _selected), default=200)
-    ui_trial_range = mo.ui.range_slider( start=0, stop=_T_max - 1, value=[0, min(_T_max - 1, 199)], label="Trial window", step=1,)
-    mo.vstack([mo.md("### Trial window"), ui_trial_range])
-    return (ui_trial_range,)
-
-
-@app.cell
-def _(K, mo, np, plt, sns, ui_subjects, ui_trial_range, views):
-    # ── posterior state probabilities ─────────────────────────────────────────
-    _selected = [s for s in ui_subjects.value if s in views]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
-
-    _t0, _t1 = ui_trial_range.value
-    _n_subj = len(_selected)
-    _fig_p, _axes_p = plt.subplots( _n_subj, 1, figsize=(14, 3 * _n_subj), squeeze=False )
-
-    for _i, _subj in enumerate(_selected):
-        _ax = _axes_p[_i, 0]
-        _view = views[_subj]
-        _probs = np.asarray(_view.smoothed_probs)[_t0 : _t1 + 1]
-        _y = np.asarray(_view.y).astype(int)[_t0 : _t1 + 1]
-        _T_w = _probs.shape[0]
-        _x = np.arange(_t0, _t0 + _T_w)
-
-        # stacked area — color by label rank so Engaged is always palette[0]
-        _colors = ["tab:green", "tab:grey", *sns.color_palette("tab10", n_colors=max(0, K - 2))]
-        _bottom = np.zeros(_T_w)
-        _slbl = _view.state_name_by_idx
-        sorted_states = list(_view.state_idx_order)
-
-        for _k in sorted_states:
-            _rank = _view.state_rank_by_idx.get(int(_k), int(_k))
-            _col = _colors[_rank] if _rank < len(_colors) else sns.color_palette("tab10", n_colors=K)[_rank % K]
-            _ax.fill_between( _x, _bottom, _bottom + _probs[:, _k], alpha=0.7, color=_col, label=_slbl.get(_k, f"State {_k}"),)
-            _bottom += _probs[:, _k]
-
-        # choice markers on top
-        _choice_colors = {0: "royalblue", 1: "gold", 2: "tomato"}
-        _choice_labels = {0: "L", 1: "C", 2: "R"}
-        for _resp, _col in _choice_colors.items():
-            _mask = _y == _resp
-            _ax.scatter( _x[_mask], np.ones(_mask.sum()) * 1.03, c=_col, s=4, marker="|", label=_choice_labels[_resp], transform=_ax.get_xaxis_transform(), clip_on=False,)
-
-        _ax.set_xlim(_t0, _t0 + _T_w - 1)
-        _ax.set_ylim(0, 1)
-        _ax.set_ylabel("State probability")
-        _ax.set_title(f"Subject {_subj}")
-        _ax.legend( bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=8, ncol=1, frameon=False,)
-
-    _axes_p[-1, 0].set_xlabel("Trial")
-    _fig_p.tight_layout()
-    _fig_p.subplots_adjust(right=0.85)
-    sns.despine(fig=_fig_p)
-    mo.vstack(
-        [
-            mo.md(f"### Posterior state probabilities  (K={K})"),
-            _fig_p,
-        ], align="center",
-    )
-    return
-
-
-@app.cell
 def _(mo):
     ui_psychometric_background = mo.ui.radio(
         options={
@@ -1307,12 +1241,6 @@ def _(mo, pl, trial_df, ui_session_subj, views):
         options=[str(s) for s in _sess_opts],
         value=str(_sess_opts[0]),
         label="Session",
-    )
-    mo.vstack(
-        [
-            mo.md("### Session deep-dive"),
-            mo.hstack([ui_session_subj, ui_session_id]),
-        ]
     )
     return (ui_session_id,)
 
