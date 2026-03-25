@@ -252,6 +252,17 @@ def plot_categorical_performance_by_state(
     model_line_mode: str = "smooth",
     state_assignment_mode: str = "weighted",
 ):
+    # Accepted for notebook API compatibility; MCDR keeps its current plot style.
+    _ = (
+        background_style,
+        show_weighted_points,
+        show_data_smooth,
+        show_model_smooth,
+        figure_dpi,
+        overlay_only,
+        model_line_mode,
+        state_assignment_mode,
+    )
     if not isinstance(df, pl.DataFrame):
         df = pl.from_pandas(df)
 
@@ -350,6 +361,8 @@ def plot_categorical_performance_all(
     ild_max: Optional[float] = None,
     background_style: str = "data",
 ):
+    # Accepted for notebook API compatibility; MCDR keeps its current plot style.
+    _ = (views, X_cols, ild_max, background_style)
     fig, axes = plt.subplots(1, 3, figsize=(10, 4), sharey=True)
     ax1, ax2, ax3 = axes
     df = df.drop("p_model_correct").rename({"p_model_correct_marginal": "p_model_correct"})
