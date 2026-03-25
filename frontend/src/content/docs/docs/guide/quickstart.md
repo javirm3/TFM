@@ -50,18 +50,32 @@ The adapter owns:
 - state labels
 - task-specific plots
 
+If you are starting support for a new behavioural task, the repository also
+ships an optional Codex skill, `$glmhmmt-task-adapter`, to speed up the first
+pass. It helps scaffold or update the task adapter, the task-owned plot module,
+and the related docs while keeping task semantics out of `glmhmmt`.
+
 ## Prepare your data
 
-Your trial data should be a `pandas.DataFrame` with one row per trial. Use `build_sequence_from_df` to convert it into the tensor format the model expects:
+Load the cleaned dataset through the active adapter and let the adapter build
+the design matrices:
 
 ```python
-from glmhmmt import build_sequence_from_df
+import polars as pl
+import paths
 
-y, X, U, names, extras = build_sequence_from_df(
-    df_sub,
-    tau=50.0,
-)
+df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+df = adapter.subject_filter(df)
+
+subject = df["subject"].unique().sort()[0]
+df_sub = df.filter(pl.col("subject") == subject).sort(adapter.sort_col)
+
+y, X, U, names = adapter.load_subject(df_sub, tau=50.0)
 ```
+
+This keeps the notebook or script generic while letting each task decide how to
+filter rows, derive regressors, and map behavioural columns into the shared
+`(y, X, U, names)` contract.
 
 ## Fit the model
 
@@ -112,4 +126,6 @@ fig, _ = plots.plot_categorical_performance_all(
 ## Next steps
 
 See the [framework guide](/docs/guide/framework) for the full repository flow and
-[adding a task](/docs/guide/tasks) for the task adapter contract.
+[adding a task](/docs/guide/tasks) for the task adapter contract, the plot
+boundary, and the install path for `$glmhmmt-task-adapter`. The generic
+adapter/factory reference lives in [tasks API](/docs/api/tasks).

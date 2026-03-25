@@ -198,6 +198,22 @@ class MCDRAdapter(TaskAdapter):
     def default_transition_cols(self) -> List[str]:
         return list(_ALL_TRANSITION_COLS)
 
+    def resolve_design_names(
+        self,
+        emission_cols: List[str] | None = None,
+        transition_cols: List[str] | None = None,
+        df=None,
+    ) -> Dict[str, List[str]]:
+        ecols = list(emission_cols) if emission_cols is not None else list(_ALL_EMISSION_COLS)
+        ucols = list(transition_cols) if transition_cols is not None else list(_ALL_TRANSITION_COLS)
+        bad_e = [c for c in ecols if c not in _ALL_EMISSION_COLS]
+        bad_u = [c for c in ucols if c not in _ALL_TRANSITION_COLS]
+        if bad_e:
+            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {_ALL_EMISSION_COLS}")
+        if bad_u:
+            raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {_ALL_TRANSITION_COLS}")
+        return {"X_cols": ecols, "U_cols": ucols}
+
     @property
     def choice_labels(self) -> list[str]:
         return ["Left", "Center", "Right"]

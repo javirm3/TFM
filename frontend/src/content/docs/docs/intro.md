@@ -26,7 +26,7 @@ The **GLM emission** connects observable covariates (stimulus contrast, previous
 | JAX/JIT acceleration | ✅ | ✅ |
 | GLM-HMM model class | Partial | `SoftmaxGLMHMM` with softmax emissions |
 | Per-subject session-aware EM | ❌ | ✅ |
-| Feature engineering helpers | ❌ | `build_sequence_from_df` |
+| Task-aware data loading | ❌ | `TaskAdapter.build_feature_df()` + `load_subject()` |
 | Postprocessing utilities | ❌ | `build_trial_df`, `build_emission_weights_df` |
 | Shared diagnostics + task-owned plots | ❌ | `glmhmmt.model_plots` + `tasks.plots.*` |
 

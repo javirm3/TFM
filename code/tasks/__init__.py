@@ -90,6 +90,33 @@ class TaskAdapter(ABC):
         """Ordered list of selectable transition regressors."""
         return self.default_transition_cols()
 
+    def resolve_design_names(
+        self,
+        emission_cols: List[str] | None = None,
+        transition_cols: List[str] | None = None,
+        df: Any = None,
+    ) -> Dict[str, List[str]]:
+        """Resolve the selected design variable names without rebuilding arrays.
+
+        This is a cheap metadata-only helper for notebook loading paths that
+        need fallback ``X_cols`` / ``U_cols`` for older fit artifacts.
+        Adapters with dynamic expansion can override it.
+        """
+        x_cols = list(emission_cols) if emission_cols is not None else list(self.default_emission_cols())
+        u_cols = list(transition_cols) if transition_cols is not None else list(self.default_transition_cols())
+
+        bad_e = [c for c in x_cols if c not in self.available_emission_cols()]
+        bad_u = [c for c in u_cols if c not in self.available_transition_cols()]
+        if bad_e:
+            raise ValueError(
+                f"Unknown emission_cols: {bad_e}. Available: {self.available_emission_cols()}"
+            )
+        if bad_u:
+            raise ValueError(
+                f"Unknown transition_cols: {bad_u}. Available: {self.available_transition_cols()}"
+            )
+        return {"X_cols": x_cols, "U_cols": u_cols}
+
     def sf_cols(self, df: Any) -> List[str]:
         """Optional dynamic stimulus-frame columns for binary tasks."""
         return []

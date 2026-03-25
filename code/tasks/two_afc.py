@@ -282,6 +282,43 @@ class TwoAFCAdapter(TaskAdapter):
     def available_transition_cols(self) -> List[str]:
         return list(_AVAILABLE_2AFC_TRANSITION_COLS)
 
+    def resolve_design_names(
+        self,
+        emission_cols: List[str] | None = None,
+        transition_cols: List[str] | None = None,
+        df: pl.DataFrame | None = None,
+    ) -> Dict[str, List[str]]:
+        requested_ecols = list(emission_cols) if emission_cols is not None else self.default_emission_cols()
+        requested_ucols = list(transition_cols) if transition_cols is not None else self.default_transition_cols()
+
+        extra_cols: list[str] = []
+        if df is not None:
+            extra_cols = self.available_extra_emission_cols(df)
+
+        resolved_ecols: list[str] = []
+        for col in requested_ecols:
+            if col == "stim_strength":
+                sf_cols = self.sf_cols(df) if df is not None else []
+                if not sf_cols:
+                    raise ValueError(
+                        "Requested emission col 'stim_strength', but no frame-level "
+                        f"'{_SF_COL_PREFIX}*' columns are available without rebuilding features."
+                    )
+                resolved_ecols.extend(sf_cols)
+            else:
+                resolved_ecols.append(col)
+
+        allowed_ecols = set(self.available_emission_cols()) | set(extra_cols)
+        bad_e = [c for c in resolved_ecols if c not in allowed_ecols]
+        bad_u = [c for c in requested_ucols if c not in _AVAILABLE_2AFC_TRANSITION_COLS]
+        if bad_e:
+            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {sorted(allowed_ecols)}")
+        if bad_u:
+            raise ValueError(
+                f"Unknown transition_cols: {bad_u}. Available: {_AVAILABLE_2AFC_TRANSITION_COLS}"
+            )
+        return {"X_cols": list(resolved_ecols), "U_cols": list(requested_ucols)}
+
     def sf_cols(self, df: pl.DataFrame) -> List[str]:
         """Return any stimulus-frame (sf_*) columns present in *df*."""
         return [c for c in df.columns if c.startswith(_SF_COL_PREFIX)]

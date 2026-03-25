@@ -10,6 +10,12 @@ def _():
     import sys, os
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     sys.path.append(os.path.join(os.path.dirname(__file__), "..", "glmhmmt", "src"))
+    from analysis_common import (
+        build_trial_and_weights_df,
+        load_fit_arrays,
+        resolve_selected_model_id,
+        select_subject_behavior_df,
+    )
     import paths
     import numpy as np
     import polars as pl
@@ -40,17 +46,19 @@ def _():
         apply_state_tweak_to_trial_df,
         apply_state_tweak_to_view,
         build_editor_payload,
-        build_emission_weights_df,
-        build_trial_df,
+        build_trial_and_weights_df,
         build_views,
         fit_main,
         get_adapter,
+        load_fit_arrays,
         make_plot_saver,
         mo,
         np,
         paths,
         pl,
         plt,
+        resolve_selected_model_id,
+        select_subject_behavior_df,
         sns,
     )
 
@@ -353,10 +361,10 @@ def _(
     adapter,
     current_hash,
     df_all,
+    load_fit_arrays,
     mo,
-    np,
     paths,
-    pl,
+    resolve_selected_model_id,
     task_name,
     ui_K,
     ui_alias,
@@ -369,41 +377,22 @@ def _(
 ):
     K = ui_K.value
 
-    selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
-    OUT = paths.RESULTS / "fits" / task_name / "glmhmmt" / selected_model_id
-    # load feature names from data (use first available subject for a representative build)
-    _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(adapter.sort_col)
-    _, _, _, names = adapter.load_subject(
-        _df_sel,
-        tau=ui_tau.value,
-        emission_cols=ui_emission_cols.value,
-        transition_cols=ui_transition_cols.value,
+    selected_model_id = resolve_selected_model_id(
+        current_hash,
+        ui_existing.value,
+        ui_alias.value,
     )
-
-    arrays_store = {}
-    _files = list(sorted(OUT.glob("*_glmhmmt_arrays.npz")))
-    _files += [f for f in sorted(OUT.glob(f"*_K{K}_glmhmmt_arrays.npz")) if f not in _files]
-    for _f in _files:
-        _subj = _f.name.removesuffix("_glmhmmt_arrays.npz").removesuffix(f"_K{K}")
-        _d = dict(np.load(_f, allow_pickle=True))
-        _saved_names = {}
-        if "names" in _d:
-            _raw_names = _d["names"]
-            if getattr(_raw_names, "shape", None) == ():
-                _saved_names = _raw_names.item()
-        # decode column names saved as string arrays; fall back to nested names,
-        # then to the current build output for backward compatibility.
-        _d["X_cols"] = (
-            list(_d["X_cols"]) if "X_cols" in _d
-            else list(_saved_names.get("X_cols", names["X_cols"]))
-        )
-        _d["U_cols"] = (
-            list(_d["U_cols"]) if "U_cols" in _d
-            else list(_saved_names.get("U_cols", names["U_cols"]))
-        )
-        arrays_store[_subj] = _d
-
-    # arrays_store
+    OUT = paths.RESULTS / "fits" / task_name / "glmhmmt" / selected_model_id
+    arrays_store, names = load_fit_arrays(
+        out_dir=OUT,
+        arrays_suffix="glmhmmt_arrays.npz",
+        adapter=adapter,
+        df_all=df_all,
+        subjects=list(ui_subjects.value),
+        emission_cols=list(ui_emission_cols.value),
+        transition_cols=list(ui_transition_cols.value),
+        k=K,
+    )
     return K, arrays_store, names, selected_model_id
 
 
@@ -443,7 +432,6 @@ def _(K, adapter, arrays_store, build_views, mo, ui_scoring_key, ui_subjects):
         adapter.scoring_key = ui_scoring_key.value
     views = build_views(arrays_store, adapter, K, _selected)
     state_labels = {s: v.state_name_by_idx for s, v in views.items()}
-    state_order = {s: v.state_idx_order for s, v in views.items()}
     return state_labels, views
 
 
@@ -458,33 +446,19 @@ def _(K, adapter, arrays_store, build_views, ui_scoring_key):
 @app.cell
 def _(
     adapter,
-    build_emission_weights_df,
-    build_trial_df,
+    build_trial_and_weights_df,
     df_all,
     mo,
-    pl,
     views,
 ):
-    _sort_col = adapter.sort_col
-    _ses_col = adapter.session_col
-    _bcols = adapter.behavioral_cols
-    _trial_frames = []
-    for _subj, _view in views.items():
-        _df_sub = (
-            df_all
-            .filter(pl.col("subject") == _subj)
-            .sort(_sort_col)
-            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
-        )
-        if _df_sub.height != _view.T:
-            print(f"⚠️  {_subj}: row mismatch ({_df_sub.height} vs {_view.T}), skipping")
-            continue
-        _trial_frames.append(build_trial_df(_view, adapter, _df_sub, _bcols))
-
-    mo.stop(not _trial_frames, mo.md("No subjects with matching data lengths."))
-    trial_df = pl.concat(_trial_frames)
-    weights_df = build_emission_weights_df(views)
-    return (trial_df,)
+    trial_df, weights_df = build_trial_and_weights_df(
+        df_all,
+        views=views,
+        adapter=adapter,
+        min_session_length=2,
+    )
+    mo.stop(trial_df.height == 0, mo.md("No subjects with matching data lengths."))
+    return trial_df, weights_df
 
 
 @app.cell
@@ -513,14 +487,16 @@ def _(
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
     _save_path = paths.RESULTS / "plots/GLMHMMT/emissions_coefs.png"
+    _views_sel = {s: views[s] for s in _selected}
     if is_2afc:
-        _fig_ag, _fig_cls = plots.plot_emission_weights(
-            views={s: views[s] for s in _selected},
+        _fig_by_subject = plots.plot_emission_weights_by_subject(
+            views=_views_sel,
             K=K,
             save_path=_save_path,
         )
+        _summary_figs = [plots.plot_emission_weights_summary(views=_views_sel, K=K)]
     else:
-        _fig_ag, _fig_cls = plots.plot_emission_weights(
+        _fig_by_subject = plots.plot_emission_weights_by_subject(
             arrays_store=arrays_store,
             state_labels=state_labels,
             names=names,
@@ -528,50 +504,41 @@ def _(
             subjects=_selected,
             save_path=_save_path,
         )
-    mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
+        _summary_figs = list(
+            plots.plot_emission_weights(
+                arrays_store=arrays_store,
+                state_labels=state_labels,
+                names=names,
+                K=K,
+                subjects=_selected,
+            )
+        )
+    mo.vstack([mo.md("### Emission weights"), mo.md("#### By subject"), _fig_by_subject, mo.md("#### Summary"), *_summary_figs])
     return
 
 
 @app.cell
-def _(K, arrays_store, mo, np, plt, sns, state_labels, ui_subjects):
-    # ── transition matrix heatmap — marimo grid (3 per row) ──────────────────
+def _(K, arrays_store, mo, plots, state_labels, ui_subjects):
     _selected = [s for s in ui_subjects.value if s in arrays_store]
-    _COLS = 3
-    _figs_t = []
-    for _subj in _selected:
-        _arr = arrays_store[_subj]
-        if "transition_matrix" in _arr:
-            _A = _arr["transition_matrix"]
-        else:
-            _bias = _arr["transition_bias"]  # (K, K)
-            _A = np.exp(_bias) / np.exp(_bias).sum(axis=-1, keepdims=True)
-        _slbl = state_labels.get(_subj, {k: f"S{k}" for k in range(K)})
-        _tick_labels = [_slbl.get(k, f"S{k}") for k in range(K)]
-        _fig_t, _ax_t = plt.subplots(figsize=(3.2, 2.8))
-        sns.heatmap(
-            _A,
-            ax=_ax_t,
-            cmap="bone",
-            annot=True, fmt=".2f",
-            vmin=0, vmax=1,
-            square=True,
-            linewidths=0.5,
-            xticklabels=_tick_labels,
-            yticklabels=_tick_labels,
-            cbar_kws={"shrink": 0.8, "label": "probability"},
-        )
-        _ax_t.set_title(f"Subject {_subj}")
-        _ax_t.set_xlabel("To state")
-        _ax_t.set_ylabel("From state")
-        _fig_t.tight_layout()
-        _figs_t.append(_fig_t)
-    _rows_t = [
-        mo.hstack(_figs_t[i : i + _COLS], justify="start")
-        for i in range(0, len(_figs_t), _COLS)
-    ]
+    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+    _fig_by_subject = plots.plot_transition_matrix_by_subject(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        K=K,
+        subjects=_selected,
+    )
+    _fig_summary = plots.plot_transition_matrix(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        K=K,
+        subjects=_selected,
+    )
     mo.vstack([
         mo.md(f"### Transition matrices — bias-only component  (K={K})"),
-        *_rows_t,
+        mo.md("#### By subject"),
+        _fig_by_subject,
+        mo.md("#### Summary"),
+        _fig_summary,
     ])
     return
 
@@ -651,6 +618,37 @@ def _(mo):
 
 
 @app.cell
+def _(mo):
+    ui_state_show_weighted_points = mo.ui.checkbox(value=True, label="Weighted dots")
+    ui_state_show_data_smooth = mo.ui.checkbox(value=True, label="Data smooth")
+    ui_state_assignment_mode = mo.ui.radio(
+        options={
+            "Predictive weights": "weighted",
+            "MAP state": "map",
+        },
+        value="weighted",
+        inline=False,
+        label="State assignment",
+    )
+    ui_state_model_line_mode = mo.ui.radio(
+        options={
+            "Smooth curve": "smooth",
+            "Trial-matched line": "trial_matched",
+            "None": "none",
+        },
+        value="smooth",
+        inline=False,
+        label="Model line",
+    )
+    return (
+        ui_state_assignment_mode,
+        ui_state_model_line_mode,
+        ui_state_show_data_smooth,
+        ui_state_show_weighted_points,
+    )
+
+
+@app.cell
 def _(is_2afc, mo, views):
     _feature_names = []
     if is_2afc and views:
@@ -671,7 +669,24 @@ def _(is_2afc, mo, views):
 
 
 @app.cell
-def _(K, is_2afc, mo, pl, plots, save_plot, task_name, trial_df, ui_psychometric_background, ui_psychometric_regressor, ui_subjects, views):
+def _(
+    K,
+    is_2afc,
+    mo,
+    pl,
+    plots,
+    save_plot,
+    task_name,
+    trial_df,
+    ui_psychometric_background,
+    ui_psychometric_regressor,
+    ui_state_assignment_mode,
+    ui_state_model_line_mode,
+    ui_state_show_data_smooth,
+    ui_state_show_weighted_points,
+    ui_subjects,
+    views,
+):
     _selected = [s for s in ui_subjects.value if s in views]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
@@ -695,6 +710,12 @@ def _(K, is_2afc, mo, pl, plots, save_plot, task_name, trial_df, ui_psychometric
         views=_views_sel,
         model_name=f"glmhmmt K={K} — per state",
         background_style=ui_psychometric_background.value,
+        show_weighted_points=ui_state_show_weighted_points.value,
+        show_data_smooth=ui_state_show_data_smooth.value,
+        show_model_smooth=ui_state_model_line_mode.value != "none",
+        model_line_mode=ui_state_model_line_mode.value,
+        state_assignment_mode=ui_state_assignment_mode.value,
+        figure_dpi=80,
     )
     _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
     if is_2afc and _reg_plot_fn is not None:
@@ -704,6 +725,12 @@ def _(K, is_2afc, mo, pl, plots, save_plot, task_name, trial_df, ui_psychometric
             model_name=f"glmhmmt K={K}",
             feature_col=ui_psychometric_regressor.value,
             background_style=ui_psychometric_background.value,
+            show_weighted_points=ui_state_show_weighted_points.value,
+            show_data_smooth=ui_state_show_data_smooth.value,
+            show_model_smooth=ui_state_model_line_mode.value != "none",
+            model_line_mode=ui_state_model_line_mode.value,
+            state_assignment_mode=ui_state_assignment_mode.value,
+            figure_dpi=80,
         )
         _reg_section = mo.vstack([
             mo.hstack([mo.md("### Per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
@@ -736,6 +763,10 @@ def _(K, is_2afc, mo, pl, plots, save_plot, task_name, trial_df, ui_psychometric
                 mo.vstack(
                     [
                         ui_psychometric_background,
+                        ui_state_show_weighted_points,
+                        ui_state_show_data_smooth,
+                        ui_state_assignment_mode,
+                        ui_state_model_line_mode,
                     ],
                     align="start",
                 ),
@@ -886,26 +917,25 @@ def _(
 @app.cell
 def _(
     adapter,
-    build_trial_df,
     df_all,
     editor_views,
     mo,
-    pl,
+    select_subject_behavior_df,
     ui_editor_subject,
 ):
     _subj = ui_editor_subject.value
     _view = editor_views[_subj]
-    _sort_col = adapter.sort_col
-    _ses_col = adapter.session_col
-    _bcols = adapter.behavioral_cols
-    _df_sub = (
-        df_all
-        .filter(pl.col("subject") == _subj)
-        .sort(_sort_col)
-        .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
+    from glmhmmt.postprocess import build_trial_df
+
+    _df_sub = select_subject_behavior_df(
+        df_all,
+        subject=_subj,
+        sort_col=adapter.sort_col,
+        session_col=adapter.session_col,
+        min_session_length=2,
     )
     mo.stop(_df_sub.height != _view.T, mo.md(f"Subject {_subj} does not match the loaded fit arrays."))
-    editor_trial_df = build_trial_df(_view, adapter, _df_sub, _bcols)
+    editor_trial_df = build_trial_df(_view, adapter, _df_sub, adapter.behavioral_cols)
     editor_view = _view
     return editor_trial_df, editor_view
 
@@ -928,9 +958,12 @@ def _(
     np,
     plots,
     save_plot,
-    task_name,
     ui_psychometric_background,
     ui_psychometric_regressor,
+    ui_state_assignment_mode,
+    ui_state_model_line_mode,
+    ui_state_show_data_smooth,
+    ui_state_show_weighted_points,
     ui_editor_subject,
 ):
     _subj = ui_editor_subject.value
@@ -970,6 +1003,12 @@ def _(
         views={_subj: _view_tweaked},
         model_name=f"{_title} — per state",
         background_style=ui_psychometric_background.value,
+        show_weighted_points=ui_state_show_weighted_points.value,
+        show_data_smooth=ui_state_show_data_smooth.value,
+        show_model_smooth=ui_state_model_line_mode.value != "none",
+        model_line_mode=ui_state_model_line_mode.value,
+        state_assignment_mode=ui_state_assignment_mode.value,
+        figure_dpi=80,
     )
     _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
     if _reg_plot_fn is None:
@@ -981,6 +1020,12 @@ def _(
             model_name=_title,
             feature_col=ui_psychometric_regressor.value,
             background_style=ui_psychometric_background.value,
+            show_weighted_points=ui_state_show_weighted_points.value,
+            show_data_smooth=ui_state_show_data_smooth.value,
+            show_model_smooth=ui_state_model_line_mode.value != "none",
+            model_line_mode=ui_state_model_line_mode.value,
+            state_assignment_mode=ui_state_assignment_mode.value,
+            figure_dpi=80,
         )
         _reg_section = mo.vstack(
             [
@@ -1034,6 +1079,10 @@ def _(
                     mo.vstack(
                         [
                             ui_psychometric_background,
+                            ui_state_show_weighted_points,
+                            ui_state_show_data_smooth,
+                            ui_state_assignment_mode,
+                            ui_state_model_line_mode,
                         ],
                         align="start",
                     ),
@@ -1074,35 +1123,6 @@ def _(K, mo, plots, ui_subjects, views):
         mo.md("### Transition weights"),
         mo.hstack([_fig_line, _fig_box]),
     ])
-    return
-
-
-@app.cell
-def _(arrays_store, names):
-    def _(K, mo, plots, ui_subjects, views):
-        # ── Input-dependent transition weights ────────────────────────────────────
-        _selected = [s for s in ui_subjects.value if s in arrays_store]
-        _selected = [s for s in ui_subjects.value if s in views]
-        mo.stop(
-            not _selected or "transition_weights" not in arrays_store.get(_selected[0], {}),
-            not _selected or getattr(views.get(_selected[0]), "transition_weights", None) is None,
-            mo.md("No transition weights found — run the glmhmm-t fit first."),
-        )
-        _fig_line, _fig_box, _fig_std, _fig_raw = plots.plot_transition_weights(
-            arrays_store=arrays_store,
-            names=names,
-            K=K,
-            subjects=_selected,
-        )
-        _fig_line, _fig_box = plots.plot_transition_weights(views=views, K=K, subjects=_selected)
-        mo.vstack([
-            mo.md("### Transition weights"),
-            mo.hstack([_fig_line, _fig_box]),
-            _fig_std,
-            _fig_raw,
-        ])
-        return
-
     return
 
 

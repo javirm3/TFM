@@ -740,30 +740,12 @@ def _build_state_palette(
     return pal, ordered
 
 
-def plot_emission_weights(
+def _collect_emission_weight_frames(
     arrays_store: dict,
     state_labels: dict,
     names: dict,
-    K: int,
     subjects: list,
-    save_path=None,
 ):
-    """
-    Emission weights: collapsed agonist view (fig_ag) + per-choice-class (fig_cls).
-
-    Parameters
-    ----------
-    arrays_store : {subj: npz-dict with "emission_weights"}
-    state_labels : {subj: {state_idx: label_str}}
-    names        : dict with key "X_cols"
-    K            : number of states
-    subjects     : subject IDs to include
-    save_path    : optional Path - agonist figure is saved there if provided
-
-    Returns
-    -------
-    fig_ag, fig_cls
-    """
     _CLS_LABELS  = ["Left (vs C)", "Right (vs C)"]
     _records     = []
     _ag_records  = []
@@ -827,11 +809,109 @@ def plot_emission_weights(
     _df_w     = pd.DataFrame(_records)
     _df_ag    = pd.DataFrame(_ag_records)
     _ag_order = [g for g, _ in _AG_GROUPS if g in _df_ag["feature"].values]
-
-    # ── canonical palette (rank-ordered, config-driven) ───────────────────────
     _state_pal, _state_hue_order = _build_state_palette(state_labels)
+    return _df_w, _df_ag, _feat_names, _ag_order, _state_pal, _state_hue_order, _CLS_LABELS
 
-    # ── 1. Agonist (collapsed) figure ─────────────────────────────────────────
+
+def plot_emission_weights_by_subject(
+    arrays_store: dict,
+    state_labels: dict,
+    names: dict,
+    K: int,
+    subjects: list,
+    save_path=None,
+):
+    """Per-subject barplots of emission weights."""
+    _df_w, _, _feat_names, _, _state_pal, _state_hue_order, _cls_labels = _collect_emission_weight_frames(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+
+    _selected = [s for s in subjects if s in arrays_store and "emission_weights" in arrays_store[s]]
+    _n_classes = max(1, _df_w["class"].nunique())
+    _n_cols = min(3, max(1, len(_selected)))
+    _n_panels = max(1, len(_selected) * _n_classes)
+    _n_rows = int(math.ceil(_n_panels / _n_cols))
+    _fig_w = max(6, len(_feat_names) * 0.8) * _n_cols
+    _fig_h = max(3.4, 3.2 * _n_rows)
+    fig_bar, axes = plt.subplots(
+        _n_rows,
+        _n_cols,
+        figsize=(_fig_w, _fig_h),
+        sharey=True,
+        squeeze=False,
+    )
+
+    _x = np.arange(len(_feat_names))
+    _bar_w = 0.8 / max(1, len(_state_hue_order))
+
+    for subj_idx, subj in enumerate(_selected):
+        for class_idx in range(_n_classes):
+            panel_idx = subj_idx * _n_classes + class_idx
+            ax = axes[panel_idx // _n_cols, panel_idx % _n_cols]
+            _sub = _df_w[(_df_w["subject"] == subj) & (_df_w["class"] == class_idx)]
+            for state_pos, state_name in enumerate(_state_hue_order):
+                _state_sub = (
+                    _sub[_sub["state"] == state_name]
+                    .set_index("feature")
+                    .reindex(_feat_names)
+                    .reset_index()
+                )
+                _offset = (state_pos - (len(_state_hue_order) - 1) / 2) * _bar_w
+                ax.bar(
+                    _x + _offset,
+                    _state_sub["weight"].to_numpy(dtype=float),
+                    _bar_w,
+                    label=state_name,
+                    color=_state_pal[state_name],
+                    alpha=0.85,
+                )
+            ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+            ax.set_xticks(_x)
+            ax.set_xticklabels(_feat_names, rotation=35, ha="right")
+            ax.set_title(
+                f"Subject {subj} — {_cls_labels[class_idx] if class_idx < len(_cls_labels) else f'Class {class_idx}'}"
+            )
+            if panel_idx % _n_cols == 0:
+                ax.set_ylabel("Weight")
+
+    for panel_idx in range(_n_panels, _n_rows * _n_cols):
+        axes[panel_idx // _n_cols, panel_idx % _n_cols].set_visible(False)
+
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    if handles:
+        axes[0, 0].legend(handles, labels, frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    fig_bar.suptitle(f"Emission weights by subject  (K={K})", y=1.01)
+    fig_bar.tight_layout()
+    sns.despine(fig=fig_bar)
+    if save_path is not None:
+        fig_bar.savefig(save_path, dpi=300)
+    return fig_bar
+
+
+def plot_emission_weights(
+    arrays_store: dict,
+    state_labels: dict,
+    names: dict,
+    K: int,
+    subjects: list,
+    save_path=None,
+):
+    """
+    Emission-weight summaries: collapsed agonist view + per-choice-class panels.
+
+    The per-subject barplots live in ``plot_emission_weights_by_subject`` so
+    notebooks can render or comment them independently.
+    """
+    _df_w, _df_ag, _feat_names, _ag_order, _state_pal, _state_hue_order, _CLS_LABELS = _collect_emission_weight_frames(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+
     # ── 1. Agonist (collapsed) figure ─────────────────────────────────────────
     fig_ag, axes_ag = plt.subplots(1, 2, figsize=(len(_ag_order) * 2, 4), sharex=True)
     ax_ag_line, ax_ag_box = axes_ag
@@ -932,8 +1012,6 @@ def plot_emission_weights(
         
     fig_ag.tight_layout()
     sns.despine(fig=fig_ag)
-    if save_path is not None:
-        fig_ag.savefig(save_path, dpi=300)
 
     # ── 2. Per-class figure ────────────────────────────────────────────────────
     _n_classes = _df_w["class"].nunique()
@@ -1029,6 +1107,113 @@ def plot_emission_weights(
     sns.despine(fig=fig_cls)
 
     return fig_ag, fig_cls
+
+
+def plot_transition_matrix_by_subject(
+    arrays_store: dict,
+    state_labels: dict,
+    K: int,
+    subjects: list,
+):
+    """Per-subject transition-matrix heatmaps."""
+    def _resolve_matrix(subj: str) -> np.ndarray | None:
+        _arr = arrays_store.get(subj, {})
+        if "transition_matrix" in _arr:
+            return np.asarray(_arr["transition_matrix"])
+        if "transition_bias" in _arr:
+            _bias = np.asarray(_arr["transition_bias"])
+            _exp = np.exp(_bias - _bias.max(axis=-1, keepdims=True))
+            return _exp / _exp.sum(axis=-1, keepdims=True)
+        return None
+
+    _selected = [s for s in subjects if _resolve_matrix(s) is not None]
+    if not _selected:
+        raise ValueError("No transition matrices found for selected subjects.")
+
+    _n_cols = min(3, len(_selected))
+    _n_rows = int(math.ceil(len(_selected) / _n_cols))
+    fig, axes = plt.subplots(
+        _n_rows,
+        _n_cols,
+        figsize=(4.2 * _n_cols, 3.4 * _n_rows),
+        squeeze=False,
+    )
+
+    for idx, subj in enumerate(_selected):
+        ax = axes[idx // _n_cols, idx % _n_cols]
+        _A = _resolve_matrix(subj)
+        _slbl = state_labels.get(subj, {k: f"S{k}" for k in range(K)})
+        _tick_labels = [_slbl.get(k, f"S{k}") for k in range(K)]
+        sns.heatmap(
+            _A,
+            ax=ax,
+            cmap="bone",
+            annot=True,
+            fmt=".2f",
+            vmin=0,
+            vmax=1,
+            square=True,
+            linewidths=0.5,
+            xticklabels=_tick_labels,
+            yticklabels=_tick_labels,
+            cbar=idx == 0,
+            cbar_kws={"shrink": 0.8, "label": "probability"},
+        )
+        ax.set_title(f"Subject {subj}")
+        ax.set_xlabel("To state")
+        ax.set_ylabel("From state")
+
+    for idx in range(len(_selected), _n_rows * _n_cols):
+        axes[idx // _n_cols, idx % _n_cols].set_visible(False)
+
+    fig.tight_layout()
+    return fig
+
+
+def plot_transition_matrix(
+    arrays_store: dict,
+    state_labels: dict,
+    K: int,
+    subjects: list,
+):
+    """Mean transition-matrix heatmap across selected subjects."""
+    def _resolve_matrix(subj: str) -> np.ndarray | None:
+        _arr = arrays_store.get(subj, {})
+        if "transition_matrix" in _arr:
+            return np.asarray(_arr["transition_matrix"])
+        if "transition_bias" in _arr:
+            _bias = np.asarray(_arr["transition_bias"])
+            _exp = np.exp(_bias - _bias.max(axis=-1, keepdims=True))
+            return _exp / _exp.sum(axis=-1, keepdims=True)
+        return None
+
+    _selected = [s for s in subjects if _resolve_matrix(s) is not None]
+    if not _selected:
+        raise ValueError("No transition matrices found for selected subjects.")
+
+    _A_mean = np.mean([_resolve_matrix(s) for s in _selected], axis=0)
+    _first_labels = state_labels.get(_selected[0], {k: f"S{k}" for k in range(K)})
+    _tick_labels = [_first_labels.get(k, f"S{k}") for k in range(K)]
+    fig, ax = plt.subplots(figsize=(4.4, 3.8))
+    sns.heatmap(
+        _A_mean,
+        ax=ax,
+        cmap="bone",
+        annot=True,
+        fmt=".2f",
+        vmin=0,
+        vmax=1,
+        square=True,
+        linewidths=0.5,
+        xticklabels=_tick_labels,
+        yticklabels=_tick_labels,
+        cbar_kws={"shrink": 0.8, "label": "probability"},
+    )
+    ax.set_title(f"Mean transition matrix  (n={len(_selected)} subjects)")
+    ax.set_xlabel("To state")
+    ax.set_ylabel("From state")
+    fig.tight_layout()
+    return fig
 
 
 def plot_posterior_probs(

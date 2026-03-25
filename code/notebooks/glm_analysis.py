@@ -17,6 +17,12 @@ def _():
     # Path setup
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     import paths
+    from analysis_common import (
+        build_trial_and_weights_df,
+        load_fit_arrays,
+        resolve_selected_model_id,
+        select_subject_behavior_df,
+    )
     from scripts.fit_glm import main as fit_main, generate_model_id
     from tasks import get_adapter
     from widgets import ModelManagerWidget
@@ -35,9 +41,11 @@ def _():
         apply_state_tweak_to_trial_df,
         apply_state_tweak_to_view,
         build_editor_payload,
+        build_trial_and_weights_df,
         fit_main,
         generate_model_id,
         get_adapter,
+        load_fit_arrays,
         make_plot_saver,
         mo,
         np,
@@ -45,6 +53,8 @@ def _():
         pd,
         pl,
         plt,
+        resolve_selected_model_id,
+        select_subject_behavior_df,
         sns,
     )
 
@@ -70,68 +80,6 @@ def _(ModelManagerWidget, mo):
     )
     ui_model_manager = mo.ui.anywidget(mm_widget)
     return (ui_model_manager,)
-
-
-@app.cell
-def _(df_all, mo, pl, plt, sns):
-    _required_cols = {
-        "ttype_n",
-        "stim_d",
-        "timepoint_2",
-        "timepoint_3",
-        "stimd_n",
-        "onset",
-        "performance",
-    }
-    mo.stop(
-        not _required_cols.issubset(set(df_all.columns)),
-        mo.md("Task-specific MCDR onset diagnostic is unavailable for this task."),
-    )
-
-    df_plot = (
-        df_all.filter(pl.col("ttype_n") == 1)
-        .with_columns(
-            # ((pl.col("onset") / 1).floor() * 1).round(2).alias("onset_bin"),
-            # ((pl.col("stim_d") / 1).floor() * 1).round(2).cast(pl.Utf8).alias("stim_bin"),
-             pl.col("stim_d").qcut(4).alias("stim_bin"),  # 4 quantile bins
-            (1/((pl.col("timepoint_3")-pl.col("timepoint_2")))).round(2).qcut(4).alias("speed"),
-              pl.col("stimd_n").cast(pl.Int32),
-            # Replace zeros with null so qcut computes quantiles only from non-zero values
-            pl.when(pl.col("onset") == 0).then(None).otherwise(pl.col("onset")).alias("_onset_nz")
-        ).with_columns(
-            pl.when(pl.col("onset") == 0)
-            .then(pl.lit("0"))
-            .otherwise(
-                pl.col("_onset_nz")
-                .qcut(3, labels=["low", "mid", "high"])
-                .cast(pl.Utf8)
-            )
-            .alias("onset_bin")
-
-        ).drop("_onset_nz")
-    )
-    df_plot = (
-        df_plot
-        .group_by(["stimd_n", "onset_bin"])
-        .agg(pl.col("performance").mean())
-        .sort(["onset_bin", "stimd_n"])  # sort so lineplot connects correctly
-    )
-    print(df_plot.pivot(index="stimd_n", on="onset_bin", values="performance"))
-    fig, ax = plt.subplots(figsize=(5,4))
-    sns.lineplot(
-        data=df_plot,
-        x="stimd_n",
-        y="performance",
-        hue="onset_bin",
-        hue_order=["0", "low", "mid", "high"],
-        palette = "viridis"
-    )
-    sns.despine()
-    ax.set_xticks(sorted(df_plot["stimd_n"].unique()))
-    ax.legend(title = "Onset", frameon=False,bbox_to_anchor=(1.02, 1), )
-    plt.tight_layout()
-    plt.show()
-    return
 
 
 @app.cell
@@ -219,66 +167,49 @@ def _(
     adapter,
     current_hash,
     df_all,
+    load_fit_arrays,
     mo,
-    np,
     paths,
-    pl,
+    resolve_selected_model_id,
     task_name,
     ui_alias,
     ui_emission_cols,
     ui_existing,
     ui_subjects,
-    ui_tau,
 ):
-    if ui_existing.value:
-        selected_model_id = ui_existing.value
-    elif ui_alias.value:
-        selected_model_id = ui_alias.value
-    else:
-        selected_model_id = current_hash 
+    def _normalize_glm_arrays(arrays: dict) -> dict:
+        # ── Backward-compatibility: old fit_glm.py saved W_R at index 0.
+        # New convention stores W_L (negative stim weight) at index 0.
+        _weights = arrays.get("emission_weights")
+        if _weights is None:
+            return arrays
 
-    OUT = paths.RESULTS / "fits" / task_name / "glm" / selected_model_id
-
-    # Feature names from adapter (uniform for both tasks)
-    _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value))
-    if len(_df_sel) > 0:
-        _df_sel = _df_sel.sort(adapter.sort_col)
-        _ , _, _, names = adapter.load_subject(
-            _df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value
+        stim_idx = next(
+            (idx for idx, col in enumerate(arrays.get("X_cols", [])) if col in {"stim_vals", "stim_d", "ild_norm"}),
+            None,
         )
-    else:
-        names = {"X_cols": [], "U_cols": []}
+        if stim_idx is not None and float(_weights[0, 0, stim_idx]) > 0:
+            arrays["emission_weights"] = -_weights
+        return arrays
 
-    arrays_store = {}
-    for _f in sorted(OUT.glob("*_glm_arrays.npz")):
-        _subj = _f.name.removesuffix("_glm_arrays.npz")
-        if _f.exists():
-            _d = dict(np.load(_f, allow_pickle=True))
-            # decode column names saved as string arrays; fall back to build output
-            _d["X_cols"] = (
-                list(_d["X_cols"]) if "X_cols" in _d else names.get("X_cols", [])
-            )
-            # ── Backward-compatibility: old fit_glm.py saved W_R at index 0.
-            # New convention stores W_L (negative stim weight) at index 0.
-            # Detect old files by sign of stim weight and negate to W_L.
-            _W = _d.get("emission_weights")
-            if _W is not None:
-                _stim_names = {"stim_vals", "stim_d", "ild_norm"}
-                _stim_idx = next(
-                    (i for i, c in enumerate(_d["X_cols"]) if c in _stim_names), None
-                )
-                if _stim_idx is not None and float(_W[0, 0, _stim_idx]) > 0:
-                    _d["emission_weights"] = -_W  # W_R → W_L (negate)
-            arrays_store[_subj] = _d
+    selected_model_id = resolve_selected_model_id(
+        current_hash,
+        ui_existing.value,
+        ui_alias.value,
+    )
+    OUT = paths.RESULTS / "fits" / task_name / "glm" / selected_model_id
+    arrays_store, names = load_fit_arrays(
+        out_dir=OUT,
+        arrays_suffix="glm_arrays.npz",
+        adapter=adapter,
+        df_all=df_all,
+        subjects=list(ui_subjects.value),
+        emission_cols=list(ui_emission_cols.value),
+        postprocess_array=_normalize_glm_arrays,
+    )
 
     mo.md(f"Loaded {len(arrays_store)} subjects from `{selected_model_id}`")
-    return arrays_store, selected_model_id
-
-
-@app.cell
-def _(adapter, df_all, pl):
-    adapter.build_feature_df(df_all.filter(pl.col("subject") == df_all["subject"][0]))
-    return
+    return arrays_store, names, selected_model_id
 
 
 @app.cell
@@ -295,17 +226,12 @@ def _(make_plot_saver, mo, paths, selected_model_id, task_name):
 
 @app.cell
 def _(adapter, arrays_store, mo, ui_subjects):
-    # ── Build SubjectFitViews + derive state_labels / state_order for backward compat ──
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
     from glmhmmt.views import build_views
-    from glmhmmt.postprocess import build_trial_df, build_emission_weights_df
     K = 1
     views = build_views(arrays_store, adapter, K, _selected)
-
-    state_labels = {s: v.state_name_by_idx for s, v in views.items()}
-    state_order  = {s: v.state_idx_order   for s, v in views.items()}
-    return K, build_emission_weights_df, build_trial_df, build_views, views
+    return K, build_views, views
 
 
 @app.cell
@@ -419,45 +345,14 @@ def _(is_2afc, np, pd, plt, sns):
 
 
 @app.cell
-def _(
-    adapter,
-    build_emission_weights_df,
-    build_trial_df,
-    df_all,
-    mo,
-    pl,
-    views,
-):
-    # ── Build canonical trial-level DataFrame ────────────────────────────────────────────────────────
-    # One row per trial per subject.  Columns include:
-    #   p_state_k         → HMM posterior (direct copy of smoothed_probs[:, k])
-    #   state_idx/rank/label → MAP state assignment
-    #   pL / pC / pR      → marginal class probabilities from p_pred
-    #   p_model_correct   → MAP-state emission P(correct class)
-    #   p_model_correct_marginal → marginal P(correct class)
-    #   correct_bool      → bool(performance)
-    # All task-specific behavioral columns (stimd_n, ttype_n, …) are preserved.
-    _sort_col = adapter.sort_col
-    _ses_col  = adapter.session_col
-    _bcols    = adapter.behavioral_cols
-    _trial_frames = []
-    for _subj, _view in views.items():
-        _df_sub = (
-            df_all
-            .filter(pl.col("subject") == _subj)
-            .sort(_sort_col)
-            # .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
-        )
-        if _df_sub.height != _view.T:
-            print(f"⚠️  {_subj}: row mismatch ({_df_sub.height} vs {_view.T}), skipping")
-            continue
-        _trial_frames.append(build_trial_df(_view, adapter, _df_sub, _bcols))
-
-    mo.stop(not _trial_frames, mo.md("No subjects with matching data lengths."))
-    trial_df = pl.concat(_trial_frames)
-
-    # Emit emission-weights long DF for downstream use
-    weights_df = build_emission_weights_df(views)
+def _(adapter, build_trial_and_weights_df, df_all, mo, views):
+    trial_df, weights_df = build_trial_and_weights_df(
+        df_all,
+        views=views,
+        adapter=adapter,
+        min_session_length=1,
+    )
+    mo.stop(trial_df.height == 0, mo.md("No subjects with matching data lengths."))
     return trial_df, weights_df
 
 
@@ -465,7 +360,9 @@ def _(
 def _(
     K,
     arrays_store,
+    is_2afc,
     mo,
+    names,
     paths,
     pl,
     plot_sequence_feature_weights,
@@ -484,33 +381,59 @@ def _(
     _save_path = paths.RESULTS / "plots/GLMHMM/emissions_coefs.png"
     _views_sel = {s: views[s] for s in _selected}
     _weights_df_sel = weights_df.filter(pl.col("subject").is_in(_selected))
-    _fig_ag, _fig_cls = plots.plot_emission_weights(
-        views=_views_sel, K=K, save_path=_save_path,
-    )
+    _state_labels = {s: dict(views[s].state_name_by_idx) for s in _selected}
 
-    _fig_seq = plot_sequence_feature_weights(_weights_df_sel)
-
-    _top_row_items = [mo.vstack([_fig_ag], align="center")]
-    _top_row_widths = [2]
-    if _fig_seq is not None:
-        _top_row_items.append(mo.vstack([_fig_seq], align="center"))
-        _top_row_widths.append(1)
+    if hasattr(plots, "plot_emission_weights_by_subject"):
+        if is_2afc:
+            _fig_by_subject = plots.plot_emission_weights_by_subject(
+                views=_views_sel,
+                K=K,
+                save_path=_save_path,
+            )
+        else:
+            _fig_by_subject = plots.plot_emission_weights_by_subject(
+                arrays_store=arrays_store,
+                state_labels=_state_labels,
+                names=names,
+                K=K,
+                subjects=_selected,
+                save_path=_save_path,
+            )
     else:
-        _top_row_items.append(
-            mo.vstack(
-                [mo.md("No `s_i` / `sf_i` regressors found in the current GLM fit.")],
-                align="center",
+        _fig_by_subject, _ = plots.plot_emission_weights(
+            views=_views_sel,
+            K=K,
+            save_path=_save_path,
+        )
+
+    if hasattr(plots, "plot_emission_weights_summary"):
+        _summary_figs = [plots.plot_emission_weights_summary(views=_views_sel, K=K)]
+    elif is_2afc:
+        _summary_figs = [plots.plot_emission_weights(views=_views_sel, K=K)[1]]
+    else:
+        _summary_figs = list(
+            plots.plot_emission_weights(
+                arrays_store=arrays_store,
+                state_labels=_state_labels,
+                names=names,
+                K=K,
+                subjects=_selected,
             )
         )
-        _top_row_widths.append(1)
 
-    mo.vstack(
-        [
-            mo.md("### Emission weights"),
-            mo.hstack(_top_row_items, widths=_top_row_widths, align="start", justify="start"),
-            _fig_cls,
-        ]
-    )
+    _fig_seq = plot_sequence_feature_weights(_weights_df_sel)
+    _items = [mo.md("### Emission weights"), mo.md("#### By subject"), _fig_by_subject]
+    if _fig_seq is not None:
+        _items.extend([mo.md("#### Sequential coefficients"), _fig_seq])
+    else:
+        _items.extend(
+            [
+                mo.md("#### Sequential coefficients"),
+                mo.md("No `s_i` / `sf_i` regressors found in the current GLM fit."),
+            ]
+        )
+    _items.extend([mo.md("#### Summary"), *_summary_figs])
+    mo.vstack(_items)
     return
 
 
@@ -532,13 +455,22 @@ def _(is_2afc, mo, pl, plots, save_plot, trial_df, ui_subjects, views):
         # background_style=ui_psychometric_background.value,
         **_perf_kwargs,
     )
-    _plot_df_state = plots.prepare_predictions_df(_trial_df_sel)
-    _fig_state, _ = plots.plot_categorical_performance_by_state(
-        df=_plot_df_state,
-        views=_views_sel,
-        model_name="glm — per state",
-        # background_style=ui_psychometric_background.value,
-    )
+    _side_plot_fn = getattr(plots, "plot_categorical_strat_by_side", None)
+    if _side_plot_fn is None:
+        _side_section = mo.md("This task does not expose a side-stratified categorical plot.")
+    else:
+        _side_fig, _ = _side_plot_fn(
+            _plot_df_all,
+            subject=_selected[0] if len(_selected) == 1 else None,
+            model_name="glm",
+        )
+        _side_section = mo.vstack(
+            [
+                mo.md("### Categorical performance by stimulus side"),
+                _side_fig,
+            ],
+            align="center",
+        )
     mo.vstack(
         [
             mo.md("### Categorical plots for accuracy"),
@@ -556,6 +488,7 @@ def _(is_2afc, mo, pl, plots, save_plot, trial_df, ui_subjects, views):
                 align="center",
                 widths=[4, 1],
             ),
+            _side_section,
         ],
         align="center",
     )
@@ -692,26 +625,25 @@ def _(
 @app.cell
 def _(
     adapter,
-    build_trial_df,
     df_all,
     editor_views,
     mo,
-    pl,
+    select_subject_behavior_df,
     ui_editor_subject,
 ):
     _subj = ui_editor_subject.value
     _view = editor_views[_subj]
-    _sort_col = adapter.sort_col
-    _ses_col = adapter.session_col
-    _bcols = adapter.behavioral_cols
-    _df_sub = (
-        df_all
-        .filter(pl.col("subject") == _subj)
-        .sort(_sort_col)
-        .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
+    from glmhmmt.postprocess import build_trial_df
+
+    _df_sub = select_subject_behavior_df(
+        df_all,
+        subject=_subj,
+        sort_col=adapter.sort_col,
+        session_col=adapter.session_col,
+        min_session_length=1,
     )
     mo.stop(_df_sub.height != _view.T, mo.md(f"Subject {_subj} does not match the loaded fit arrays."))
-    editor_trial_df = build_trial_df(_view, adapter, _df_sub, _bcols)
+    editor_trial_df = build_trial_df(_view, adapter, _df_sub, adapter.behavioral_cols)
     editor_view = _view
     return editor_trial_df, editor_view
 
@@ -766,12 +698,6 @@ def _(
     _fig_all_tweaked, _ = plots.plot_categorical_performance_all(
         _plot_df_tweaked,
         _title,
-        # background_style=ui_psychometric_background.value,
-    )
-    _fig_state_tweaked, _ = plots.plot_categorical_performance_by_state(
-        df=_plot_df_tweaked,
-        views={_subj: _view_tweaked},
-        model_name=f"{_title} — per state",
         # background_style=ui_psychometric_background.value,
     )
     _side_plot_fn = getattr(plots, "plot_categorical_strat_by_side", None)

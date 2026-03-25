@@ -11,6 +11,12 @@ def _():
 
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     sys.path.append(os.path.join(os.path.dirname(__file__), "..", "glmhmmt", "src"))
+    from analysis_common import (
+        build_trial_and_weights_df,
+        load_fit_arrays,
+        resolve_selected_model_id,
+        select_subject_behavior_df,
+    )
     import paths
     import numpy as np
     import polars as pl
@@ -42,11 +48,12 @@ def _():
         apply_state_tweak_to_trial_df,
         apply_state_tweak_to_view,
         build_editor_payload,
-        build_emission_weights_df,
+        build_trial_and_weights_df,
         build_trial_df,
         build_views,
         fit_main,
         get_adapter,
+        load_fit_arrays,
         make_plot_saver,
         mo,
         np,
@@ -54,6 +61,8 @@ def _():
         pd,
         pl,
         plt,
+        resolve_selected_model_id,
+        select_subject_behavior_df,
         sns,
     )
 
@@ -137,12 +146,6 @@ def _(mo, task_name, ui_model_manager):
         ui_subjects,
         ui_tau,
     )
-
-
-@app.cell
-def _():
-    # df_all.filter(pl.col("subject") == "326.0").select("Session").unique()
-    return
 
 
 @app.cell
@@ -353,45 +356,33 @@ def _(
     adapter,
     current_hash,
     df_all,
-    np,
+    load_fit_arrays,
     paths,
-    pl,
+    resolve_selected_model_id,
     task_name,
     ui_K,
     ui_alias,
     ui_emission_cols,
     ui_existing,
     ui_subjects,
-    ui_tau,
 ):
     K = ui_K.value
 
-    selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
+    selected_model_id = resolve_selected_model_id(
+        current_hash,
+        ui_existing.value,
+        ui_alias.value,
+    )
     OUT = paths.RESULTS / "fits" / task_name / "glmhmm" / selected_model_id
-    # load feature names via adapter
-    _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value)).sort(adapter.sort_col)
-    _, _, _, names = adapter.load_subject(_df_sel[0], tau=ui_tau.value, emission_cols=ui_emission_cols.value)
-
-    arrays_store = {}
-    _files = list(sorted(OUT.glob("*_glmhmm_arrays.npz")))
-    _files += [f for f in sorted(OUT.glob(f"*_K{K}_glmhmm_arrays.npz")) if f not in _files]
-    for _f in _files:
-        _subj = _f.name.removesuffix("_glmhmm_arrays.npz").removesuffix(f"_K{K}")
-        _d = dict(np.load(_f, allow_pickle=True))
-        _saved_names = {}
-        if "names" in _d:
-            _raw_names = _d["names"]
-            if getattr(_raw_names, "shape", None) == ():
-                _saved_names = _raw_names.item()
-        # decode column names saved as string arrays; fall back to nested names,
-        # then to the current adapter output for backward compatibility
-        _d["X_cols"] = (
-            list(_d["X_cols"]) if "X_cols" in _d
-            else list(_saved_names.get("X_cols", names["X_cols"]))
-        )
-        arrays_store[_subj] = _d
-
-    # arrays_store
+    arrays_store, names = load_fit_arrays(
+        out_dir=OUT,
+        arrays_suffix="glmhmm_arrays.npz",
+        adapter=adapter,
+        df_all=df_all,
+        subjects=list(ui_subjects.value),
+        emission_cols=list(ui_emission_cols.value),
+        k=K,
+    )
     return K, OUT, arrays_store, names, selected_model_id
 
 
@@ -425,7 +416,6 @@ def _(adapter, mo):
 
 @app.cell
 def _(K, adapter, arrays_store, build_views, mo, ui_scoring_key, ui_subjects):
-    # ── Build SubjectFitViews + derive state_labels / state_order for backward compat ──
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
 
@@ -433,7 +423,6 @@ def _(K, adapter, arrays_store, build_views, mo, ui_scoring_key, ui_subjects):
         adapter.scoring_key = ui_scoring_key.value
     views = build_views(arrays_store, adapter, K, _selected)
     state_labels = {s: v.state_name_by_idx for s, v in views.items()}
-    state_order  = {s: v.state_idx_order   for s, v in views.items()}
     return state_labels, views
 
 
@@ -446,45 +435,14 @@ def _(K, adapter, arrays_store, build_views, ui_scoring_key):
 
 
 @app.cell
-def _(
-    adapter,
-    build_emission_weights_df,
-    build_trial_df,
-    df_all,
-    mo,
-    pl,
-    views,
-):
-    # ── Build canonical trial-level DataFrame ────────────────────────────────────────────────────────
-    # One row per trial per subject.  Columns include:
-    #   p_state_k         → HMM posterior (direct copy of smoothed_probs[:, k])
-    #   state_idx/rank/label → MAP state assignment
-    #   pL / pC / pR      → marginal class probabilities from p_pred
-    #   p_model_correct   → MAP-state emission P(correct class)
-    #   p_model_correct_marginal → marginal P(correct class)
-    #   correct_bool      → bool(performance)
-    # All task-specific behavioral columns (stimd_n, ttype_n, …) are preserved.
-    _sort_col = adapter.sort_col
-    _ses_col  = adapter.session_col
-    _bcols    = adapter.behavioral_cols
-    _trial_frames = []
-    for _subj, _view in views.items():
-        _df_sub = (
-            df_all
-            .filter(pl.col("subject") == _subj)
-            .sort(_sort_col)
-            .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
-        )
-        if _df_sub.height != _view.T:
-            print(f"⚠️  {_subj}: row mismatch ({_df_sub.height} vs {_view.T}), skipping")
-            continue
-        _trial_frames.append(build_trial_df(_view, adapter, _df_sub, _bcols))
-
-    mo.stop(not _trial_frames, mo.md("No subjects with matching data lengths."))
-    trial_df = pl.concat(_trial_frames)
-
-    # Emit emission-weights long DF for downstream use
-    weights_df = build_emission_weights_df(views)
+def _(adapter, build_trial_and_weights_df, df_all, mo, views):
+    trial_df, weights_df = build_trial_and_weights_df(
+        df_all,
+        views=views,
+        adapter=adapter,
+        min_session_length=2,
+    )
+    mo.stop(trial_df.height == 0, mo.md("No subjects with matching data lengths."))
     return (trial_df,)
 
 
@@ -517,47 +475,53 @@ def _(
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
     _save_path = paths.RESULTS / "plots/GLMHMM/emissions_coefs.png"
+    _views_sel = {s: views[s] for s in _selected}
     if is_2afc:
-        _fig_ag, _fig_cls = plots.plot_emission_weights(
-            views={s: views[s] for s in _selected}, K=K, save_path=_save_path,
+        _fig_by_subject = plots.plot_emission_weights_by_subject(
+            views=_views_sel,
+            K=K,
+            save_path=_save_path,
         )
+        _summary_figs = [plots.plot_emission_weights_summary(views=_views_sel, K=K)]
     else:
-        _fig_ag, _fig_cls = plots.plot_emission_weights(
-            arrays_store=arrays_store, state_labels=state_labels, names=names,
-            K=K, subjects=_selected, save_path=_save_path,
+        _fig_by_subject = plots.plot_emission_weights_by_subject(
+            arrays_store=arrays_store,
+            state_labels=state_labels,
+            names=names,
+            K=K,
+            subjects=_selected,
+            save_path=_save_path,
         )
-    mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
+        _summary_figs = list(
+            plots.plot_emission_weights(
+                arrays_store=arrays_store,
+                state_labels=state_labels,
+                names=names,
+                K=K,
+                subjects=_selected,
+            )
+        )
+    mo.vstack([mo.md("### Emission weights"), mo.md("#### By subject"), _fig_by_subject, mo.md("#### Summary"), *_summary_figs])
     return
 
 
 @app.cell
-def _(K, arrays_store, mo, plt, sns, state_labels, ui_subjects):
-    # ── transition matrix heatmap — marimo grid (3 per row) ──────────────────
+def _(K, arrays_store, mo, plots, state_labels, ui_subjects):
     _selected = [s for s in ui_subjects.value if s in arrays_store]
-    _COLS = 3
-    _figs_t = []
-    for _subj in _selected:
-        _A = arrays_store[_subj]["transition_matrix"]  # (K, K)
-        _slbl = state_labels.get(_subj, {k: f"S{k}" for k in range(K)})
-        _tick_labels = [_slbl.get(k, f"S{k}") for k in range(K)]
-        _fig_t, _ax_t = plt.subplots(figsize=(3.2, 2.8))
-        sns.heatmap(_A, ax=_ax_t, cmap="bone", annot=True, fmt=".2f", vmin=0, vmax=1, square=True, linewidths=0.5, xticklabels=_tick_labels,     
-                    yticklabels=_tick_labels, cbar_kws={"shrink": 0.8, "label": "probability"},)
-        _ax_t.set_title(f"Subject {_subj}")
-        _ax_t.set_xlabel("To state")
-        _ax_t.set_ylabel("From state")
-        _fig_t.tight_layout()
-        _figs_t.append(_fig_t)
-    _rows_t = [
-        mo.hstack(_figs_t[i : i + _COLS], justify="start")
-        for i in range(0, len(_figs_t), _COLS)
-    ]
-    mo.vstack(
-        [
-            mo.md(f"### Transition matrices  (K={K})"),
-            *_rows_t,
-        ]
+    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+    _fig_by_subject = plots.plot_transition_matrix_by_subject(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        K=K,
+        subjects=_selected,
     )
+    _fig_summary = plots.plot_transition_matrix(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        K=K,
+        subjects=_selected,
+    )
+    mo.vstack([mo.md(f"### Transition matrices  (K={K})"), mo.md("#### By subject"), _fig_by_subject, mo.md("#### Summary"), _fig_summary])
     return
 
 
@@ -1000,22 +964,21 @@ def _(
     df_all,
     editor_views,
     mo,
-    pl,
+    select_subject_behavior_df,
     ui_editor_subject,
 ):
     _subj = ui_editor_subject.value
     _view = editor_views[_subj]
-    _sort_col = adapter.sort_col
-    _ses_col = adapter.session_col
-    _bcols = adapter.behavioral_cols
-    _df_sub = (
-        df_all
-        .filter(pl.col("subject") == _subj)
-        .sort(_sort_col)
-        .filter(pl.col(_ses_col).count().over(_ses_col) >= 2)
+
+    _df_sub = select_subject_behavior_df(
+        df_all,
+        subject=_subj,
+        sort_col=adapter.sort_col,
+        session_col=adapter.session_col,
+        min_session_length=2,
     )
     mo.stop(_df_sub.height != _view.T, mo.md(f"Subject {_subj} does not match the loaded fit arrays."))
-    editor_trial_df = build_trial_df(_view, adapter, _df_sub, _bcols)
+    editor_trial_df = build_trial_df(_view, adapter, _df_sub, adapter.behavioral_cols)
     editor_view = _view
     return editor_trial_df, editor_view
 

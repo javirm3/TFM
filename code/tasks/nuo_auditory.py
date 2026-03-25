@@ -198,6 +198,26 @@ class NuoAuditoryAdapter(TaskAdapter):
     def available_transition_cols(self) -> List[str]:
         return list(_NUO_AUDITORY_TRANSITION_COLS)
 
+    def resolve_design_names(
+        self,
+        emission_cols: List[str] | None = None,
+        transition_cols: List[str] | None = None,
+        df=None,
+    ) -> Dict[str, List[str]]:
+        ecols = list(emission_cols) if emission_cols is not None else self.default_emission_cols()
+        ucols = list(transition_cols) if transition_cols is not None else self.default_transition_cols()
+        bad_e = [c for c in ecols if c not in _NUO_AUDITORY_EMISSION_COLS]
+        bad_u = [c for c in ucols if c not in _NUO_AUDITORY_TRANSITION_COLS]
+        if bad_e:
+            raise ValueError(
+                f"Unknown emission_cols: {bad_e}. Available: {_NUO_AUDITORY_EMISSION_COLS}"
+            )
+        if bad_u:
+            raise ValueError(
+                f"Unknown transition_cols: {bad_u}. Available: {_NUO_AUDITORY_TRANSITION_COLS}"
+            )
+        return {"X_cols": list(ecols), "U_cols": list(ucols)}
+
     def cv_balance_labels(self, feature_df: pl.DataFrame):
         """Return signed evidence labels for balanced session-holdout CV."""
         if self.psychometric_x_col not in feature_df.columns:

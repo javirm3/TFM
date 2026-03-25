@@ -29,9 +29,11 @@ export default defineConfig({
 					label: 'API Reference',
 					items: [
 						{ label: 'SoftmaxGLMHMM', slug: 'docs/api/model' },
-						{ label: 'Features', slug: 'docs/api/features' },
+						{ label: 'Tasks API', slug: 'docs/api/tasks' },
 						{ label: 'Postprocessing', slug: 'docs/api/postprocess' },
 						{ label: 'Views', slug: 'docs/api/views' },
+						{ label: 'Common Plots', slug: 'docs/api/common-plots' },
+						{ label: 'Task Plots', slug: 'docs/api/task-plots' },
 					],
 				},
 				{

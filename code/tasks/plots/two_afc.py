@@ -2048,33 +2048,19 @@ def prepare_predictions_df(df_pred):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def plot_emission_weights(
+def plot_emission_weights_by_subject(
     views: dict,
     K: int,
     save_path=None,
-) -> Tuple[plt.Figure, plt.Figure]:
-    """Emission weights: per-subject bar charts + multi-subject error-bar figure.
-
-    Mirrors plots.plot_emission_weights.
-
-    Parameters
-    ----------
-    views     : {subj: SubjectFitView} as produced by build_views
-    K         : number of states
-    save_path : optional Path - per-subject figure saved there if provided
-
-    Returns
-    -------
-    fig_single, fig_multi
-    """
+) -> plt.Figure:
+    """Per-subject bar charts of emission weights."""
     valid_subjs = list(views.keys())
     feat_names = next(iter(views.values())).feat_names if views else []
-    _pal, _hue_order = _build_state_palette({s: v.state_name_by_idx for s, v in views.items()})
 
     if not valid_subjs:
         fig, ax = plt.subplots()
         ax.text(0.5, 0.5, "No data", ha="center", va="center")
-        return fig, fig
+        return fig
 
     # ── per-subject panel ─────────────────────────────────────────────────────
     n_cols = min(3, len(valid_subjs))
@@ -2111,8 +2097,29 @@ def plot_emission_weights(
     if save_path is not None:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         fig_single.savefig(save_path, dpi=150, bbox_inches="tight")
+    return fig_single
 
-    # ── multi-subject summary ─────────────────────────────────────────────────
+
+def plot_emission_weights_summary(
+    views: dict,
+    K: int,
+) -> plt.Figure:
+    """Lineplot/boxplot summary of emission weights across subjects."""
+    valid_subjs = list(views.keys())
+    feat_names = next(iter(views.values())).feat_names if views else []
+    _pal, _hue_order = _build_state_palette({s: v.state_name_by_idx for s, v in views.items()})
+
+    if not valid_subjs:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    all_w = []
+    for subj in valid_subjs:
+        W_raw = -views[subj].emission_weights
+        rank_order = views[subj].state_idx_order
+        all_w.append(np.asarray(W_raw[rank_order]))
+
     if len(all_w) > 1:
         W_stack = np.stack(all_w, axis=0)
         if W_stack.ndim == 3:
@@ -2122,9 +2129,91 @@ def plot_emission_weights(
             W_stack, fn, state_labels=_hue_order[:K], title=f"Emission weights - all subjects  (K={K})"
         )
     else:
-        fig_multi = fig_single
+        fig_multi = plot_emission_weights_by_subject(views=views, K=K)
 
-    return fig_single, fig_multi
+    return fig_multi
+
+
+def plot_emission_weights(
+    views: dict,
+    K: int,
+    save_path=None,
+) -> Tuple[plt.Figure, plt.Figure]:
+    """Backward-compatible emission weights API."""
+    return (
+        plot_emission_weights_by_subject(views=views, K=K, save_path=save_path),
+        plot_emission_weights_summary(views=views, K=K),
+    )
+
+
+def plot_transition_matrix_by_subject(
+    arrays_store: dict,
+    state_labels: dict,
+    K: int,
+    subjects: list,
+) -> plt.Figure:
+    """Per-subject transition-matrix heatmaps."""
+    def _resolve_matrix(subj: str) -> np.ndarray | None:
+        _arr = arrays_store.get(subj, {})
+        if "transition_matrix" in _arr:
+            return np.asarray(_arr["transition_matrix"])
+        if "transition_bias" in _arr:
+            _bias = np.asarray(_arr["transition_bias"])
+            _exp = np.exp(_bias - _bias.max(axis=-1, keepdims=True))
+            return _exp / _exp.sum(axis=-1, keepdims=True)
+        return None
+
+    _selected = [s for s in subjects if _resolve_matrix(s) is not None]
+    if not _selected:
+        raise ValueError("No transition matrices found for selected subjects.")
+
+    _n_cols = min(3, len(_selected))
+    _n_rows = int(np.ceil(len(_selected) / _n_cols))
+    fig, axes = plt.subplots(_n_rows, _n_cols, figsize=(4.2 * _n_cols, 3.4 * _n_rows), squeeze=False)
+
+    for idx, subj in enumerate(_selected):
+        ax = axes[idx // _n_cols, idx % _n_cols]
+        _slbl = state_labels.get(subj, {k: f"S{k}" for k in range(K)})
+        _tick_labels = [_slbl.get(k, f"S{k}") for k in range(K)]
+        plot_trans_mat(
+            _resolve_matrix(subj),
+            state_labels=_tick_labels,
+            title=f"Subject {subj}",
+            ax=ax,
+        )
+
+    for idx in range(len(_selected), _n_rows * _n_cols):
+        axes[idx // _n_cols, idx % _n_cols].set_visible(False)
+
+    fig.tight_layout()
+    return fig
+
+
+def plot_transition_matrix(
+    arrays_store: dict,
+    state_labels: dict,
+    K: int,
+    subjects: list,
+) -> plt.Figure:
+    """Mean transition-matrix heatmap across selected subjects."""
+    def _resolve_matrix(subj: str) -> np.ndarray | None:
+        _arr = arrays_store.get(subj, {})
+        if "transition_matrix" in _arr:
+            return np.asarray(_arr["transition_matrix"])
+        if "transition_bias" in _arr:
+            _bias = np.asarray(_arr["transition_bias"])
+            _exp = np.exp(_bias - _bias.max(axis=-1, keepdims=True))
+            return _exp / _exp.sum(axis=-1, keepdims=True)
+        return None
+
+    _selected = [s for s in subjects if _resolve_matrix(s) is not None]
+    if not _selected:
+        raise ValueError("No transition matrices found for selected subjects.")
+
+    _A_mean = np.mean([_resolve_matrix(s) for s in _selected], axis=0)
+    _slbl = state_labels.get(_selected[0], {k: f"S{k}" for k in range(K)})
+    _tick_labels = [_slbl.get(k, f"S{k}") for k in range(K)]
+    return plot_trans_mat(_A_mean, state_labels=_tick_labels, title=f"Mean transition matrix  (n={len(_selected)} subjects)")
 
 
 def plot_posterior_probs(

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import tomllib
+from typing import Optional, Sequence
 
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
@@ -23,11 +24,14 @@ import paths
 from glmhmmt.model_plots import (
     _state_color,
     plot_emission_weights,
+    plot_emission_weights_by_subject,
     plot_posterior_probs,
     plot_session_deepdive,
     plot_session_trajectories,
     plot_state_accuracy,
     plot_state_occupancy,
+    plot_transition_matrix,
+    plot_transition_matrix_by_subject,
     plot_tau_sweep,
     plot_transition_weights,
 )
@@ -235,7 +239,19 @@ def _plot_state_panel(ax, df_state, group_col, order, color):
     return data_h, model_h
 
 
-def plot_categorical_performance_by_state(df, views: dict, model_name: str):
+def plot_categorical_performance_by_state(
+    df,
+    views: dict,
+    model_name: str,
+    background_style: str = "data",
+    show_weighted_points: bool = True,
+    show_data_smooth: bool = True,
+    show_model_smooth: bool = True,
+    figure_dpi: float = 80.0,
+    overlay_only: bool = False,
+    model_line_mode: str = "smooth",
+    state_assignment_mode: str = "weighted",
+):
     if not isinstance(df, pl.DataFrame):
         df = pl.from_pandas(df)
 
@@ -326,7 +342,14 @@ def plot_categorical_performance_by_state(df, views: dict, model_name: str):
     return fig, axes
 
 
-def plot_categorical_performance_all(df, model_name):
+def plot_categorical_performance_all(
+    df,
+    model_name: str,
+    views: Optional[dict] = None,
+    X_cols: Optional[Sequence[str]] = None,
+    ild_max: Optional[float] = None,
+    background_style: str = "data",
+):
     fig, axes = plt.subplots(1, 3, figsize=(10, 4), sharey=True)
     ax1, ax2, ax3 = axes
     df = df.drop("p_model_correct").rename({"p_model_correct_marginal": "p_model_correct"})
