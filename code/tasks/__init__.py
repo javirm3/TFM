@@ -94,6 +94,14 @@ class TaskAdapter(ABC):
         """Optional dynamic stimulus-frame columns for binary tasks."""
         return []
 
+    def available_extra_emission_cols(self, df: Any) -> List[str]:
+        """Optional dynamic emission columns shown in selectors."""
+        return self.sf_cols(df)
+
+    def default_extra_emission_cols(self, df: Any) -> List[str]:
+        """Optional dynamic emission columns preselected by default."""
+        return self.sf_cols(df)
+
     def cv_balance_labels(self, feature_df: Any):
         """Return per-trial labels used for CV balancing, or ``None`` if unsupported."""
         return None

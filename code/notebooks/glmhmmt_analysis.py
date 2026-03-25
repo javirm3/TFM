@@ -209,6 +209,7 @@ def _(
                     return
                 if info.get("event") == "cv_repeat_complete":
                     _bar.update(
+                        increment=1,
                         title=_progress_title(info),
                         subtitle=f"CV repeat {info['cv_repeat_index']}/{info['cv_repeat_total']} complete",
                     )
@@ -222,6 +223,7 @@ def _(
                     return
                 if info.get("event") == "restart_complete":
                     _bar.update(
+                        increment=0 if ui_cv_mode.value != "none" else 1,
                         title=_progress_title(info),
                         subtitle=_progress_subtitle(info),
                     )
@@ -256,6 +258,97 @@ def _(
 
 
 @app.cell
+def _(current_hash, mo, paths, pl, plt, sns, task_name, ui_alias, ui_cv_mode, ui_existing):
+    import json
+    import pandas as pd
+
+    mo.stop(ui_cv_mode.value == "none", mo.md(""))
+
+    selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
+    out_dir = paths.RESULTS / "fits" / task_name / "glmhmmt" / selected_model_id
+    repeat_files = sorted(out_dir.glob("*_cv_repeats.parquet"))
+    mo.stop(not repeat_files, mo.md("No CV repeat diagnostics found yet."))
+
+    repeats_df = pl.concat([pl.read_parquet(path) for path in repeat_files], how="diagonal_relaxed")
+    repeats_pd = repeats_df.to_pandas()
+
+    count_rows = []
+    for row in repeats_pd.to_dict(orient="records"):
+        for split_name, counts_key in (
+            ("train", "train_label_counts_json"),
+            ("test", "test_label_counts_json"),
+        ):
+            counts = json.loads(row.get(counts_key) or "{}")
+            for ild, count in counts.items():
+                count_rows.append(
+                    {
+                        "subject": row["subject"],
+                        "repeat_index": int(row["repeat_index"]),
+                        "subject_repeat": f"{row['subject']} r{int(row['repeat_index'])}",
+                        "split": split_name,
+                        "ild": float(ild),
+                        "count": int(count),
+                    }
+                )
+
+    count_pd = pd.DataFrame(count_rows)
+    if not count_pd.empty:
+        count_pd = count_pd.sort_values(["ild", "subject", "repeat_index"])
+
+    fig, axes = plt.subplots(3, 1, figsize=(max(10, 0.55 * max(len(repeats_pd), 1)), 12))
+
+    sns.lineplot(
+        data=repeats_pd,
+        x="repeat_index",
+        y="test_ll_per_trial",
+        hue="subject",
+        marker="o",
+        ax=axes[0],
+    )
+    axes[0].set_title("CV Test Log-Likelihood by Repeat")
+    axes[0].set_xlabel("Repeat")
+    axes[0].set_ylabel("Test LL / trial")
+
+    for ax_idx, split_name in enumerate(["train", "test"], start=1):
+        split_pd = count_pd[count_pd["split"] == split_name]
+        if split_pd.empty:
+            axes[ax_idx].set_visible(False)
+            continue
+        pivot = (
+            split_pd.pivot_table(
+                index="ild",
+                columns="subject_repeat",
+                values="count",
+                fill_value=0,
+            )
+            .sort_index()
+        )
+        sns.heatmap(pivot, cmap="Blues", cbar=True, ax=axes[ax_idx])
+        axes[ax_idx].set_title(f"Signed ILD Counts in {split_name.capitalize()} Split")
+        axes[ax_idx].set_xlabel("Subject / Repeat")
+        axes[ax_idx].set_ylabel("Signed ILD")
+
+    plt.tight_layout()
+
+    summary_cols = [
+        "subject",
+        "repeat_index",
+        "balance_score",
+        "train_session_count",
+        "test_session_count",
+        "test_ll_per_trial",
+        "test_acc",
+    ]
+    return mo.vstack(
+        [
+            mo.md("### CV Diagnostics"),
+            mo.ui.table(repeats_pd[summary_cols]),
+            mo.as_html(fig),
+        ]
+    )
+
+
+@app.cell
 def _(
     adapter,
     current_hash,
@@ -275,11 +368,6 @@ def _(
     ui_cv_mode,
 ):
     K = ui_K.value
-
-    mo.stop(
-        ui_cv_mode.value != "none",
-        mo.md("This analysis notebook expects a single full-data fit with arrays. CV fits save summary metrics only."),
-    )
 
     selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
     OUT = paths.RESULTS / "fits" / task_name / "glmhmmt" / selected_model_id
@@ -619,18 +707,16 @@ def _(K, is_2afc, mo, pl, plots, save_plot, task_name, trial_df, ui_psychometric
         )
         _reg_section = mo.vstack([
             mo.hstack([mo.md("### Per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
-            mo.hstack(
+            mo.vstack(
                 [
-                    mo.vstack([_fig_reg_state], align="center"),
+                    _fig_reg_state,
                     save_plot(
                         _fig_reg_state,
                         f"{ui_psychometric_regressor.value} by state",
                         stem=f"regressor_by_state_{ui_psychometric_regressor.value}",
                     ),
                 ],
-                justify="space-between",
                 align="center",
-                widths=[4, 1],
             ),
         ], align="center")
     else:
@@ -640,11 +726,16 @@ def _(K, is_2afc, mo, pl, plots, save_plot, task_name, trial_df, ui_psychometric
         mo.md("### Categorical plots for accuracy"),
         mo.hstack(
             [
-                mo.vstack([_fig_all], align="center"),
+                mo.vstack(
+                    [
+                        _fig_all,
+                        save_plot(_fig_all, "overall psychometric", stem="categorical_overall"),
+                    ],
+                    align="center",
+                ),
                 mo.vstack(
                     [
                         ui_psychometric_background,
-                        save_plot(_fig_all, "overall psychometric", stem="categorical_overall"),
                     ],
                     align="start",
                 ),
@@ -654,14 +745,12 @@ def _(K, is_2afc, mo, pl, plots, save_plot, task_name, trial_df, ui_psychometric
             widths=[4,1],
         ),
         mo.md("### Per-state categorical performance"),
-        mo.hstack(
+        mo.vstack(
             [
-                mo.vstack([_fig_state], align="center"),
+                _fig_state,
                 save_plot(_fig_state, "per-state psychometric", stem="categorical_by_state"),
             ],
-            justify="space-between",
             align="center",
-            widths=[4,1],
         ),
         _reg_section,
     ], align="center")
@@ -896,18 +985,16 @@ def _(
         _reg_section = mo.vstack(
             [
                 mo.hstack([mo.md("### Tweaked per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
-                mo.hstack(
+                mo.vstack(
                     [
-                        mo.vstack([_fig_reg_state_tweaked], align="center"),
+                        _fig_reg_state_tweaked,
                         save_plot(
                             _fig_reg_state_tweaked,
                             f"tweaked {ui_psychometric_regressor.value} by state",
                             stem=f"tweaked_regressor_by_state_{ui_psychometric_regressor.value}",
                         ),
                     ],
-                    justify="space-between",
                     align="center",
-                    widths=[4, 1],
                 ),
             ],
             align="center",
@@ -933,15 +1020,20 @@ def _(
             mo.md("### Tweaked categorical plots"),
             mo.hstack(
                 [
-                    mo.vstack([_fig_all_tweaked], align="center"),
                     mo.vstack(
                         [
-                            ui_psychometric_background,
+                            _fig_all_tweaked,
                             save_plot(
                                 _fig_all_tweaked,
                                 "tweaked overall psychometric",
                                 stem="tweaked_categorical_overall",
                             ),
+                        ],
+                        align="center",
+                    ),
+                    mo.vstack(
+                        [
+                            ui_psychometric_background,
                         ],
                         align="start",
                     ),
@@ -951,18 +1043,16 @@ def _(
                 widths=[4,1],
             ),
             mo.md("### Tweaked per-state categorical performance"),
-            mo.hstack(
+            mo.vstack(
                 [
-                    mo.vstack([_fig_state_tweaked], align="center"),
+                    _fig_state_tweaked,
                     save_plot(
                         _fig_state_tweaked,
                         "tweaked per-state psychometric",
                         stem="tweaked_categorical_by_state",
                     ),
                 ],
-                justify="space-between",
                 align="center",
-                widths=[4,1],
             ),
             _reg_section,
             _side_section,
@@ -1084,7 +1174,7 @@ def _(K, mo, plots, trial_df, ui_subjects_traj, views):
 
 
 @app.cell
-def _(K, mo, plots, trial_df, ui_subjects_traj, views):
+def _(K, THRESH_ui, mo, plots, trial_df, ui_subjects_traj, views):
     # ── d. Fractional occupancy & state-change histogram ─────────────────────
     _selected_occ = [s for s in ui_subjects_traj.value if s in views]
     mo.stop(not _selected_occ, mo.md("Select subjects above."))
@@ -1093,6 +1183,7 @@ def _(K, mo, plots, trial_df, ui_subjects_traj, views):
         trial_df=trial_df,
         session_col="session",
         sort_col="trial_idx",
+        switch_posterior_threshold=THRESH_ui.amount,
     )
     mo.vstack([
         mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
@@ -1101,6 +1192,10 @@ def _(K, mo, plots, trial_df, ui_subjects_traj, views):
             "middle = per-session occupancy pooled across subjects; right = histogram of state switches per session.  \n"
             "> **Rows below**: one row per subject. Left = posterior mean occupancy by state; middle = per-session "
             "occupancy boxplots; right = histogram of inferred state switches per session."
+        ),
+        mo.md(
+            f"> Switch counts use the same posterior threshold slider as the state-accuracy panel and only count "
+            f"changes between confident MAP assignments with posterior ≥ {THRESH_ui.amount:.2f}."
         ),
         _fig_occ,
     ], align="center")

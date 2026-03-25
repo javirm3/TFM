@@ -13,7 +13,7 @@ def _():
     import polars as pl
     import matplotlib.pyplot as plt
     import seaborn as sns
-
+    import pandas as pd
     # Path setup
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     import paths
@@ -42,6 +42,7 @@ def _():
         mo,
         np,
         paths,
+        pd,
         pl,
         plt,
         sns,
@@ -73,8 +74,6 @@ def _(ModelManagerWidget, mo):
 
 @app.cell
 def _(df_all, mo, pl, plt, sns):
-    import pandas as pd
-
     _required_cols = {
         "ttype_n",
         "stim_d",
@@ -244,7 +243,7 @@ def _(
     _df_sel = df_all.filter(pl.col("subject").is_in(ui_subjects.value))
     if len(_df_sel) > 0:
         _df_sel = _df_sel.sort(adapter.sort_col)
-        _, _, _, names = adapter.load_subject(
+        _ , _, _, names = adapter.load_subject(
             _df_sel, tau=ui_tau.value, emission_cols=ui_emission_cols.value
         )
     else:
@@ -274,6 +273,12 @@ def _(
 
     mo.md(f"Loaded {len(arrays_store)} subjects from `{selected_model_id}`")
     return arrays_store, selected_model_id
+
+
+@app.cell
+def _(adapter, df_all, pl):
+    adapter.build_feature_df(df_all.filter(pl.col("subject") == df_all["subject"][0]))
+    return
 
 
 @app.cell
@@ -307,6 +312,110 @@ def _(adapter, arrays_store, mo, ui_subjects):
 def _(adapter, arrays_store, build_views):
     editor_views = build_views(arrays_store, adapter, 1, list(arrays_store.keys()))
     return (editor_views,)
+
+
+@app.cell
+def _(is_2afc, np, pd, plt, sns):
+    import re
+
+    def plot_sequence_feature_weights(weights_df) -> plt.Figure | None:
+        """Plot only sequential stimulus features (s_i / sf_i) from the canonical weights df."""
+        feature_pattern = re.compile(r"^(?:s|sf)_(\d+)$")
+        if weights_df is None or getattr(weights_df, "is_empty", lambda: False)():
+            return None
+
+        df_plot = weights_df.to_pandas() if hasattr(weights_df, "to_pandas") else pd.DataFrame(weights_df)
+        if df_plot.empty:
+            return None
+
+        df_plot["feature_name"] = df_plot["feature"].astype(str)
+        df_plot["seq_idx"] = df_plot["feature_name"].str.extract(feature_pattern, expand=False)
+        df_plot = df_plot[df_plot["seq_idx"].notna()].copy()
+        if df_plot.empty:
+            return None
+
+        df_plot["seq_idx"] = df_plot["seq_idx"].astype(int)
+        if is_2afc:
+            # Binary fits store logit(Left); flip sign so the plot keeps the intuitive rightward convention.
+            df_plot["weight"] = -df_plot["weight"]
+
+        # Collapse across class_idx so each subject/state/feature contributes one value.
+        df_plot = (
+            df_plot.groupby(
+                ["subject", "state_rank", "state_label", "seq_idx", "feature_name"],
+                as_index=False,
+            )["weight"]
+            .mean()
+        )
+
+        state_order = (
+            df_plot[["state_rank", "state_label"]]
+            .drop_duplicates()
+            .sort_values("state_rank")
+        )
+        n_states = max(1, len(state_order))
+        fig, axes = plt.subplots(1, n_states, figsize=(4.8 * n_states, 3.8), sharey=True)
+        axes = np.atleast_1d(axes)
+
+        for ax, (_, state_row) in zip(axes, state_order.iterrows()):
+            state_rank = int(state_row["state_rank"])
+            state_label = str(state_row["state_label"])
+            state_df = df_plot[df_plot["state_rank"] == state_rank].copy()
+            state_df = state_df.sort_values(["subject", "seq_idx"])
+
+            for _, subj_df in state_df.groupby("subject", sort=False):
+                ax.plot(
+                    subj_df["seq_idx"],
+                    subj_df["weight"],
+                    color="#bdbdbd",
+                    alpha=0.35,
+                    linewidth=1.0,
+                )
+
+            summary = (
+                state_df.groupby(["seq_idx", "feature_name"], as_index=False)
+                .agg(
+                    mean=("weight", "mean"),
+                    std=("weight", "std"),
+                    count=("weight", "count"),
+                )
+            )
+            summary["sem"] = np.where(
+                summary["count"] > 1,
+                summary["std"] / np.sqrt(summary["count"]),
+                0.0,
+            )
+            summary = summary.sort_values("seq_idx")
+
+            ax.plot(
+                summary["seq_idx"],
+                summary["mean"],
+                color="#1f77b4",
+                marker="o",
+                linewidth=2.2,
+            )
+            if len(summary) > 1:
+                ax.fill_between(
+                    summary["seq_idx"],
+                    summary["mean"] - summary["sem"],
+                    summary["mean"] + summary["sem"],
+                    color="#1f77b4",
+                    alpha=0.15,
+                )
+
+            ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+            ax.set_title(state_label)
+            ax.set_xlabel("Sequential stimulus features")
+            ax.set_xticks(summary["seq_idx"])
+            ax.set_xticklabels(summary["feature_name"], rotation=35, ha="right")
+            sns.despine(ax=ax)
+
+        axes[0].set_ylabel("Weight")
+        fig.suptitle("s_i / sf_i coefficients", y=1.02)
+        fig.tight_layout()
+        return fig
+
+    return (plot_sequence_feature_weights,)
 
 
 @app.cell
@@ -349,11 +458,22 @@ def _(
 
     # Emit emission-weights long DF for downstream use
     weights_df = build_emission_weights_df(views)
-    return (trial_df,)
+    return trial_df, weights_df
 
 
 @app.cell
-def _(K, arrays_store, mo, paths, plots, ui_subjects, views):
+def _(
+    K,
+    arrays_store,
+    mo,
+    paths,
+    pl,
+    plot_sequence_feature_weights,
+    plots,
+    ui_subjects,
+    views,
+    weights_df,
+):
     # Plot Weights (Folded / Agonist)
     # GLM is essentially K=1.
     # State Labels Trivial
@@ -362,10 +482,35 @@ def _(K, arrays_store, mo, paths, plots, ui_subjects, views):
         mo.stop(True, mo.md("No results loaded."))
     _selected = [s for s in ui_subjects.value if s in arrays_store]
     _save_path = paths.RESULTS / "plots/GLMHMM/emissions_coefs.png"
+    _views_sel = {s: views[s] for s in _selected}
+    _weights_df_sel = weights_df.filter(pl.col("subject").is_in(_selected))
     _fig_ag, _fig_cls = plots.plot_emission_weights(
-        views={s: views[s] for s in _selected}, K=K, save_path=_save_path,
+        views=_views_sel, K=K, save_path=_save_path,
     )
-    mo.vstack([mo.md("### Emission weights"), _fig_ag, _fig_cls])
+
+    _fig_seq = plot_sequence_feature_weights(_weights_df_sel)
+
+    _top_row_items = [mo.vstack([_fig_ag], align="center")]
+    _top_row_widths = [2]
+    if _fig_seq is not None:
+        _top_row_items.append(mo.vstack([_fig_seq], align="center"))
+        _top_row_widths.append(1)
+    else:
+        _top_row_items.append(
+            mo.vstack(
+                [mo.md("No `s_i` / `sf_i` regressors found in the current GLM fit.")],
+                align="center",
+            )
+        )
+        _top_row_widths.append(1)
+
+    mo.vstack(
+        [
+            mo.md("### Emission weights"),
+            mo.hstack(_top_row_items, widths=_top_row_widths, align="start", justify="start"),
+            _fig_cls,
+        ]
+    )
     return
 
 
@@ -420,10 +565,10 @@ def _(is_2afc, mo, pl, plots, save_plot, trial_df, ui_subjects, views):
 @app.cell
 def _(editor_views, mo):
     subjects = list(editor_views.keys())
-    mo.stop(not _subjects, mo.md("No fitted subjects available for coefficient editing."))
+    mo.stop(not subjects, mo.md("No fitted subjects available for coefficient editing."))
     ui_editor_subject = mo.ui.dropdown(
-        options=_subjects,
-        value=_subjects[0],
+        options=subjects,
+        value=subjects[0],
         label="Subject",
     )
     ui_editor_subject
@@ -532,6 +677,7 @@ def _(
     coef_editor_reference_class_idx = _payload["reference_class_idx"]
     coef_editor_stored_class_indices = _payload["stored_class_indices"]
     coef_editor_stored_reference_class_idx = _payload["stored_reference_class_idx"]
+    coef_editor
     return (
         coef_editor,
         coef_editor_explicit_class_indices,
@@ -589,7 +735,6 @@ def _(
     plots,
     save_plot,
     ui_editor_subject,
-    ui_psychometric_background,
 ):
     _subj = ui_editor_subject.value
     _view = editor_view
@@ -621,13 +766,13 @@ def _(
     _fig_all_tweaked, _ = plots.plot_categorical_performance_all(
         _plot_df_tweaked,
         _title,
-        background_style=ui_psychometric_background.value,
+        # background_style=ui_psychometric_background.value,
     )
     _fig_state_tweaked, _ = plots.plot_categorical_performance_by_state(
         df=_plot_df_tweaked,
         views={_subj: _view_tweaked},
         model_name=f"{_title} — per state",
-        background_style=ui_psychometric_background.value,
+        # background_style=ui_psychometric_background.value,
     )
     _side_plot_fn = getattr(plots, "plot_categorical_strat_by_side", None)
     if _side_plot_fn is None:
@@ -648,12 +793,12 @@ def _(
     mo.vstack(
         [
             mo.md("### Tweaked categorical plots"),
-            mo.hstack(
+            mo.vstack(
                 [
                     mo.vstack([_fig_all_tweaked], align="center"),
                     mo.vstack(
                         [
-                            ui_psychometric_background,
+                            # ui_psychometric_background,
                             save_plot(
                                 _fig_all_tweaked,
                                 "tweaked overall psychometric",
@@ -665,26 +810,16 @@ def _(
                 ],
                 justify="space-between",
                 align="center",
-                widths=[4,1],
-            ),
-            mo.md("### Tweaked per-state categorical performance"),
-            mo.hstack(
-                [
-                    mo.vstack([_fig_state_tweaked], align="center"),
-                    save_plot(
-                        _fig_state_tweaked,
-                        "tweaked per-state psychometric",
-                        stem="tweaked_categorical_by_state",
-                    ),
-                ],
-                justify="space-between",
-                align="center",
-                widths=[4, 1],
             ),
             _side_section,
         ],
         align="center",
     )
+    return
+
+
+@app.cell
+def _():
     return
 
 

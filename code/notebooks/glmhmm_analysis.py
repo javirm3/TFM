@@ -51,6 +51,7 @@ def _():
         mo,
         np,
         paths,
+        pd,
         pl,
         plt,
         sns,
@@ -128,13 +129,13 @@ def _(mo, task_name, ui_model_manager):
         fit_clicks,
         ui_K,
         ui_alias,
+        ui_cv_mode,
+        ui_cv_repeats,
         ui_emission_cols,
         ui_existing,
         ui_frozen_emissions,
         ui_subjects,
         ui_tau,
-        ui_cv_mode,
-        ui_cv_repeats,
     )
 
 
@@ -157,13 +158,13 @@ def _(
     task_name,
     ui_K,
     ui_alias,
+    ui_cv_mode,
+    ui_cv_repeats,
     ui_emission_cols,
     ui_existing,
     ui_frozen_emissions,
     ui_subjects,
     ui_tau,
-    ui_cv_mode,
-    ui_cv_repeats,
 ):
     _last_fit_click = get_last_fit_click()
     mo.stop(
@@ -217,6 +218,7 @@ def _(
                     return
                 if info.get("event") == "cv_repeat_complete":
                     _bar.update(
+                        increment=1,
                         title=_progress_title(info),
                         subtitle=f"CV repeat {info['cv_repeat_index']}/{info['cv_repeat_total']} complete",
                     )
@@ -230,6 +232,7 @@ def _(
                     return
                 if info.get("event") == "restart_complete":
                     _bar.update(
+                        increment=0 if ui_cv_mode.value != "none" else 1,
                         title=_progress_title(info),
                         subtitle=_progress_subtitle(info),
                     )
@@ -263,11 +266,93 @@ def _(
 
 
 @app.cell
+def _(OUT, mo, pd, pl, plt, sns, ui_cv_mode):
+    import json
+    mo.stop(ui_cv_mode.value == "none", mo.md(""))
+
+    repeat_files = sorted(OUT.glob("*_cv_repeats.parquet"))
+    mo.stop(not repeat_files, mo.md("No CV repeat diagnostics found yet."))
+
+    repeats_df = pl.concat([pl.read_parquet(path) for path in repeat_files], how="diagonal_relaxed")
+
+    repeats_pd = repeats_df.to_pandas()
+
+    count_rows = []
+    for _row in repeats_pd.to_dict(orient="records"):
+        print(_row)
+        for split_name, counts_key in (
+            ("train", "train_label_counts_json"),
+            ("test", "test_label_counts_json"),
+        ):
+            counts = json.loads(_row.get(counts_key) or "{}")
+            for ild, count in counts.items():
+                count_rows.append(
+                    {
+                        "subject": _row["subject"],
+                        "repeat_index": int(_row["repeat_index"]),
+                        "subject_repeat": f"{_row['subject']} r{int(_row['repeat_index'])}",
+                        "split": split_name,
+                        "ild": float(ild),
+                        "count": int(count),
+                    }
+                )
+
+    count_pd = pd.DataFrame(count_rows)
+    if not count_pd.empty:
+        count_pd = count_pd.sort_values(["ild", "subject", "repeat_index"])
+
+    fig, axes = plt.subplots(3, 1, figsize=(max(10, 0.55 * max(len(repeats_pd), 1)), 12))
+
+    sns.lineplot(
+        data=repeats_pd,
+        x="repeat_index",
+        y="test_ll_per_trial",
+        hue="subject",
+        marker="o",
+        ax=axes[0],
+    )
+    axes[0].set_title("CV Test Log-Likelihood by Repeat")
+    axes[0].set_xlabel("Repeat")
+    axes[0].set_ylabel("Test LL / trial")
+
+    for ax_idx, split_name in enumerate(["train", "test"], start=1):
+        split_pd = count_pd[count_pd["split"] == split_name]
+        if split_pd.empty:
+            axes[ax_idx].set_visible(False)
+            continue
+        pivot = (
+            split_pd.pivot_table(
+                index="ild",
+                columns="subject_repeat",
+                values="count",
+                fill_value=0,
+            )
+            .sort_index()
+        )
+        sns.heatmap(pivot, cmap="Blues", cbar=True, ax=axes[ax_idx])
+        axes[ax_idx].set_title(f"Signed ILD Counts in {split_name.capitalize()} Split")
+        axes[ax_idx].set_xlabel("Subject / Repeat")
+        axes[ax_idx].set_ylabel("Signed ILD")
+
+    plt.tight_layout()
+    plt.show()
+    # summary_cols = [
+    #     "subject",
+    #     "repeat_index",
+    #     "balance_score",
+    #     "train_session_count",
+    #     "test_session_count",
+    #     "test_ll_per_trial",
+    #     "test_acc",
+    # ]
+    return
+
+
+@app.cell
 def _(
     adapter,
     current_hash,
     df_all,
-    mo,
     np,
     paths,
     pl,
@@ -278,14 +363,8 @@ def _(
     ui_existing,
     ui_subjects,
     ui_tau,
-    ui_cv_mode,
 ):
     K = ui_K.value
-
-    mo.stop(
-        ui_cv_mode.value != "none",
-        mo.md("This analysis notebook expects a single full-data fit with arrays. CV fits save summary metrics only."),
-    )
 
     selected_model_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
     OUT = paths.RESULTS / "fits" / task_name / "glmhmm" / selected_model_id
@@ -313,7 +392,7 @@ def _(
         arrays_store[_subj] = _d
 
     # arrays_store
-    return K, arrays_store, names, selected_model_id
+    return K, OUT, arrays_store, names, selected_model_id
 
 
 @app.cell
@@ -648,6 +727,12 @@ def _(
         background_style=ui_psychometric_background.value,
         **_perf_kwargs,
     )
+    for _ax_idx, _ax in enumerate(_fig_all.axes):
+        _ax.set_title("")
+        _ax.set_ylabel(r"$\mathit{p}(\mathrm{right})$" if _ax_idx == 0 else "")
+    if _fig_all._suptitle is not None:
+        _fig_all._suptitle.set_text("")
+    _fig_all.tight_layout()
 
     _plot_df_state = plots.prepare_predictions_df(_trial_df_sel)
     _fig_state, _ = plots.plot_categorical_performance_by_state(
@@ -993,6 +1078,12 @@ def _(
         _title,
         background_style=ui_psychometric_background.value,
     )
+    for _ax_idx, _ax in enumerate(_fig_all_tweaked.axes):
+        _ax.set_title("")
+        _ax.set_ylabel(r"$\mathit{p}(\mathrm{right})$" if _ax_idx == 0 else "")
+    if _fig_all_tweaked._suptitle is not None:
+        _fig_all_tweaked._suptitle.set_text("")
+    _fig_all_tweaked.tight_layout()
     _fig_state_tweaked, _ = plots.plot_categorical_performance_by_state(
         df=_plot_df_tweaked,
         views={_subj: _view_tweaked},
@@ -1025,18 +1116,16 @@ def _(
         _reg_section = mo.vstack(
             [
                 mo.hstack([mo.md("### Tweaked per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
-                mo.hstack(
+                mo.vstack(
                     [
-                        mo.vstack([_fig_reg_state_tweaked], align="center"),
+                        _fig_reg_state_tweaked,
                         save_plot(
                             _fig_reg_state_tweaked,
                             f"tweaked {ui_psychometric_regressor.value} by state",
                             stem=f"tweaked_regressor_by_state_{ui_psychometric_regressor.value}",
                         ),
                     ],
-                    justify="space-between",
                     align="center",
-                    widths=[4, 1],
                 ),
             ],
             align="center",
@@ -1062,15 +1151,20 @@ def _(
             mo.md("### Tweaked categorical plots"),
             mo.hstack(
                 [
-                    mo.vstack([_fig_all_tweaked], align="center"),
                     mo.vstack(
                         [
-                            ui_psychometric_background,
+                            _fig_all_tweaked,
                             save_plot(
                                 _fig_all_tweaked,
                                 "tweaked overall psychometric",
                                 stem="tweaked_categorical_overall",
                             ),
+                        ],
+                        align="center",
+                    ),
+                    mo.vstack(
+                        [
+                            ui_psychometric_background,
                         ],
                         align="start",
                     ),
@@ -1080,18 +1174,16 @@ def _(
                 widths=[4, 1],
             ),
             mo.md("### Tweaked per-state categorical performance"),
-            mo.hstack(
+            mo.vstack(
                 [
-                    mo.vstack([_fig_state_tweaked], align="center"),
+                    _fig_state_tweaked,
                     save_plot(
                         _fig_state_tweaked,
                         "tweaked per-state psychometric",
                         stem="tweaked_categorical_by_state",
                     ),
                 ],
-                justify="space-between",
                 align="center",
-                widths=[4, 1],
             ),
             _reg_section,
             _side_section,
@@ -1195,7 +1287,7 @@ def _(K, mo, plots, trial_df, ui_subjects_traj, views):
 
 
 @app.cell
-def _(K, mo, plots, trial_df, ui_subjects_traj, views):
+def _(K, THRESH_ui, mo, plots, trial_df, ui_subjects_traj, views):
     selected_occ = [s for s in ui_subjects_traj.value if s in views]
     mo.stop(not selected_occ, mo.md("Select subjects above."))
     _fig_occ = plots.plot_state_occupancy(
@@ -1203,6 +1295,7 @@ def _(K, mo, plots, trial_df, ui_subjects_traj, views):
         trial_df=trial_df,
         session_col="session",
         sort_col="trial_idx",
+        switch_posterior_threshold=THRESH_ui.amount,
     )
     mo.vstack([
         mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
@@ -1212,6 +1305,10 @@ def _(K, mo, plots, trial_df, ui_subjects_traj, views):
             "middle = per-session occupancy pooled across subjects; right = histogram of state switches per session.  \n"
             "> **Rows below**: one row per subject. Left = posterior mean occupancy by state; middle = per-session "
             "occupancy boxplots; right = histogram of inferred state switches per session."
+        ),
+        mo.md(
+            f"> Switch counts use the same posterior threshold slider as the state-accuracy panel and only count "
+            f"changes between confident MAP assignments with posterior ≥ {THRESH_ui.amount:.2f}."
         ),
     ], align="center")
     return
@@ -1448,13 +1545,17 @@ def _(
 ):
     # ── SSM fit + comparison tables ────────────────────────────────────────────
     mo.stop(not ssm_run_btn.value, mo.md("Press **▶ Run SSM safety check** above to fit."))
-
     try:
         import ssm as ssm_lib
-    except ImportError:
+    except Exception as exc:
         mo.stop(
             True,
-            mo.md("SSM is not installed in the current environment, so the SSM vs custom log-likelihood comparison cannot run."),
+            mo.md(
+                "SSM could not be imported in the current environment, so the SSM vs custom log-likelihood comparison cannot run. "
+                f"Import error: `{type(exc).__name__}: {exc}`. "
+                "In this project, that usually means `ssm` is installed but incompatible with the currently resolved "
+                "`autograd`/`numpy` versions, not that `uv` is using the wrong environment."
+            ),
         )
     from scripts.fit_common import valid_trial_mask
 
@@ -1637,12 +1738,24 @@ def _(
             f"Dynamax glmhmm K={K}",
             views=views_sel,
         )
+        for _ax_idx, _ax in enumerate(ssm_psych_fig_custom.axes):
+            _ax.set_title("")
+            _ax.set_ylabel(r"$\mathit{p}(\mathrm{right})$" if _ax_idx == 0 else "")
+        if ssm_psych_fig_custom._suptitle is not None:
+            ssm_psych_fig_custom._suptitle.set_text("")
+        ssm_psych_fig_custom.tight_layout()
         plot_df_ssm = plots.prepare_predictions_df(trial_df_ssm)
         ssm_psych_fig_ssm, _ = plots.plot_categorical_performance_all(
             plot_df_ssm,
             f"SSM glmhmm K={K}",
             views=ssm_views_sel,
         )
+        for _ax_idx, _ax in enumerate(ssm_psych_fig_ssm.axes):
+            _ax.set_title("")
+            _ax.set_ylabel(r"$\mathit{p}(\mathrm{right})$" if _ax_idx == 0 else "")
+        if ssm_psych_fig_ssm._suptitle is not None:
+            ssm_psych_fig_ssm._suptitle.set_text("")
+        ssm_psych_fig_ssm.tight_layout()
 
     ssm_cmp_df = pl.DataFrame(cmp_rows)
     contrast_labels = list(adapter.choice_labels[:-1]) or ["contrast_0"]

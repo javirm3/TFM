@@ -14,6 +14,7 @@ from tasks import TaskAdapter, _register
 # Default experiments to keep (avoids habituation / drug sessions)
 _KEEP_EXPERIMENTS = ["2AFC_2", "2AFC_3", "2AFC_4", "2AFC_6"]
 _SF_COL_PREFIX = "sf_"
+_STIM_ABS_COL_PREFIX = "stim_"
 _ALL_2AFC_EMISSION_COLS: list[str] = [
     "bias",
     "stim_vals",
@@ -44,6 +45,35 @@ _AVAILABLE_2AFC_TRANSITION_COLS: list[str] = list(_ALL_2AFC_TRANSITION_COLS)
 def _sf_sort_key(name: str) -> tuple[int, str]:
     suffix = name.removeprefix(_SF_COL_PREFIX)
     return (int(suffix), name) if suffix.isdigit() else (10**9, name)
+
+
+def _stim_abs_sort_key(name: str) -> tuple[int, str]:
+    suffix = name.removeprefix(_STIM_ABS_COL_PREFIX)
+    return (int(suffix), name) if suffix.isdigit() else (10**9, name)
+
+
+def _stim_abs_cols(columns: list[str]) -> list[str]:
+    return sorted(
+        [
+            col
+            for col in columns
+            if col.startswith(_STIM_ABS_COL_PREFIX)
+            and col.removeprefix(_STIM_ABS_COL_PREFIX).isdigit()
+        ],
+        key=_stim_abs_sort_key,
+    )
+
+
+def _infer_stim_abs_cols_from_df(df: pl.DataFrame | pd.DataFrame) -> list[str]:
+    columns = list(df.columns)
+    existing = _stim_abs_cols(columns)
+    if existing:
+        return existing
+    if "ILD" not in columns:
+        return []
+    ild_series = df["ILD"].drop_nulls() if isinstance(df, pl.DataFrame) else df["ILD"].dropna()
+    stim_abs_levels = sorted({int(abs(v)) for v in ild_series.to_list()})
+    return [f"{_STIM_ABS_COL_PREFIX}{stim_abs}" for stim_abs in stim_abs_levels]
 
 
 @_register(["two_afc", "2afc"])
@@ -100,11 +130,27 @@ class TwoAFCAdapter(TaskAdapter):
             stim_scale = 1.0
 
         stim_set = 6 if df_pd["Experiment"].iloc[0] == "2AFC_6" else 2
+        stim_abs_levels = sorted(
+            {
+                int(abs(v))
+                for v in df_pd["ILD"].dropna().astype(int).tolist()
+            }
+        )
         parts = []
         for _, df_session in df_pd.groupby("Session", sort=False):
             part = df_session.copy().reset_index(drop=True)
             part["bias"] = 1.0
             part["stim_vals"] = part["ILD"].astype(float) / stim_scale
+            for stim_abs in stim_abs_levels:
+                if stim_abs == 0:
+                    stim_col = np.where(part["ILD"] == 0, 1.0, 0.0).astype(np.float32)
+                else:
+                    stim_col = np.select(
+                        [part["ILD"] == stim_abs, part["ILD"] == -stim_abs],
+                        [1.0, -1.0],
+                        default=0.0,
+                    ).astype(np.float32)
+                part[f"{_STIM_ABS_COL_PREFIX}{stim_abs}"] = stim_col
 
             existing_sf_cols = [
                 c for c in part.columns if str(c).startswith(_SF_COL_PREFIX)
@@ -196,7 +242,7 @@ class TwoAFCAdapter(TaskAdapter):
         ucols = transition_cols if transition_cols is not None else self.default_transition_cols()
         allowed_ecols = set(self.available_emission_cols()) | {
             c for c in feature_df.columns if c.startswith(_SF_COL_PREFIX)
-        }
+        } | set(_stim_abs_cols(feature_df.columns))
         bad_e = [c for c in ecols if c not in allowed_ecols]
         bad_u = [c for c in ucols if c not in _AVAILABLE_2AFC_TRANSITION_COLS]
         if bad_e:
@@ -240,6 +286,16 @@ class TwoAFCAdapter(TaskAdapter):
         """Return any stimulus-frame (sf_*) columns present in *df*."""
         return [c for c in df.columns if c.startswith(_SF_COL_PREFIX)]
 
+    def stim_abs_cols(self, df: pl.DataFrame) -> List[str]:
+        """Return signed one-hot columns for absolute ILD magnitudes."""
+        return _infer_stim_abs_cols_from_df(df)
+
+    def available_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
+        return list(dict.fromkeys(self.sf_cols(df) + self.stim_abs_cols(df)))
+
+    def default_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
+        return self.sf_cols(df)
+
     @property
     def choice_labels(self) -> list[str]:
         return ["Left", "Right"]
@@ -247,7 +303,7 @@ class TwoAFCAdapter(TaskAdapter):
     @property
     def probability_columns(self) -> list[str]:
         return ["pL", "pR"]
-    
+
     def get_correct_class(self, df: pl.DataFrame) -> np.ndarray:
         stim = df["stimulus"].to_numpy().astype(float)
         unique = set(np.unique(stim[~np.isnan(stim)]).tolist())

@@ -738,12 +738,36 @@ def eval_glm_on_ild_grid(
 
     X_cols_list = list(X_cols)
 
+    stim_abs_indices = {
+        int(name.removeprefix("stim_")): idx
+        for idx, name in enumerate(X_cols_list)
+        if isinstance(name, str)
+        and name.startswith("stim_")
+        and name.removeprefix("stim_").isdigit()
+    }
+
     # Accept any of these as the stimulus / ILD column
     _STIM_NAMES = {"stim_vals", "stim_d", "ild_norm", "ILD", "ild", "stimulus"}
     ild_idx = next((i for i, n in enumerate(X_cols_list) if n in _STIM_NAMES), None)
     bias_idx = next((i for i, n in enumerate(X_cols_list) if n == "bias"), None)
-
-    ild_grid = np.linspace(-ild_max, ild_max, n_grid)
+    if stim_abs_indices:
+        observed_levels = sorted(stim_abs_indices)
+        signed_levels = sorted(
+            {
+                float(level)
+                for level in observed_levels
+                if level == 0
+            }
+            | {
+                signed
+                for level in observed_levels
+                if level != 0
+                for signed in (-float(level), float(level))
+            }
+        )
+        ild_grid = np.asarray(signed_levels, dtype=float)
+    else:
+        ild_grid = np.linspace(-ild_max, ild_max, n_grid)
     ild_norm = ild_grid / ild_max
 
     gL, gR = 0.0, 0.0
@@ -754,7 +778,7 @@ def eval_glm_on_ild_grid(
         elif len(_lr) == 1:
             gL = gR = float(_lr[0])
 
-    p_right = np.zeros((K, n_grid))
+    p_right = np.zeros((K, len(ild_grid)))
 
     weights_t = None
     if X_data is not None and trial_weights is not None:
@@ -764,16 +788,31 @@ def eval_glm_on_ild_grid(
             if float(_w.sum()) > 0:
                 weights_t = _w
 
-    if X_data is not None and ild_idx is not None:
+    stim_feature_indices = sorted(set(([ild_idx] if ild_idx is not None else []) + list(stim_abs_indices.values())))
+
+    if X_data is not None and (ild_idx is not None or stim_abs_indices):
         # ── partial-dependence: average over real trial features ──────────────
         X_base = np.asarray(X_data, dtype=float).copy()
         for k in range(K):
             w = W[k, 0, :]
             other_logit = X_base @ w
-            stim_contrib = X_base[:, ild_idx] * w[ild_idx]
+            stim_contrib = (
+                X_base[:, stim_feature_indices] @ w[stim_feature_indices]
+                if stim_feature_indices
+                else 0.0
+            )
             base_logit = other_logit - stim_contrib
-            for gi, sv in enumerate(ild_norm):
-                logit = base_logit + sv * w[ild_idx]
+            for gi, (ild_value, sv) in enumerate(zip(ild_grid, ild_norm)):
+                stim_logit = 0.0
+                if ild_idx is not None:
+                    stim_logit += sv * w[ild_idx]
+                for stim_abs, stim_abs_idx in stim_abs_indices.items():
+                    if stim_abs == 0:
+                        stim_value = 1.0 if ild_value == 0 else 0.0
+                    else:
+                        stim_value = float(np.sign(ild_value)) if abs(ild_value) == float(stim_abs) else 0.0
+                    stim_logit += stim_value * w[stim_abs_idx]
+                logit = base_logit + stim_logit
                 # W[k,0,:] parameterises P(class-0 = LEFT); class-1 (RIGHT) is
                 # the softmax reference (logit=0). So P(right) = sigmoid(-logit).
                 p_left = 1.0 / (1.0 + np.exp(-logit))
@@ -791,9 +830,20 @@ def eval_glm_on_ild_grid(
             if bias_idx is not None:
                 col_means[bias_idx] = 1.0
 
-        X_grid = np.tile(col_means, (n_grid, 1))
+        X_grid = np.tile(col_means, (len(ild_grid), 1))
+        if stim_feature_indices:
+            X_grid[:, stim_feature_indices] = 0.0
         if ild_idx is not None:
             X_grid[:, ild_idx] = ild_norm
+        for stim_abs, stim_abs_idx in stim_abs_indices.items():
+            if stim_abs == 0:
+                X_grid[:, stim_abs_idx] = (ild_grid == 0).astype(float)
+            else:
+                X_grid[:, stim_abs_idx] = np.where(
+                    np.abs(ild_grid) == float(stim_abs),
+                    np.sign(ild_grid),
+                    0.0,
+                )
         if bias_idx is not None:
             X_grid[:, bias_idx] = 1.0  # bias is always 1
 
@@ -1403,6 +1453,7 @@ def _style_legacy_psych_axis(ax: plt.Axes, xticks: Sequence[float]) -> None:
     ax.title.set_size(13)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    ax.set_ylabel(f"$p(\mathrm{{right}})$")
 
 
 def _resolve_plot_col(df: pd.DataFrame, preferred: str, candidates: Sequence[str]) -> str:
@@ -1596,10 +1647,10 @@ def _psych_panel(
     ax.set_xlim(xticks[0], xticks[-1])
     ax.set_ylim(0, 1)
     ax.set_yticks([0, 0.5, 1])
-    ax.set_title(title)
+    # ax.set_title(title)
     ax.set_xlabel(xlabel)
-    if ylabel:
-        ax.set_ylabel(ylabel)
+    # if ylabel:
+    #     ax.set_ylabel(ylabel)
 
 
 def _psych_state_panel(
@@ -1858,7 +1909,25 @@ def _regressor_state_panel(
     ax.axhline(0.5, color="tab:gray", ls="--", lw=1.6)
     ax.axvline(0.0, color="tab:gray", ls="--", lw=1.6)
     ax.set_ylim(0, 1)
-    ax.set_yticks([0, 0.5, 1])
+    ax.set_yticks([0, 0.5, 1], [0, 0.5, 1])
+    ax.set_xlim([-1,1])
+    ax.set_xticks([-1,-0.5, 0, 0.5, 1], labels = ["-1", "0.5", "0", "0.5", "1"])
+    ax.xaxis.set_ticks_position("bottom")
+    ax.tick_params(
+        axis="x",
+        which="major",
+        bottom=True,
+        top=False,
+        direction="out",
+        length=7,
+        width=1.1,
+        color="#111827",
+        labelcolor="#111827",
+        pad=4,
+    )
+    ax.spines["bottom"].set_visible(True)
+    ax.spines["bottom"].set_linewidth(1.1)
+    ax.set_ylabel(f"$p(\mathrm{{right}})$")
     return data_h, model_h
 
 
@@ -2148,6 +2217,8 @@ def plot_state_occupancy(
         views,
         trial_df,
         session_col=session_col,
+        sort_col=sort_col,
+        **kwargs,
     )
 
 
@@ -2495,7 +2566,6 @@ def plot_categorical_performance_all_by_state(
         _ax_overlay.set_ylim(0, 1)
         _ax_overlay.set_yticks([0, 0.5, 1])
         _ax_overlay.set_xlabel("Stimulus ILD (dB)")
-        _ax_overlay.set_ylabel("p(right)")
         _ax_overlay.set_title("")
         _ax_overlay.legend(frameon=False, fontsize=8)
 
@@ -2536,7 +2606,7 @@ def plot_categorical_performance_all_by_state(
             else:
                 ax.set_ylabel("")
 
-    fig.suptitle(model_name, y=1.02)
+    # fig.suptitle(model_name, y=1.02)
     sns.despine(fig=fig)
     fig.tight_layout()
     return fig, None
@@ -2726,7 +2796,7 @@ def plot_regressor_psychometric_by_state(
                 model_line_mode=model_line_mode,
             )
         _ax_overlay.set_xlabel(xlabel)
-        _ax_overlay.set_ylabel("p(right)")
+        _ax_overlay.set_ylabel(f"$p(\mathrm{{right}})$")
         _ax_overlay.set_title("")
         _ax_overlay.legend(frameon=False, fontsize=8)
 
@@ -2760,13 +2830,13 @@ def plot_regressor_psychometric_by_state(
                 model_line_mode=model_line_mode,
             )
             ax.set_xlabel(xlabel)
-            ax.set_title(lbl)
+            # ax.set_title(lbl)
             if k == 0:
                 ax.set_ylabel("P(Right)")
             else:
                 ax.set_ylabel("")
 
-    fig.suptitle(f"{model_name} — {_feature_label(feature_col)} psychometric", y=1.02)
+    # fig.suptitle(f"{model_name} — {_feature_label(feature_col)} psychometric", y=1.02)
     sns.despine(fig=fig)
     fig.tight_layout()
     return fig, None

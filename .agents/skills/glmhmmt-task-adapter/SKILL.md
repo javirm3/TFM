@@ -24,14 +24,17 @@ Read these files before coding:
    You need subject id, session id, trial order, observed choice, correct class
    or stimulus coding, performance, and candidate emission and transition
    regressors.
+   Ask explicitly which evidence / regressor axes are continuous and which are
+   categorical, because that determines whether psychometric summaries should
+   be binned or shown at native levels.
 2. Keep preprocessing separate from model code.
    Heavy ETL should end in a parquet file. The adapter should consume the
    cleaned dataframe, not recreate the full preprocessing pipeline.
 3. Implement the adapter in `code/tasks/<task>.py`.
    Define `task_key`, `task_label`, `num_classes`, `data_file`, `sort_col`,
    `session_col`, `subject_filter`, `build_feature_df`, `load_subject`,
-   defaults, `behavioral_cols`, `get_correct_class`, `label_states`, and
-   `get_plots`.
+   defaults, `behavioral_cols`, `get_correct_class`, `label_states`,
+   `cv_balance_labels` when CV balancing is needed, and `get_plots`.
 4. Implement task-owned plots in `code/tasks/plots/<task>.py`.
    Put psychometrics, task diagnostics, and performance-by-condition plots
    here. Reuse `glmhmmt.model_plots` for shared diagnostics, but do not
@@ -58,6 +61,9 @@ parser's contract; otherwise implement a task-owned `build_feature_df(...)`.
 - Only add canonical behavioral / sort columns needed by the adapter
   contract. Do not rename one task's raw columns into another task's private
   schema just to make copied code run.
+- Never import or call another task module from inside a task module. If a new
+  task needs similar logic, duplicate it into the new task file and adapt it
+  there.
 - Registry-driven task selectors are preferred over hard-coded task lists in
   widgets and notebooks.
 - For tasks with history regressors, decide separately:
@@ -70,6 +76,20 @@ parser's contract; otherwise implement a task-owned `build_feature_df(...)`.
 - Task-owned plots should read task-specific axes and behavioral columns from
   the adapter or task-local constants, rather than assuming Alexis 2AFC names
   like `ILD`, `Choice`, or `Hit`.
+- Do not inherit another task's emission-weight sign convention blindly.
+  Verify whether positive stimulus weight should stay positive in the new
+  task's native response coding before copying 2AFC sign flips into state
+  labelling or weight plots.
+- If you add balanced session-holdout CV for a task, expose
+  `cv_balance_labels(feature_df)` from the adapter and base it on the task's
+  own signed evidence / balancing variable.
+- Decide plot aggregation from the regressor type:
+  continuous axes should usually be binned before pooling, while categorical
+  axes should usually stay at their native levels.
+- Keep the task's categorical / psychometric plot family internally
+  consistent. If the overall psychometric is binned for a continuous axis, the
+  by-state version should follow the same binning pattern unless there is a
+  task-specific reason not to.
 - If a blocker is specific to one dataset, document it near the adapter or in
   task docs, not in the public skill.
 

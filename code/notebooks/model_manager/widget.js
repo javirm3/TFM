@@ -334,7 +334,7 @@ function render({ model, el }) {
               <label class="mm-label inline">Mode</label>
               <select id="inp-cv-mode" class="mm-input small">
                 <option value="none" ${currentCvMode === "none" ? "selected" : ""}>none</option>
-                <option value="balanced_holdout" ${currentCvMode === "balanced_holdout" ? "selected" : ""}>balanced_holdout</option>
+                <option value="balanced_session_holdout" ${currentCvMode === "balanced_session_holdout" ? "selected" : ""}>balanced_session_holdout</option>
               </select>
             </div>
             <div class="mm-col half-col">

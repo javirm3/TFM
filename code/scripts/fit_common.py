@@ -13,6 +13,14 @@ FIT_ROW_ID_COL = "_fit_row_id"
 CV_SESSION_ID_COL = "_cv_session_id"
 
 
+def normalize_cv_mode(cv_mode: str) -> str:
+    """Map legacy CV mode names to the current canonical values."""
+    cv_mode = str(cv_mode)
+    if cv_mode == "balanced_holdout":
+        return "balanced_session_holdout"
+    return cv_mode
+
+
 def valid_trial_mask(session_ids: np.ndarray, min_length: int = 2) -> np.ndarray:
     """Return a boolean mask keeping only trials from sessions with >= min_length trials."""
     ids, counts = np.unique(session_ids, return_counts=True)
@@ -20,9 +28,13 @@ def valid_trial_mask(session_ids: np.ndarray, min_length: int = 2) -> np.ndarray
     return np.array([session_id in keep for session_id in session_ids])
 
 
-def apply_valid_trial_mask(session_ids: np.ndarray, *arrays: np.ndarray) -> tuple[np.ndarray, ...]:
-    """Mask all arrays using the standard minimum-session-length rule."""
-    mask = valid_trial_mask(session_ids)
+def apply_valid_trial_mask(
+    session_ids: np.ndarray,
+    *arrays: np.ndarray,
+    min_length: int = 2,
+) -> tuple[np.ndarray, ...]:
+    """Mask all arrays using the requested minimum-session-length rule."""
+    mask = valid_trial_mask(session_ids, min_length=min_length)
     masked = [np.asarray(arr)[mask] for arr in arrays]
     return (*masked, np.asarray(session_ids)[mask])
 
@@ -38,7 +50,7 @@ def stable_model_id(
     cv_repeats: int = 0,
 ) -> str:
     """Stable 8-char MD5 hash over the fit-defining model configuration."""
-    cv_mode = str(cv_mode)
+    cv_mode = normalize_cv_mode(cv_mode)
     cv_repeats = int(cv_repeats) if cv_mode != "none" else 0
     config = {
         "task": task,
@@ -124,59 +136,144 @@ def _trial_order_column(sort_col: str | list[str]) -> str:
     return cols[-1]
 
 
-def build_balanced_holdout(
+def _label_sort_key(label: Any) -> tuple[int, Any]:
+    if isinstance(label, (int, float, np.integer, np.floating)):
+        return (0, float(label))
+    return (1, str(label))
+
+
+def build_balanced_session_holdout(
     feature_df: pl.DataFrame,
     labels: pl.Series | np.ndarray | list[Any],
+    session_col: str,
     seed: int,
+    test_fraction: float = 0.5,
+    n_candidates: int = 512,
 ) -> tuple[pl.DataFrame, pl.DataFrame, dict[str, Any]]:
-    """Return balanced train/test trial subsets matched across all label bins."""
-    df = attach_feature_row_ids(feature_df)
+    """Split full sessions into train/test while balancing aggregate label counts."""
+    df = feature_df
     label_arr = labels.to_numpy() if isinstance(labels, pl.Series) else np.asarray(labels)
     if label_arr.shape[0] != df.height:
         raise ValueError(
             f"CV labels length {label_arr.shape[0]} does not match feature_df height {df.height}."
         )
 
-    row_ids = df[FIT_ROW_ID_COL].to_numpy()
-    by_label: dict[Any, list[int]] = {}
-    for row_id, label in zip(row_ids, label_arr, strict=True):
+    session_arr = np.asarray(df[session_col].to_numpy())
+    by_session_label: dict[Any, dict[Any, int]] = {}
+    by_label: dict[Any, int] = {}
+    for session_id, label in zip(session_arr, label_arr, strict=True):
         if label is None:
             continue
         if isinstance(label, (float, np.floating)) and not np.isfinite(float(label)):
             continue
-        by_label.setdefault(label, []).append(int(row_id))
+        by_session_label.setdefault(session_id, {})
+        by_session_label[session_id][label] = by_session_label[session_id].get(label, 0) + 1
+        by_label[label] = by_label.get(label, 0) + 1
 
     if len(by_label) < 2:
         raise ValueError("Balanced CV requires at least two non-empty condition bins.")
-
-    min_count = min(len(rows) for rows in by_label.values())
-    n_per_split = min_count // 2
-    if n_per_split < 1:
+    sessions = list(by_session_label)
+    n_sessions = len(sessions)
+    if n_sessions < 2:
         raise ValueError(
-            "Balanced CV requires at least two trials in every condition bin "
-            f"after filtering, got min_count={min_count}."
+            "Balanced session CV requires at least two sessions with valid labeled trials."
         )
 
-    rng = np.random.default_rng(seed)
-    train_ids: list[int] = []
-    test_ids: list[int] = []
-    label_counts: dict[str, int] = {}
-    for label in sorted(by_label):
-        pool = np.asarray(by_label[label], dtype=int)
-        picked = rng.choice(pool, size=2 * n_per_split, replace=False)
-        rng.shuffle(picked)
-        train_ids.extend(picked[:n_per_split].tolist())
-        test_ids.extend(picked[n_per_split:].tolist())
-        label_counts[str(label)] = int(n_per_split)
+    label_keys = sorted(by_label, key=_label_sort_key)
+    label_index = {label: idx for idx, label in enumerate(label_keys)}
+    counts = np.zeros((n_sessions, len(label_keys)), dtype=np.int32)
+    for sess_idx, session_id in enumerate(sessions):
+        for label, count in by_session_label[session_id].items():
+            counts[sess_idx, label_index[label]] = int(count)
 
-    train_df = df.filter(pl.col(FIT_ROW_ID_COL).is_in(train_ids))
-    test_df = df.filter(pl.col(FIT_ROW_ID_COL).is_in(test_ids))
+    total_counts = counts.sum(axis=0).astype(np.float64)
+    target_test = total_counts * float(test_fraction)
+    test_n_sessions = int(round(n_sessions * float(test_fraction)))
+    test_n_sessions = max(1, min(n_sessions - 1, test_n_sessions))
+
+    rng = np.random.default_rng(seed)
+    best_test_idx: np.ndarray | None = None
+    best_score = np.inf
+
+    for _ in range(max(1, int(n_candidates))):
+        test_idx = np.sort(rng.choice(n_sessions, size=test_n_sessions, replace=False))
+        train_mask = np.ones(n_sessions, dtype=bool)
+        train_mask[test_idx] = False
+        train_idx = np.flatnonzero(train_mask)
+        test_counts = counts[test_idx].sum(axis=0).astype(np.float64)
+        train_counts = counts[train_idx].sum(axis=0).astype(np.float64)
+        if np.any(test_counts <= 0) or np.any(train_counts <= 0):
+            zero_penalty = 1e9 + float(np.sum(test_counts <= 0) + np.sum(train_counts <= 0))
+            score = zero_penalty
+        else:
+            scale = np.maximum(total_counts, 1.0)
+            balance_error = np.sum(np.abs(test_counts - target_test) / scale)
+            ratio_error = abs(len(test_idx) - (n_sessions / 2.0)) / max(n_sessions, 1)
+            score = float(balance_error + ratio_error)
+        if score < best_score:
+            best_score = score
+            best_test_idx = test_idx
+
+    if best_test_idx is None:
+        raise ValueError("Balanced session CV could not construct a valid session split.")
+
+    if best_score >= 1e9:
+        raise ValueError(
+            "Balanced session CV could not find a train/test split that preserves "
+            "all balance labels in both partitions. Reduce the number of labels or "
+            "use subjects with more sessions."
+        )
+
+    test_sessions = [sessions[idx] for idx in best_test_idx.tolist()]
+    test_session_set = set(test_sessions)
+    train_sessions = [session for session in sessions if session not in test_session_set]
+    train_session_set = set(train_sessions)
+    train_df = df.filter(pl.col(session_col).is_in(train_sessions))
+    test_df = df.filter(pl.col(session_col).is_in(test_sessions))
+
+    train_label_counts: dict[str, int] = {}
+    test_label_counts: dict[str, int] = {}
+    for label in label_keys:
+        idx = label_index[label]
+        train_label_counts[str(label)] = int(
+            counts[[i for i, session in enumerate(sessions) if session in train_session_set], idx].sum()
+        )
+        test_label_counts[str(label)] = int(
+            counts[[i for i, session in enumerate(sessions) if session in test_session_set], idx].sum()
+        )
+
     return train_df, test_df, {
-        "labels": [float(lbl) if isinstance(lbl, (int, float, np.integer, np.floating)) else str(lbl) for lbl in sorted(by_label)],
-        "min_count": int(min_count),
-        "n_per_label_per_split": int(n_per_split),
-        "label_counts": label_counts,
+        "labels": [
+            float(lbl) if isinstance(lbl, (int, float, np.integer, np.floating)) else str(lbl)
+            for lbl in label_keys
+        ],
+        "train_session_count": int(len(train_sessions)),
+        "test_session_count": int(len(test_sessions)),
+        "train_label_counts": train_label_counts,
+        "test_label_counts": test_label_counts,
+        "balance_score": float(best_score),
     }
+
+
+def format_balance_label_stats(
+    train_label_counts: dict[str, int],
+    test_label_counts: dict[str, int],
+) -> str:
+    """Return a compact human-readable summary of per-label train/test counts."""
+    def _sort_key(label: str) -> tuple[int, Any]:
+        try:
+            return (0, float(label))
+        except Exception:
+            return (1, label)
+
+    parts: list[str] = []
+    for label in sorted(set(train_label_counts) | set(test_label_counts), key=_sort_key):
+        train_count = int(train_label_counts.get(label, 0))
+        test_count = int(test_label_counts.get(label, 0))
+        total = train_count + test_count
+        test_frac = (100.0 * test_count / total) if total > 0 else np.nan
+        parts.append(f"{label}: {train_count}|{test_count} ({test_frac:.1f}% test)")
+    return ", ".join(parts)
 
 
 def resegment_subsampled_trials(
@@ -213,7 +310,11 @@ def resegment_subsampled_trials(
 
 def raw_loglik_multisession(model, params, emissions, inputs, session_ids) -> float:
     """Return the summed data log-likelihood without any parameter prior."""
+    if int(np.asarray(emissions).shape[0]) == 0:
+        return 0.0
     sessions = model._split_by_session(emissions, inputs, session_ids)
+    if not sessions:
+        return 0.0
     e_pad, i_pad, _ = model._pad_sessions(sessions)
     _batch_stats, ll_batch = model._batched_e_step_jit(params, e_pad, i_pad)
     return float(jnp.sum(ll_batch))
@@ -222,6 +323,14 @@ def raw_loglik_multisession(model, params, emissions, inputs, session_ids) -> fl
 def score_split(model, params, emissions, inputs, session_ids) -> dict[str, Any]:
     """Evaluate one fitted model on a train or test split."""
     T = int(np.asarray(emissions).shape[0])
+    if T == 0:
+        return {
+            "raw_ll": 0.0,
+            "ll_per_trial": np.nan,
+            "acc": np.nan,
+            "T": 0,
+            "p_pred": np.empty((0, getattr(model, "num_classes", 0))),
+        }
     raw_ll = raw_loglik_multisession(model, params, emissions, inputs, session_ids)
     p_pred = np.asarray(
         model.predict_choice_probs_multisession(params, emissions, inputs, session_ids=session_ids)

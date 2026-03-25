@@ -12,11 +12,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paths
 from glmhmmt.model import SoftmaxGLMHMM, normalize_frozen_emissions, serialize_frozen_emissions
 from scripts.fit_common import (
-    CV_SESSION_ID_COL,
     apply_valid_trial_mask,
-    build_balanced_holdout,
+    build_balanced_session_holdout,
     fit_best_restart,
-    resegment_subsampled_trials,
+    format_balance_label_stats,
+    normalize_cv_mode,
     score_split,
     stable_model_id,
 )
@@ -76,10 +76,17 @@ def _build_model(
     )
 
 
-def _prepare_arrays(adapter, feature_df: pl.DataFrame, emission_cols, session_col: str):
+def _prepare_arrays(
+    adapter,
+    feature_df: pl.DataFrame,
+    emission_cols,
+    session_col: str,
+    *,
+    min_session_length: int = 2,
+):
     y, X, _, names = adapter.build_design_matrices(feature_df, emission_cols=emission_cols)
     session_ids = feature_df[session_col].to_numpy()
-    y, X, session_ids = apply_valid_trial_mask(session_ids, y, X)
+    y, X, session_ids = apply_valid_trial_mask(session_ids, y, X, min_length=min_session_length)
     return jnp.asarray(y), jnp.asarray(X), np.asarray(session_ids), names
 
 
@@ -174,6 +181,12 @@ def fit_subject_cv(
 
     frozen = normalize_frozen_emissions(frozen_emissions)
     repeats: list[dict[str, Any]] = []
+    best_repeat_idx = -1
+    best_test_ll = -np.inf
+    best_repeat_params = None
+    best_repeat_lps = None
+    best_repeat_model = None
+    best_repeat_names = None
     for repeat_idx in range(cv_repeats):
         if progress_callback is not None:
             progress_callback(
@@ -185,12 +198,35 @@ def fit_subject_cv(
                     "cv_repeat_total": cv_repeats,
                 }
             )
-        train_df, test_df, split_meta = build_balanced_holdout(feature_df, labels, seed=base_seed + repeat_idx)
-        train_df = resegment_subsampled_trials(train_df, adapter.session_col, adapter.sort_col)
-        test_df = resegment_subsampled_trials(test_df, adapter.session_col, adapter.sort_col)
+        train_df, test_df, split_meta = build_balanced_session_holdout(
+            feature_df,
+            labels,
+            adapter.session_col,
+            seed=base_seed + repeat_idx,
+        )
+        if verbose:
+            ild_stats = format_balance_label_stats(
+                split_meta["train_label_counts"],
+                split_meta["test_label_counts"],
+            )
+            print(
+                f"[CV repeat {repeat_idx + 1}/{cv_repeats}] "
+                f"sessions train/test={split_meta['train_session_count']}/{split_meta['test_session_count']} "
+                f"balance_score={split_meta['balance_score']:.4f} | ILD train|test -> {ild_stats}"
+            )
 
-        y_train, X_train, session_train, names = _prepare_arrays(adapter, train_df, emission_cols, CV_SESSION_ID_COL)
-        y_test, X_test, session_test, _ = _prepare_arrays(adapter, test_df, emission_cols, CV_SESSION_ID_COL)
+        y_train, X_train, session_train, names = _prepare_arrays(
+            adapter,
+            train_df,
+            emission_cols,
+            adapter.session_col,
+        )
+        y_test, X_test, session_test, _ = _prepare_arrays(
+            adapter,
+            test_df,
+            emission_cols,
+            adapter.session_col,
+        )
 
         model = _build_model(
             K,
@@ -225,8 +261,16 @@ def fit_subject_cv(
         )
         train_metrics = score_split(model, best_params, y_train, X_train, session_train)
         test_metrics = score_split(model, best_params, y_test, X_test, session_test)
+        if float(test_metrics["ll_per_trial"]) > best_test_ll:
+            best_test_ll = float(test_metrics["ll_per_trial"])
+            best_repeat_idx = repeat_idx + 1
+            best_repeat_params = best_params
+            best_repeat_lps = np.asarray(best_lps)
+            best_repeat_model = model
+            best_repeat_names = names
         repeats.append(
             {
+                "subject": subject,
                 "repeat_index": repeat_idx + 1,
                 "best_restart": int(best_restart),
                 "train_T": int(train_metrics["T"]),
@@ -238,9 +282,11 @@ def fit_subject_cv(
                 "test_ll_per_trial": float(test_metrics["ll_per_trial"]),
                 "test_acc": float(test_metrics["acc"]),
                 "objective_lp": float(best_lps[-1]),
-                "min_count": int(split_meta["min_count"]),
-                "n_per_label_per_split": int(split_meta["n_per_label_per_split"]),
-                "label_counts_json": json.dumps(split_meta["label_counts"], sort_keys=True),
+                "train_session_count": int(split_meta["train_session_count"]),
+                "test_session_count": int(split_meta["test_session_count"]),
+                "train_label_counts_json": json.dumps(split_meta["train_label_counts"], sort_keys=True),
+                "test_label_counts_json": json.dumps(split_meta["test_label_counts"], sort_keys=True),
+                "balance_score": float(split_meta["balance_score"]),
             }
         )
         if progress_callback is not None:
@@ -256,14 +302,55 @@ def fit_subject_cv(
                 }
             )
 
+    if best_repeat_model is None or best_repeat_params is None or best_repeat_lps is None or best_repeat_names is None:
+        raise ValueError("CV fitting did not produce a valid best repeat.")
+
+    y_full, X_full, session_full, full_names = _prepare_arrays(
+        adapter,
+        feature_df,
+        emission_cols,
+        adapter.session_col,
+    )
+    smoothed_probs = best_repeat_model.smoother_multisession(
+        params=best_repeat_params,
+        emissions=y_full,
+        inputs=X_full,
+        session_ids=session_full,
+    )
+    p_pred = best_repeat_model.predict_choice_probs_multisession(
+        best_repeat_params,
+        y_full,
+        X_full,
+        session_ids=session_full,
+    )
+    predictive_state_probs = best_repeat_model.predict_state_probs_multisession(
+        best_repeat_params,
+        y_full,
+        X_full,
+        session_ids=session_full,
+    )
+    full_metrics = score_split(best_repeat_model, best_repeat_params, y_full, X_full, session_full)
+
     return {
         "subject": subject,
         "K": K,
         "num_classes": adapter.num_classes,
         "repeats": repeats,
-        "names": names,
+        "best_repeat_index": int(best_repeat_idx),
+        "best_repeat_test_ll_per_trial": float(best_test_ll),
+        "model": best_repeat_model,
+        "fitted_params": best_repeat_params,
+        "lps": best_repeat_lps,
+        "smoothed_probs": smoothed_probs,
+        "p_pred": p_pred,
+        "predictive_state_probs": predictive_state_probs,
+        "raw_ll": float(full_metrics["raw_ll"]),
+        "T": int(y_full.shape[0]),
+        "names": full_names,
+        "y": np.asarray(y_full),
+        "X": np.asarray(X_full),
         "frozen_emissions": serialize_frozen_emissions(frozen),
-        "cv_mode": "balanced_holdout",
+        "cv_mode": "balanced_session_holdout",
         "cv_repeats": cv_repeats,
     }
 
@@ -343,6 +430,8 @@ def save_cv_results(result: dict, out_dir: Path) -> None:
             "objective_lp": [float(np.mean(repeats_df["objective_lp"].to_numpy()))],
             "bic": [None],
             "acc": [float(np.mean(test_acc))],
+            "best_repeat_index": [int(result["best_repeat_index"])],
+            "best_repeat_test_ll_per_trial": [float(result["best_repeat_test_ll_per_trial"])],
             "cv_mode": [result["cv_mode"]],
             "cv_repeats": [int(result["cv_repeats"])],
             "test_ll_per_trial_mean": [float(np.mean(test_ll))],
@@ -355,6 +444,29 @@ def save_cv_results(result: dict, out_dir: Path) -> None:
             "train_acc_std": [float(np.std(train_acc, ddof=0))],
         }
     ).write_parquet(str(prefix) + "_metrics.parquet")
+
+    _tp = result["fitted_params"].transitions
+    if hasattr(_tp, "transition_matrix"):
+        _A = np.asarray(_tp.transition_matrix)
+    else:
+        _A = np.asarray(jnn.softmax(_tp.bias, axis=-1))
+
+    np.savez(
+        str(prefix) + "_arrays.npz",
+        lps=result["lps"],
+        p_pred=result["p_pred"],
+        smoothed_probs=result["smoothed_probs"],
+        predictive_state_probs=result["predictive_state_probs"],
+        initial_probs=np.asarray(result["fitted_params"].initial.probs),
+        emission_weights=np.asarray(result["fitted_params"].emissions.weights),
+        transition_matrix=_A,
+        y=result["y"],
+        X=result["X"],
+        X_cols=np.array(result["names"].get("X_cols", []), dtype=object),
+        frozen_emissions_json=np.array(json.dumps(result["frozen_emissions"], sort_keys=True)),
+        cv_selected_repeat=np.array(int(result["best_repeat_index"])),
+        cv_selected_metric=np.array(float(result["best_repeat_test_ll_per_trial"])),
+    )
 
 
 def main(
@@ -374,7 +486,7 @@ def main(
     progress_callback: ProgressCallback | None = None,
 ):
     adapter = get_adapter(task)
-    cv_mode = str(cv_mode)
+    cv_mode = normalize_cv_mode(cv_mode)
     cv_repeats = int(cv_repeats) if cv_mode != "none" else 0
     frozen_spec = serialize_frozen_emissions(frozen_emissions)
     if out_dir is None:
@@ -414,10 +526,7 @@ def main(
     for subj_idx, subj in enumerate(subjects, start=1):
         for k_idx, K in enumerate(K_list, start=1):
             if verbose:
-                print(
-                    f"Fitting glmhmm | subject={subj} K={K} tau={tau} "
-                    f"task={task} cv_mode={cv_mode} ..."
-                )
+                print(f"Fitting glmhmm | subject={subj} K={K} tau={tau} task={task} cv_mode={cv_mode} ...")
 
             def _progress(info: dict[str, Any]) -> None:
                 if progress_callback is None:
@@ -432,7 +541,7 @@ def main(
                     }
                 )
 
-            if cv_mode == "balanced_holdout":
+            if cv_mode == "balanced_session_holdout":
                 result = fit_subject_cv(
                     subj,
                     K,
@@ -478,10 +587,13 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out_dir", type=str, default=None, help="Output directory.")
     parser.add_argument("--tau", type=float, default=50.0, help="Half-life for exponential action traces.")
+    parser.add_argument("--task", type=str, default="MCDR", help="Task to fit: 'MCDR', '2AFC', or 'nuo_auditory'.")
     parser.add_argument(
-        "--task", type=str, default="MCDR", help="Task to fit: 'MCDR', '2AFC', or 'nuo_auditory'."
+        "--cv_mode",
+        type=str,
+        default="none",
+        choices=["none", "balanced_session_holdout", "balanced_holdout"],
     )
-    parser.add_argument("--cv_mode", type=str, default="none", choices=["none", "balanced_holdout"])
     parser.add_argument("--cv_repeats", type=int, default=0)
     parser.add_argument(
         "--frozen_emissions",

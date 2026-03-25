@@ -198,6 +198,12 @@ class NuoAuditoryAdapter(TaskAdapter):
     def available_transition_cols(self) -> List[str]:
         return list(_NUO_AUDITORY_TRANSITION_COLS)
 
+    def cv_balance_labels(self, feature_df: pl.DataFrame):
+        """Return signed evidence labels for balanced session-holdout CV."""
+        if self.psychometric_x_col not in feature_df.columns:
+            return None
+        return feature_df[self.psychometric_x_col].cast(pl.Float64)
+
     @property
     def choice_labels(self) -> list[str]:
         return ["Left", "Right"]
@@ -238,7 +244,7 @@ class NuoAuditoryAdapter(TaskAdapter):
         K: int,
         subjects: list,
     ) -> tuple:
-        """Binary-task state labels aligned with the existing 2AFC semantics."""
+        """Binary-task state labels using the task's native stimulus sign."""
         base_feat = list(names.get("X_cols", []))
         state_labels: dict = {}
         state_order: dict = {}
@@ -256,9 +262,9 @@ class NuoAuditoryAdapter(TaskAdapter):
 
             stim_fi = name2fi.get("stim_vals")
             if stim_fi is not None:
-                stim_scores = -W[:, 0, stim_fi]
+                stim_scores = W[:, 0, stim_fi]
             else:
-                stim_scores = -W[:, 0, :].mean(axis=1)
+                stim_scores = W[:, 0, :].mean(axis=1)
 
             engaged_k = int(np.argmax(stim_scores))
             others = [k for k in range(K) if k != engaged_k]
@@ -270,7 +276,7 @@ class NuoAuditoryAdapter(TaskAdapter):
             elif K == 3:
                 bias_fi = name2fi.get("bias")
                 if bias_fi is not None:
-                    bias_disp = -W[others, 0, bias_fi]
+                    bias_disp = W[others, 0, bias_fi]
                     biased_l = others[int(np.argmin(bias_disp))]
                     biased_r = others[int(np.argmax(bias_disp))]
                 else:

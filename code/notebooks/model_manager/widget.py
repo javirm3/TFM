@@ -74,6 +74,13 @@ _HASH_RE   = re.compile(r"^[0-9a-f]{8}$")
 _ARRAYS_RE = re.compile(r"^(.+?)(?:_K\d+)?_(glm|glmhmm|glmhmmt)_arrays\.npz$")
 
 
+def _normalize_cv_mode(cv_mode: str) -> str:
+    cv_mode = str(cv_mode)
+    if cv_mode == "balanced_holdout":
+        return "balanced_session_holdout"
+    return cv_mode
+
+
 def _build_regressor_groups(available_cols: list[str], registry: list[dict]) -> list[dict]:
     """Filter *registry* to columns present in *available_cols*.
 
@@ -285,7 +292,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
             self.subjects = sorted(cfg["subjects"], key=str)
         if "tau" in cfg:
             self.tau = int(cfg["tau"])
-        self.cv_mode = str(cfg.get("cv_mode", "none"))
+        self.cv_mode = _normalize_cv_mode(cfg.get("cv_mode", "none"))
         self.cv_repeats = int(cfg.get("cv_repeats", 5))
         k = _get_K_from_config(cfg)
         if isinstance(k, int):
@@ -317,11 +324,11 @@ class ModelManagerWidget(anywidget.AnyWidget):
             self.lapse_max = 0.2
             is_2afc = adapter.num_classes == 2
             available_ecols = (
-                adapter.available_emission_cols() + adapter.sf_cols(df_all)
+                adapter.available_emission_cols() + adapter.available_extra_emission_cols(df_all)
                 if is_2afc else adapter.available_emission_cols()
             )
             default_ecols = (
-                adapter.default_emission_cols() + adapter.sf_cols(df_all)
+                adapter.default_emission_cols() + adapter.default_extra_emission_cols(df_all)
                 if is_2afc else adapter.default_emission_cols()
             )
             self.emission_cols_options = available_ecols
@@ -361,7 +368,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
         return Path(name).name == name and "/" not in name and "\\" not in name
 
     def _build_current_config(self, model_name: str) -> dict[str, Any]:
-        cv_mode = str(self.cv_mode)
+        cv_mode = _normalize_cv_mode(self.cv_mode)
         cfg: dict[str, Any] = {
             "task": self.task,
             "model_id": model_name,
@@ -397,9 +404,9 @@ class ModelManagerWidget(anywidget.AnyWidget):
             return False
         if int(saved.get("tau", -1)) != int(self.tau):
             return False
-        if str(saved.get("cv_mode", "none")) != str(self.cv_mode):
+        if _normalize_cv_mode(saved.get("cv_mode", "none")) != _normalize_cv_mode(self.cv_mode):
             return False
-        if self.cv_mode != "none" and int(saved.get("cv_repeats", 0)) != int(self.cv_repeats):
+        if _normalize_cv_mode(self.cv_mode) != "none" and int(saved.get("cv_repeats", 0)) != int(self.cv_repeats):
             return False
         if saved.get("emission_cols", []) != list(self.emission_cols):
             return False
@@ -530,7 +537,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
                     continue
                 display_name = _get_display_name(cfg)
                 n_subjects   = _count_fitted_subjects(d)
-                cv_mode = str(cfg.get("cv_mode", "none"))
+                cv_mode = _normalize_cv_mode(cfg.get("cv_mode", "none"))
                 cv_repeats = int(cfg.get("cv_repeats", 0))
                 cv_label = f"{cv_mode}×{cv_repeats}" if cv_mode != "none" and cv_repeats > 0 else cv_mode
                 info_list.append({
@@ -570,11 +577,11 @@ class ModelManagerWidget(anywidget.AnyWidget):
                 self.subjects = subjects
 
             available_ecols = (
-                adapter.available_emission_cols() + adapter.sf_cols(df_all)
+                adapter.available_emission_cols() + adapter.available_extra_emission_cols(df_all)
                 if self.is_2afc else adapter.available_emission_cols()
             )
             default_ecols = (
-                adapter.default_emission_cols() + adapter.sf_cols(df_all)
+                adapter.default_emission_cols() + adapter.default_extra_emission_cols(df_all)
                 if self.is_2afc else adapter.default_emission_cols()
             )
             self.emission_cols_options = available_ecols

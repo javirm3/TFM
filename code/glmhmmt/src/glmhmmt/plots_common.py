@@ -247,7 +247,14 @@ def plot_state_occupancy(
     trial_df,
     *,
     session_col: str = "session",
+    sort_col: str | None = None,
+    switch_posterior_threshold: float | None = None,
 ) -> plt.Figure:
+    if switch_posterior_threshold is not None:
+        switch_posterior_threshold = float(switch_posterior_threshold)
+        if not 0.0 <= switch_posterior_threshold <= 1.0:
+            raise ValueError("switch_posterior_threshold must be between 0 and 1.")
+
     subjects = list(views.keys())
     n_rows = len(subjects) + 1
     fig, axes = plt.subplots(n_rows, 3, figsize=(14, 3.8 * n_rows), squeeze=False)
@@ -289,10 +296,27 @@ def plot_state_occupancy(
         ax.set_xticklabels(labels, rotation=15, ha="right")
         ax.set_ylim(0, 1)
 
+    def _count_switches(p_s: np.ndarray) -> int:
+        if len(p_s) == 0:
+            return 0
+        if switch_posterior_threshold is None:
+            v = np.argmax(p_s, axis=1)
+            return int(np.sum(np.diff(v) != 0))
+
+        keep = np.max(p_s, axis=1) >= switch_posterior_threshold
+        if np.count_nonzero(keep) <= 1:
+            return 0
+        v_conf = np.argmax(p_s[keep], axis=1)
+        return int(np.sum(np.diff(v_conf) != 0))
+
     def _plot_switch_hist(ax, changes_per_sess: list[int], title: str) -> None:
+        xlabel = "# state switches / session"
+        if switch_posterior_threshold is not None:
+            xlabel = f"# confident state switches / session\nposterior ≥ {switch_posterior_threshold:.2f}"
         if not changes_per_sess:
             ax.text(0.5, 0.5, "No data", ha="center", va="center")
             ax.set_title(title)
+            ax.set_xlabel(xlabel)
             return
         max_chg = max(changes_per_sess)
         ax.hist(
@@ -305,7 +329,7 @@ def plot_state_occupancy(
         ax.set_xlim(-0.5, max_chg + 0.5)
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-        ax.set_xlabel("# state switches / session")
+        ax.set_xlabel(xlabel)
         ax.set_ylabel("# sessions")
         ax.set_title(title)
 
@@ -313,6 +337,12 @@ def plot_state_occupancy(
         ax_occ, ax_box, ax_chg = axes[i, 0], axes[i, 1], axes[i, 2]
         P = np.asarray(views[subj].smoothed_probs)
         df_sub = _subject_df(trial_df, subj)
+        if _is_polars_df(df_sub):
+            if sort_col is not None and sort_col in df_sub.columns:
+                df_sub = df_sub.sort([session_col, sort_col])
+        else:
+            if sort_col is not None and sort_col in df_sub.columns:
+                df_sub = df_sub.sort_values([session_col, sort_col], kind="stable")
         sess_arr = np.asarray(df_sub[session_col])
         T = min(len(P), len(sess_arr))
         P, sess_arr = P[:T], sess_arr[:T]
@@ -320,7 +350,6 @@ def plot_state_occupancy(
             for ax in (ax_occ, ax_box, ax_chg):
                 ax.set_visible(False)
             continue
-        viterbi = np.argmax(P, axis=1)
 
         rank_order, labels, colors = _state_labels_and_colors(views[subj])
         occ = [float(np.mean(P[:, k])) for k in rank_order]
@@ -342,10 +371,9 @@ def plot_state_occupancy(
         changes_per_sess = []
         for s in np.unique(sess_arr):
             p_s = P[sess_arr == s]
-            v = viterbi[sess_arr == s]
-            if len(v) == 0:
+            if len(p_s) == 0:
                 continue
-            n_changes = int(np.sum(np.diff(v) != 0))
+            n_changes = _count_switches(p_s)
             changes_per_sess.append(n_changes)
             switch_records.append({"subject": subj, "session": s, "switches": n_changes})
             for pos, k in enumerate(rank_order):

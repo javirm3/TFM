@@ -1156,6 +1156,8 @@ def plot_state_occupancy(
         views,
         trial_df,
         session_col=session_col,
+        sort_col=sort_col,
+        **kwargs,
     )
 
 
