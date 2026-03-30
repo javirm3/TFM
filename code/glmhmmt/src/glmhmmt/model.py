@@ -29,20 +29,20 @@ def normalize_frozen_emissions(frozen: Any) -> dict[int, dict[str, float]]:
         try:
             state = int(raw_state)
         except (TypeError, ValueError):
-            continue
+            raise ValueError(f"Invalid state index {raw_state!r} in frozen emissions; must be an integer.")
         if not isinstance(raw_features, dict):
-            continue
+            raise ValueError(f"Invalid feature map for state {state} in frozen emissions; must be a dict of {{feature_name: value}}.")
 
         feature_map: dict[str, float] = {}
         for feature_name, raw_value in raw_features.items():
             if not isinstance(feature_name, str):
-                continue
+                raise ValueError(f"Invalid feature name {feature_name!r} for state {state} in frozen emissions; must be a string.")
             try:
                 value = float(raw_value)
             except (TypeError, ValueError):
-                continue
+                raise ValueError(f"Invalid freeze value {raw_value!r} for feature '{feature_name}' in state {state}; must be a float.")
             if not math.isfinite(value):
-                continue
+                raise ValueError(f"Invalid freeze value {raw_value!r} for feature '{feature_name}' in state {state}; must be finite.")
             feature_map[feature_name] = value
 
         if feature_map:

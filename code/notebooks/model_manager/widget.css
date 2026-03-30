@@ -602,13 +602,15 @@
 }
 
 .mm-table th {
-    padding: 14px 18px;
+    position: relative;
+    padding: 12px 16px 10px;
     font-weight: 800;
     color: #111827;
     text-transform: uppercase;
     font-size: 14px;
     letter-spacing: 0.05em;
     border-bottom: 2px solid #d1d5db;
+    vertical-align: top;
 }
 
 .mm-table td {
@@ -625,6 +627,194 @@
     max-width: 320px;
     font-size: 13px;
     line-height: 1.5;
+}
+
+.mm-table-header-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.mm-table-header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.mm-table-header-label {
+    display: block;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.mm-table-header-bottom {
+    min-height: 28px;
+}
+
+.mm-sort-btn {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #64748b;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mm-sort-btn:hover {
+    border-color: var(--brand-light);
+    color: var(--brand-main);
+    background: #eff6ff;
+}
+
+.mm-sort-btn.active {
+    border-color: var(--brand-light);
+    background: var(--brand-bg);
+    color: var(--brand-main);
+}
+
+.mm-filter-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 72px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mm-filter-btn:hover {
+    border-color: var(--brand-light);
+    color: var(--brand-main);
+    background: #eff6ff;
+}
+
+.mm-filter-btn.active,
+.mm-filter-btn.open {
+    border-color: var(--brand-light);
+    background: var(--brand-bg);
+    color: var(--brand-main);
+}
+
+.mm-filter-btn.active::after {
+    content: "";
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: #2563eb;
+}
+
+.mm-filter-placeholder {
+    display: block;
+    min-height: 28px;
+}
+
+.mm-filter-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 25;
+    width: 240px;
+    max-width: min(240px, calc(100vw - 80px));
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.14);
+}
+
+.mm-table th:nth-last-child(2) .mm-filter-popover,
+.mm-table th:nth-last-child(3) .mm-filter-popover {
+    left: auto;
+    right: 0;
+}
+
+.mm-filter-popover-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: #0f172a;
+    margin-bottom: 8px;
+}
+
+.mm-filter-popover-label {
+    display: block;
+    margin-bottom: 6px;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.mm-filter-input-popup {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.mm-filter-input-popup:focus {
+    outline: none;
+    border-color: var(--brand-light);
+    box-shadow: 0 0 0 2px rgba(0, 75, 135, 0.15);
+}
+
+.mm-filter-popover-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.mm-filter-popover-btn {
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #334155;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mm-filter-popover-btn:hover {
+    border-color: #94a3b8;
+    background: #f8fafc;
+}
+
+.mm-filter-popover-btn.primary {
+    border-color: var(--brand-light);
+    background: var(--brand-main);
+    color: #ffffff;
+}
+
+.mm-filter-popover-btn.primary:hover {
+    background: var(--brand-light);
 }
 
 .mm-actions-cell {
@@ -692,6 +882,13 @@
     padding: 1px 5px;
     margin-left: 6px;
     vertical-align: middle;
+}
+
+.mm-table-empty-cell {
+    padding: 24px 18px;
+    color: #64748b;
+    font-style: italic;
+    text-align: center;
 }
 
 /* ── Dark mode ──────────────────────────────────────────────────────────── */
@@ -922,6 +1119,93 @@
         border-color: #374151;
     }
 
+    .mm-sort-btn {
+        border-color: #475569;
+        background: #0f172a;
+        color: #cbd5e1;
+    }
+
+    .mm-sort-btn:hover {
+        border-color: #60a5fa;
+        background: rgba(59, 130, 246, 0.16);
+        color: #bfdbfe;
+    }
+
+    .mm-sort-btn.active {
+        border-color: #60a5fa;
+        background: rgba(59, 130, 246, 0.2);
+        color: #bfdbfe;
+    }
+
+    .mm-filter-btn {
+        border-color: #475569;
+        background: #0f172a;
+        color: #cbd5e1;
+    }
+
+    .mm-filter-btn:hover {
+        border-color: #60a5fa;
+        background: rgba(59, 130, 246, 0.16);
+        color: #bfdbfe;
+    }
+
+    .mm-filter-btn.active,
+    .mm-filter-btn.open {
+        border-color: #60a5fa;
+        background: rgba(59, 130, 246, 0.2);
+        color: #bfdbfe;
+    }
+
+    .mm-filter-btn.active::after {
+        background: #93c5fd;
+    }
+
+    .mm-filter-popover {
+        border-color: #334155;
+        background: #0f172a;
+        box-shadow: 0 14px 30px rgba(2, 6, 23, 0.5);
+    }
+
+    .mm-filter-popover-title {
+        color: #f8fafc;
+    }
+
+    .mm-filter-popover-label {
+        color: #cbd5e1;
+    }
+
+    .mm-filter-input-popup {
+        border-color: #475569;
+        background: #111827;
+        color: #f8fafc;
+    }
+
+    .mm-filter-input-popup:focus {
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+    }
+
+    .mm-filter-popover-btn {
+        border-color: #475569;
+        background: #111827;
+        color: #e2e8f0;
+    }
+
+    .mm-filter-popover-btn:hover {
+        border-color: #64748b;
+        background: #1e293b;
+    }
+
+    .mm-filter-popover-btn.primary {
+        border-color: #60a5fa;
+        background: #1d4ed8;
+        color: #eff6ff;
+    }
+
+    .mm-filter-popover-btn.primary:hover {
+        background: #2563eb;
+    }
+
     .mm-btn-delete-row {
         background: #1f2937;
         color: #fca5a5;
@@ -963,5 +1247,9 @@
         background: #1f2937;
         color: #6b7280;
         border-color: #374151;
+    }
+
+    .mm-table-empty-cell {
+        color: #94a3b8;
     }
 }

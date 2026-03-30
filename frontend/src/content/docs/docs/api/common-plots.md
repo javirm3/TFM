@@ -15,6 +15,9 @@ from glmhmmt.plots_common import (
     plot_session_deepdive,
     plot_session_trajectories,
     plot_state_accuracy,
+    plot_state_dwell_times_by_subject,
+    plot_state_dwell_times_summary,
+    plot_state_dwell_times,
     plot_state_occupancy,
 )
 ```
@@ -105,6 +108,92 @@ fig = plot_state_occupancy(
 
 ---
 
+## `plot_state_dwell_times_by_subject`
+
+```python
+plot_state_dwell_times_by_subject(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+) -> plt.Figure
+```
+
+Builds Ashwood-style dwell-time panels for each selected subject and state:
+
+- solid line with markers: geometric dwell distribution from the fitted self-transition probability `A_kk`
+- dashed line with markers: empirical dwell distribution from MAP posterior state assignments
+- vertical error bars: Wilson confidence interval around the empirical probabilities
+
+By default the display horizon is fixed to `90` trials, and both curves are shown in 10-trial bins up to that limit for Ashwood-style comparison.
+Runs are split at session boundaries, so dwell episodes never span multiple sessions.
+
+**Example**
+
+```python
+fig = plot_state_dwell_times_by_subject(
+    views,
+    trial_df,
+    session_col="session",
+    sort_col="trial_idx",
+    ci_level=0.68,
+)
+```
+
+---
+
+## `plot_state_dwell_times_summary`
+
+```python
+plot_state_dwell_times_summary(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+) -> plt.Figure
+```
+
+Builds the subject-aggregated dwell-time summary using the same binning and 90-trial dwell horizon as the by-subject plot.
+The summary pools empirical dwell lengths across subjects inside the function and uses the same y-axis limit as the by-subject panels for direct comparison.
+
+**Example**
+
+```python
+fig = plot_state_dwell_times_summary(
+    views,
+    trial_df,
+    session_col="session",
+    sort_col="trial_idx",
+    ci_level=0.68,
+)
+```
+
+---
+
+## `plot_state_dwell_times`
+
+```python
+plot_state_dwell_times(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+) -> plt.Figure
+```
+
+Alias for `plot_state_dwell_times_by_subject(...)`.
+
+---
+
 ## `plot_session_deepdive`
 
 ```python
@@ -115,6 +204,8 @@ plot_session_deepdive(
     sess,
     *,
     session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    switch_posterior_threshold: float | None = None,
     performance_candidates: Sequence[str] = ("correct_bool", "performance"),
     stim_candidates: Sequence[str] = ("stimd_n", "ILD", "stimulus"),
     response_candidates: Sequence[str] = ("response", "Choice"),
@@ -130,6 +221,11 @@ Creates a single-session diagnostic view combining:
 - stacked posterior state probabilities
 - trial-by-trial responses and rolling accuracy
 - optional emission or transition regressor traces when available
+- the session's state-change count in the title
+- red markers at detected state-change trials
+
+If `switch_posterior_threshold` is set, the title count only includes confident MAP changes where posterior is at least that threshold.
+The red marker is drawn at the later detected trial and sits on the `P(engaged)` trace.
 
 **Example**
 

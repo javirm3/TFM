@@ -34,7 +34,9 @@ Read these files before coding:
    Define `task_key`, `task_label`, `num_classes`, `data_file`, `sort_col`,
    `session_col`, `subject_filter`, `build_feature_df`, `load_subject`,
    defaults, `behavioral_cols`, `get_correct_class`, `label_states`,
-   `cv_balance_labels` when CV balancing is needed, and `get_plots`.
+   adapter-level state-assignment scoring (`_SCORING_OPTIONS` and
+   `scoring_key`), `cv_balance_labels` when CV balancing is needed, and
+   `get_plots`.
 4. Implement task-owned plots in `code/tasks/plots/<task>.py`.
    Put psychometrics, task diagnostics, and performance-by-condition plots
    here. Reuse `glmhmmt.model_plots` for shared diagnostics, but do not
@@ -51,6 +53,26 @@ Read these files before coding:
 For binary tasks, keep feature construction inside the adapter boundary.
 Reuse existing parser code only when the task dataframe genuinely matches that
 parser's contract; otherwise implement a task-owned `build_feature_df(...)`.
+
+## State-assignment scoring
+
+Keep state-assignment scoring in the adapter. Define `_SCORING_OPTIONS` and
+`scoring_key` there so the generic analysis notebooks can rank and label
+states. For binary stimulus-following tasks, start from:
+
+```python
+_SCORING_OPTIONS: dict = {
+    "stim_vals (-w)": [("stim_vals", "neg")],
+    "stim_vals (|w|)": [("stim_vals", "abs")],
+    "at_choice (|w|)": [("at_choice", "abs")],
+    "wsls (|w|)": [("wsls", "abs")],
+    "bias (|w|)": [("bias", "abs")],
+}
+scoring_key: str = "stim_vals (-w)"
+```
+
+Adapt the feature names or sign modes to the task, but do not leave the
+adapter without this scoring config.
 
 ## Design rules
 

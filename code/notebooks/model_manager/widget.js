@@ -7,6 +7,277 @@
 
 // ── Rendering helpers ─────────────────────────────────────────────────────────
 
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function compareTableValues(a, b) {
+  const aNum = typeof a === "number" ? a : Number(String(a ?? "").trim());
+  const bNum = typeof b === "number" ? b : Number(String(b ?? "").trim());
+  const aIsNum = Number.isFinite(aNum) && String(a ?? "").trim() !== "";
+  const bIsNum = Number.isFinite(bNum) && String(b ?? "").trim() !== "";
+
+  if (aIsNum && bIsNum) {
+    return aNum - bNum;
+  }
+
+  return String(a ?? "").localeCompare(String(b ?? ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function getLoadTableColumns(showTransitionRegressors) {
+  const columns = [
+    {
+      key: "name",
+      label: "Model Name",
+      sortable: true,
+      filterable: true,
+      getValue: (info) => info.name ?? "",
+      renderCell: (info) => `
+        <strong>${escapeHTML(info.name)}</strong>
+        ${info.id === "__default__" ? '<span class="mm-default-badge">default</span>' : ""}
+      `,
+    },
+    {
+      key: "subjects",
+      label: "Subjects",
+      sortable: true,
+      filterable: true,
+      getValue: (info) => info.subjects ?? "",
+    },
+    {
+      key: "K",
+      label: "K",
+      sortable: true,
+      filterable: true,
+      getValue: (info) => info.K ?? "",
+    },
+    {
+      key: "regressors",
+      label: "Regressors",
+      sortable: true,
+      filterable: true,
+      getValue: (info) => info.regressors ?? "",
+      cellClassName: "mm-wrap",
+    },
+  ];
+
+  if (showTransitionRegressors) {
+    columns.push({
+      key: "transition_regressors",
+      label: "Transition Regressors",
+      sortable: true,
+      filterable: true,
+      getValue: (info) => info.transition_regressors ?? "",
+      cellClassName: "mm-wrap",
+    });
+  }
+
+  columns.push(
+    {
+      key: "cv",
+      label: "CV",
+      sortable: true,
+      filterable: true,
+      getValue: (info) => info.cv ?? "none",
+    },
+    {
+      key: "tau",
+      label: "Tau",
+      sortable: true,
+      filterable: true,
+      getValue: (info) => info.tau ?? "",
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      sortable: false,
+      filterable: false,
+      headerClassName: "mm-actions-cell",
+      cellClassName: "mm-actions-cell",
+      getValue: () => "",
+      renderCell: (info) => (
+        info.id === "__default__"
+          ? ""
+          : `<button class="mm-btn-delete-row" data-delete-model="${escapeHTML(info.id)}">Delete</button>`
+      ),
+    }
+  );
+
+  return columns;
+}
+
+function getFilteredLoadRows(rows, columns, filters) {
+  return rows.filter((info) => columns.every((column) => {
+    if (!column.filterable) return true;
+    const filterValue = String(filters[column.key] || "").trim().toLowerCase();
+    if (!filterValue) return true;
+    return String(column.getValue(info) ?? "").toLowerCase().includes(filterValue);
+  }));
+}
+
+function getSortedLoadRows(rows, columns, sortKey, sortDir) {
+  if (!sortKey) return [...rows];
+  const column = columns.find((item) => item.key === sortKey && item.sortable);
+  if (!column) return [...rows];
+
+  const direction = sortDir === "desc" ? -1 : 1;
+  return [...rows].sort((left, right) => {
+    const primary = compareTableValues(column.getValue(left), column.getValue(right));
+    if (primary !== 0) {
+      return primary * direction;
+    }
+    return compareTableValues(left.name || "", right.name || "");
+  });
+}
+
+function renderLoadSortButton(column, loadTableState) {
+  if (!column.sortable) return "";
+
+  const isActive = loadTableState.sortKey === column.key;
+  const indicator = isActive
+    ? (loadTableState.sortDir === "desc" ? "↓" : "↑")
+    : "↕";
+
+  return `
+    <button
+      type="button"
+      class="mm-sort-btn ${isActive ? "active" : ""}"
+      data-sort-key="${column.key}"
+      aria-label="Sort by ${escapeHTML(column.label)}"
+      title="Sort by ${escapeHTML(column.label)}"
+    >${indicator}</button>
+  `;
+}
+
+function renderLoadFilterPopover(column, loadTableState) {
+  if (loadTableState.activeFilterKey !== column.key) return "";
+
+  const currentValue = escapeHTML(loadTableState.filters[column.key] || "");
+  return `
+    <div class="mm-filter-popover" data-filter-popover="${column.key}">
+      <div class="mm-filter-popover-title">${escapeHTML(column.label)}</div>
+      <label class="mm-filter-popover-label" for="mm-filter-${column.key}">Contains</label>
+      <input
+        id="mm-filter-${column.key}"
+        type="text"
+        class="mm-filter-input-popup"
+        data-filter-input="${column.key}"
+        value="${currentValue}"
+        placeholder="Type text to match"
+      >
+      <div class="mm-filter-popover-actions">
+        <button type="button" class="mm-filter-popover-btn primary" data-apply-filter="${column.key}">Apply</button>
+        <button type="button" class="mm-filter-popover-btn" data-clear-filter="${column.key}">Clear</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderLoadFilterButton(column, loadTableState) {
+  if (!column.filterable) {
+    return '<span class="mm-filter-placeholder"></span>';
+  }
+
+  const isOpen = loadTableState.activeFilterKey === column.key;
+  const isFiltered = Boolean(String(loadTableState.filters[column.key] || "").trim());
+
+  return `
+    <button
+      type="button"
+      class="mm-filter-btn ${isOpen ? "open" : ""} ${isFiltered ? "active" : ""}"
+      data-filter-key="${column.key}"
+      aria-pressed="${isOpen ? "true" : "false"}"
+    >Filter</button>
+    ${renderLoadFilterPopover(column, loadTableState)}
+  `;
+}
+
+function renderLoadTable(existingInfo, existingVal, showTransitionRegressors, loadTableState) {
+  const columns = getLoadTableColumns(showTransitionRegressors);
+  const visibleKeys = new Set(columns.map((column) => column.key));
+
+  Object.keys(loadTableState.filters).forEach((key) => {
+    if (!visibleKeys.has(key)) {
+      delete loadTableState.filters[key];
+    }
+  });
+  if (!visibleKeys.has(loadTableState.sortKey)) {
+    loadTableState.sortKey = "name";
+    loadTableState.sortDir = "asc";
+  }
+  if (!visibleKeys.has(loadTableState.activeFilterKey)) {
+    loadTableState.activeFilterKey = null;
+  }
+
+  const filteredRows = getFilteredLoadRows(existingInfo, columns, loadTableState.filters);
+  const rows = getSortedLoadRows(filteredRows, columns, loadTableState.sortKey, loadTableState.sortDir);
+
+  const body = rows.length > 0
+    ? rows.map((info) => {
+        const isDefault = info.id === "__default__";
+        const isSelected = info.id === existingVal;
+        const rowClasses = [
+          "mm-tr",
+          isSelected ? "selected" : "",
+          isDefault ? "mm-tr-default" : "",
+        ].filter(Boolean).join(" ");
+
+        const cells = columns.map((column) => {
+          const cellClass = column.cellClassName ? ` ${column.cellClassName}` : "";
+          const content = column.renderCell
+            ? column.renderCell(info)
+            : escapeHTML(column.getValue(info));
+          return `<td class="${cellClass.trim()}">${content}</td>`;
+        }).join("");
+
+        return `
+          <tr class="${rowClasses}" data-model="${escapeHTML(info.id)}">
+            ${cells}
+          </tr>
+        `;
+      }).join("")
+    : `
+        <tr class="mm-table-empty-row">
+          <td class="mm-table-empty-cell" colspan="${columns.length}">
+            No models match the active filters.
+          </td>
+        </tr>
+      `;
+
+  return `
+    <div class="mm-table-container">
+      <table class="mm-table">
+        <thead>
+          <tr>
+            ${columns.map((column) => `
+              <th class="mm-table-th ${column.headerClassName || ""}">
+                <div class="mm-table-header-cell">
+                  <div class="mm-table-header-top">
+                    <span class="mm-table-header-label">${escapeHTML(column.label)}</span>
+                    ${renderLoadSortButton(column, loadTableState)}
+                  </div>
+                  <div class="mm-table-header-bottom">
+                    ${renderLoadFilterButton(column, loadTableState)}
+                  </div>
+                </div>
+              </th>
+            `).join("")}
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 /**
  * Render a grouped regressor selector table.
  *
@@ -151,6 +422,12 @@ function render({ model, el }) {
   const containerId = "mm-" + Math.random().toString(36).substring(7);
   let aliasDraft = model.get("alias") || "";
   let aliasDirty = false;
+  const loadTableState = {
+    sortKey: "name",
+    sortDir: "asc",
+    filters: {},
+    activeFilterKey: null,
+  };
 
   const updateUI = () => {
     const existingVal      = model.get("existing_model");
@@ -217,45 +494,7 @@ function render({ model, el }) {
       html += `
         <div class="mm-section">
           <label class="mm-label">Select Saved Model</label>
-          <div class="mm-table-container">
-            <table class="mm-table">
-              <thead>
-                <tr>
-                  <th>Model Name</th>
-                  <th>Subjects</th>
-                  <th>K</th>
-                  <th>Regressors</th>
-                  ${showTransitionRegressors ? "<th>Transition Regressors</th>" : ""}
-                  <th>CV</th>
-                  <th>Tau</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${existingInfo.map(info => {
-                  const isDefault  = info.id === "__default__";
-                  const isSelected = info.id === existingVal;
-                  return `
-                    <tr class="mm-tr ${isSelected ? "selected" : ""} ${isDefault ? "mm-tr-default" : ""}"
-                        data-model="${info.id}">
-                      <td>
-                        <strong>${info.name}</strong>
-                        ${isDefault ? '<span class="mm-default-badge">default</span>' : ""}
-                      </td>
-                      <td>${info.subjects}</td>
-                      <td>${info.K}</td>
-                      <td class="mm-wrap">${info.regressors}</td>
-                      ${showTransitionRegressors ? `<td class="mm-wrap">${info.transition_regressors || ""}</td>` : ""}
-                      <td>${info.cv || "none"}</td>
-                      <td>${info.tau}</td>
-                      <td class="mm-actions-cell">
-                        ${isDefault ? "" : `<button class="mm-btn-delete-row" data-delete-model="${info.id}">Delete</button>`}
-                      </td>
-                    </tr>`;
-                }).join("")}
-              </tbody>
-            </table>
-          </div>
+          ${renderLoadTable(existingInfo, existingVal, showTransitionRegressors, loadTableState)}
         </div>
       `;
 
@@ -417,6 +656,13 @@ function render({ model, el }) {
     if (aliasInput) {
       aliasInput.value = aliasDraft;
     }
+    if (mode === "load" && loadTableState.activeFilterKey) {
+      const activeFilterInput = el.querySelector(`[data-filter-input="${loadTableState.activeFilterKey}"]`);
+      if (activeFilterInput) {
+        activeFilterInput.focus();
+        activeFilterInput.select();
+      }
+    }
 
     // ── Event wiring helpers ────────────────────────────────────────────────
     const bind    = (sel, ev, fn) => { const n = el.querySelector(sel);    if (n) n.addEventListener(ev, fn); };
@@ -428,11 +674,88 @@ function render({ model, el }) {
       model.save_changes();
     });
 
+    bindAll(".mm-sort-btn[data-sort-key]", "click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = e.currentTarget.dataset.sortKey;
+      if (!key) return;
+      if (loadTableState.sortKey === key) {
+        loadTableState.sortDir = loadTableState.sortDir === "asc" ? "desc" : "asc";
+      } else {
+        loadTableState.sortKey = key;
+        loadTableState.sortDir = "asc";
+      }
+      loadTableState.activeFilterKey = null;
+      updateUI();
+    });
+
+    bindAll(".mm-filter-btn[data-filter-key]", "click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = e.currentTarget.dataset.filterKey;
+      if (!key) return;
+      loadTableState.activeFilterKey = loadTableState.activeFilterKey === key ? null : key;
+      updateUI();
+    });
+
+    bindAll(".mm-filter-popover", "click", (e) => {
+      e.stopPropagation();
+    });
+
+    bindAll(".mm-filter-popover-btn[data-apply-filter]", "click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = e.currentTarget.dataset.applyFilter;
+      if (!key) return;
+      const input = el.querySelector(`[data-filter-input="${key}"]`);
+      const value = input ? input.value.trim() : "";
+      if (value) {
+        loadTableState.filters[key] = value;
+      } else {
+        delete loadTableState.filters[key];
+      }
+      loadTableState.activeFilterKey = null;
+      updateUI();
+    });
+
+    bindAll(".mm-filter-popover-btn[data-clear-filter]", "click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = e.currentTarget.dataset.clearFilter;
+      if (!key) return;
+      delete loadTableState.filters[key];
+      loadTableState.activeFilterKey = null;
+      updateUI();
+    });
+
+    bindAll(".mm-filter-input-popup[data-filter-input]", "keydown", (e) => {
+      const key = e.currentTarget.dataset.filterInput;
+      if (!key) return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const value = e.currentTarget.value.trim();
+        if (value) {
+          loadTableState.filters[key] = value;
+        } else {
+          delete loadTableState.filters[key];
+        }
+        loadTableState.activeFilterKey = null;
+        updateUI();
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        loadTableState.activeFilterKey = null;
+        updateUI();
+      }
+    });
+
     // Load table row click — sets existing_model; Python observer does the heavy lifting
     bindAll(".mm-tr", "click", (e) => {
       if (e.target.closest(".mm-btn-delete-row")) return;
       const row = e.target.closest(".mm-tr");
       if (!row) return;
+      loadTableState.activeFilterKey = null;
       el.querySelectorAll(".mm-tr").forEach(r => r.classList.remove("selected"));
       row.classList.add("selected");
       model.set("existing_model", row.dataset.model);

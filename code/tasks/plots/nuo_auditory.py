@@ -13,6 +13,7 @@ High-level functions:
   - plot_state_accuracy
   - plot_session_trajectories
   - plot_state_occupancy
+  - plot_state_dwell_times
   - plot_psychometric_all        (≡ plot_categorical_performance_all)
   - plot_psychometric_by_state   (≡ plot_categorical_performance_by_state)
   - plot_regressor_psychometric_by_state
@@ -40,8 +41,14 @@ from scipy.stats import sem, ttest_1samp
 from typing import Dict, List, Optional, Sequence, Tuple
 from glmhmmt.plots_common import (
     plot_state_accuracy as _plot_state_accuracy_common,
+    plot_change_triggered_posteriors_by_subject as _plot_change_triggered_posteriors_by_subject_common,
+    plot_change_triggered_posteriors_summary as _plot_change_triggered_posteriors_summary_common,
+    plot_state_posterior_count_kde as _plot_state_posterior_count_kde_common,
     plot_session_trajectories as _plot_session_trajectories_common,
     plot_state_occupancy as _plot_state_occupancy_common,
+    plot_state_dwell_times_by_subject as _plot_state_dwell_times_by_subject_common,
+    plot_state_dwell_times_summary as _plot_state_dwell_times_summary_common,
+    plot_state_dwell_times as _plot_state_dwell_times_common,
     plot_session_deepdive as _plot_session_deepdive_common,
 )
 from glmhmmt.model_plots import plot_transition_weights
@@ -54,6 +61,7 @@ _PERFORMANCE_COL = "performance"
 _EVIDENCE_COL = "total_evidence_strength"
 _CONDITION_COL = "difficulty"
 _EXPERIMENT_COL = "stimulus_modality"
+_PLOT_CHOICE_LEFT_COL = "_plot_choice_left"
 
 # ── state colour palette ──────────────────────────────────────────────────────
 
@@ -93,6 +101,16 @@ def _default_labels(K: int, C: int = 2) -> List[str]:
     if K == 3:
         return ["Engaged", "Biased L", "Biased R"]
     return [f"State {k}" for k in range(K)]
+
+
+def _with_plot_choice_left(
+    df: pd.DataFrame,
+    choice_col: str,
+) -> Tuple[pd.DataFrame, str]:
+    """Return a copy of *df* with a plotting column for P(left)."""
+    out = df.copy()
+    out[_PLOT_CHOICE_LEFT_COL] = 1.0 - pd.to_numeric(out[choice_col], errors="coerce")
+    return out, _PLOT_CHOICE_LEFT_COL
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -917,7 +935,7 @@ def _mean_glm_curve(
     marginalised rather than fixed to 0.
 
     Returns:
-        ``(ild_grid, mean_p_right)`` or *None* if no valid fits are found.
+        ``(ild_grid, mean_p_left)`` or *None* if no valid fits are found.
     """
     all_p: list[np.ndarray] = []
     ild_g: Optional[np.ndarray] = None
@@ -964,6 +982,7 @@ def _mean_glm_curve(
                 if not np.any(_lr > 0):
                     _lr = None
             ig, pg = eval_glm_on_ild_grid(W, cols, ild_max=ild_max, lapse_rates=_lr, X_data=X_data)
+            pg = 1.0 - np.asarray(pg, dtype=float)
         except Exception:
             continue
 
@@ -1000,7 +1019,7 @@ def _subject_glm_curves(
     ild_max: float,
     state_k: Optional[int] = None,
 ) -> dict:
-    """Return {subject: (ild_grid, p_right)} for per-subject psychometric backgrounds."""
+    """Return {subject: (ild_grid, p_left)} for per-subject psychometric backgrounds."""
     out: dict = {}
     for subj in subjects:
         curve = _mean_glm_curve(arrays_store, [subj], X_cols, ild_max=ild_max, state_k=state_k)
@@ -1068,6 +1087,7 @@ def _mean_glm_feature_curve(
                 lapse_rates=_lr,
                 X_data=X_data,
             )
+            pg = 1.0 - np.asarray(pg, dtype=float)
         except Exception:
             continue
 
@@ -1104,7 +1124,7 @@ def _subject_glm_feature_curves(
     state_k: Optional[int] = None,
     n_grid: int = 300,
 ) -> dict:
-    """Return {subject: (feature_grid, p_right)} for per-subject feature backgrounds."""
+    """Return {subject: (feature_grid, p_left)} for per-subject feature backgrounds."""
     out: dict = {}
     for subj in subjects:
         curve = _mean_glm_feature_curve(
@@ -1436,7 +1456,7 @@ def _attach_rank_state_model_cols(
     df: pd.DataFrame,
     views: dict,
     subj_col: str = "subject",
-    base_col: str = "pR_state",
+    base_col: str = "pL_state",
 ) -> pd.DataFrame:
     """Attach rank-aligned per-state model columns from raw-state trial_df columns."""
     if df.empty or subj_col not in df.columns or not views:
@@ -1495,7 +1515,7 @@ def _psych_panel(
     subject_curves: Optional[dict] = None,
     tick_ilds: Optional[Sequence[float]] = None,
 ) -> None:
-    """Draw a pooled psychometric curve (P(right) vs evidence strength) on ax.
+    """Draw a pooled psychometric curve (P(left) vs evidence strength) on ax.
 
     Style mirrors plot_pc_across_batches:
     - Per-subject individual traces drawn with low alpha.
@@ -1508,9 +1528,10 @@ def _psych_panel(
         return
 
     choice_col = _resolve_plot_col(df, choice_col, (_RESPONSE_COL,))
+    df_plot, choice_col = _with_plot_choice_left(df, choice_col)
 
     subj_agg = (
-        df.groupby([subj_col, ild_col], observed=True)
+        df_plot.groupby([subj_col, ild_col], observed=True)
         .agg(data_mean=(choice_col, "mean"), model_mean=(pred_col, "mean"))
         .reset_index()
     )
@@ -1596,11 +1617,12 @@ def _psych_state_panel(
     bin_points: bool = False,
     n_bins: int = 9,
 ) -> Tuple:
-    """Draw state-specific psychometric on ax.  Returns (data_h, model_h)."""
+    """Draw state-specific P(left) psychometric on ax. Returns (data_h, model_h)."""
     if df_state.empty:
         return None, None
 
     choice_col = _resolve_plot_col(df_state, choice_col, (_RESPONSE_COL,))
+    df_state, choice_col = _with_plot_choice_left(df_state, choice_col)
     empirical_smooth = None
     if weight_col is not None and weight_col in df_state.columns:
         empirical_smooth = _mean_weighted_empirical_curve(
@@ -1781,11 +1803,12 @@ def _regressor_state_panel(
     show_model_smooth: bool = True,
     model_line_mode: str = "smooth",
 ) -> Tuple:
-    """Draw state-specific P(right) vs arbitrary regressor on ax."""
+    """Draw state-specific P(left) vs arbitrary regressor on ax."""
     if df_state.empty:
         return None, None
 
     choice_col = _resolve_plot_col(df_state, choice_col, (_RESPONSE_COL,))
+    df_state, choice_col = _with_plot_choice_left(df_state, choice_col)
     empirical_smooth = None
     if weight_col is not None and weight_col in df_state.columns:
         empirical_smooth = _mean_weighted_empirical_curve(
@@ -1905,7 +1928,7 @@ def prepare_predictions_df(df_pred):
     Added / ensured output columns
     ------------------------------
     correct_bool    : bool  - Trial accuracy
-    p_pred          : float - model P(right)  → psychometric x-axis
+    p_pred          : float - model P(left) used on the psychometric y-axis
     p_model_correct : float - model P(correct stimulus)
 
     Returns
@@ -1934,7 +1957,7 @@ def prepare_predictions_df(df_pred):
             raise ValueError("Missing 'pL' or 'pR' columns (model predictions).")
 
         df = df.with_columns(
-            pl.col("pR").alias("p_pred"),
+            pl.col("pL").alias("p_pred"),
             pl.when(pl.col("stimulus") == 0).then(pl.col("pL")).otherwise(pl.col("pR")).alias("p_model_correct"),
         )
 
@@ -1955,7 +1978,7 @@ def prepare_predictions_df(df_pred):
         if "pL" not in df.columns or "pR" not in df.columns:
             raise ValueError("Missing 'pL' or 'pR' columns (model predictions).")
 
-        df["p_pred"] = df["pR"]
+        df["p_pred"] = df["pL"]
         df["p_model_correct"] = df.apply(lambda row: row["pL"] if row["stimulus"] == 0 else row["pR"], axis=1)
 
         return df
@@ -2213,6 +2236,57 @@ def plot_session_trajectories(
     )
 
 
+def plot_state_posterior_count_kde(
+    views: dict,
+    thresh: float | None = None,
+    bins: int = 40,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_state_posterior_count_kde_common(
+        views,
+        thresh=thresh,
+        bins=bins,
+    )
+
+
+def plot_change_triggered_posteriors_summary(
+    views: dict,
+    trial_df,
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
+    switch_posterior_threshold: float | None = None,
+    window: int = 15,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_change_triggered_posteriors_summary_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
+        window=window,
+    )
+
+
+def plot_change_triggered_posteriors_by_subject(
+    views: dict,
+    trial_df,
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
+    switch_posterior_threshold: float | None = None,
+    window: int = 15,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_change_triggered_posteriors_by_subject_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
+        window=window,
+    )
+
+
 def plot_state_occupancy(
     views: dict,
     trial_df,
@@ -2229,6 +2303,63 @@ def plot_state_occupancy(
     )
 
 
+def plot_state_dwell_times_by_subject(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_state_dwell_times_by_subject_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+
+def plot_state_dwell_times_summary(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_state_dwell_times_summary_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+
+def plot_state_dwell_times(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_state_dwell_times_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Session deep-dive
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2241,6 +2372,7 @@ def plot_session_deepdive(
     sess,
     session_col: str = _SESSION_COL,
     sort_col: str = _SORT_COL,
+    switch_posterior_threshold: float | None = None,
     **kwargs,
 ) -> plt.Figure:
     return _plot_session_deepdive_common(
@@ -2249,6 +2381,8 @@ def plot_session_deepdive(
         subj,
         sess,
         session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
         performance_candidates=("correct_bool", _PERFORMANCE_COL),
         stim_candidates=(_EVIDENCE_COL, "stimulus"),
         response_candidates=(_RESPONSE_COL,),
@@ -2275,7 +2409,7 @@ def plot_categorical_performance_all(
     background_style: str = "data",
     n_bins: int = 9,
 ) -> plt.Figure:
-    """Overall psychometric P(right) vs evidence strength.
+    """Overall psychometric P(left) vs evidence strength.
 
     The Nuo non-state view is a single pooled panel. Empirical means use the
     modeled response column and the data are binned over the evidence axis
@@ -2285,6 +2419,7 @@ def plot_categorical_performance_all(
         df_pd = df.to_pandas()
     else:
         df_pd = df.copy()
+    df_pd, choice_col = _with_plot_choice_left(df_pd, choice_col)
 
     summary = _binned_feature_summary(
         df_pd,
@@ -2366,7 +2501,7 @@ def plot_categorical_performance_all(
     ax.set_ylim(0, 1)
     ax.set_yticks([0, 0.5, 1])
     ax.set_xlabel("Evidence strength")
-    ax.set_ylabel("P(Right)")
+    ax.set_ylabel("P(Left)")
     ax.set_title("Overall psychometric")
     ax.legend(frameon=False, fontsize=8)
     sns.despine(fig=fig)
@@ -2397,7 +2532,7 @@ def plot_categorical_performance_all_by_state(
 ) -> plt.Figure:
     """Per-state psychometric grid (K panels, one per state).
 
-    Each state gets its own panel showing P(right) vs evidence strength; data (markers) and
+    Each state gets its own panel showing P(left) vs evidence strength; data (markers) and
     model prediction (lines) are drawn in the state's colour.
 
     Parameters
@@ -2437,7 +2572,7 @@ def plot_categorical_performance_all_by_state(
     df_pd["_state_k"] = _arr
     if state_assignment_mode == "weighted":
         df_pd = _attach_rank_posterior_cols(df_pd, views, subj_col=subj_col)
-        df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pR_state")
+        df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pL_state")
 
     # Resolve labels: {rank: label} merged across all subjects
     slbls: dict[int, str] = {}
@@ -2506,7 +2641,7 @@ def plot_categorical_performance_all_by_state(
                 _df_state,
                 ild_col,
                 choice_col,
-                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
+                pred_col=f"_pL_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -2528,7 +2663,7 @@ def plot_categorical_performance_all_by_state(
         _ax_overlay.set_ylim(0, 1)
         _ax_overlay.set_yticks([0, 0.5, 1])
         _ax_overlay.set_xlabel("Evidence strength")
-        _ax_overlay.set_ylabel("p(right)")
+        _ax_overlay.set_ylabel("p(left)")
         _ax_overlay.set_title("")
         _ax_overlay.legend(frameon=False, fontsize=8)
 
@@ -2545,7 +2680,7 @@ def plot_categorical_performance_all_by_state(
                 _df_state,
                 ild_col,
                 choice_col,
-                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
+                pred_col=f"_pL_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -2567,7 +2702,7 @@ def plot_categorical_performance_all_by_state(
             ax.set_xlabel("Evidence strength")
             ax.set_title(lbl)
             if k == 0:
-                ax.set_ylabel("P(Right)")
+                ax.set_ylabel("P(Left)")
             else:
                 ax.set_ylabel("")
 
@@ -2635,7 +2770,7 @@ def plot_regressor_psychometric_by_state(
     df_pd["_state_k"] = _arr
     if state_assignment_mode == "weighted":
         df_pd = _attach_rank_posterior_cols(df_pd, views, subj_col=subj_col)
-        df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pR_state")
+        df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pL_state")
 
     if feature_min is None:
         feature_min = float(np.nanmin(df_pd[feature_col].to_numpy(dtype=float)))
@@ -2740,7 +2875,7 @@ def plot_regressor_psychometric_by_state(
                 _df_state,
                 feature_col,
                 choice_col,
-                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else "p_pred",
+                pred_col=f"_pL_state_rank_{k}" if state_assignment_mode == "weighted" else "p_pred",
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -2756,7 +2891,7 @@ def plot_regressor_psychometric_by_state(
                 model_line_mode=model_line_mode,
             )
         _ax_overlay.set_xlabel(xlabel)
-        _ax_overlay.set_ylabel("p(right)")
+        _ax_overlay.set_ylabel("p(left)")
         _ax_overlay.set_title("")
         _ax_overlay.legend(frameon=False, fontsize=8)
 
@@ -2773,7 +2908,7 @@ def plot_regressor_psychometric_by_state(
                 _df_state,
                 feature_col,
                 choice_col,
-                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else "p_pred",
+                pred_col=f"_pL_state_rank_{k}" if state_assignment_mode == "weighted" else "p_pred",
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -2790,7 +2925,7 @@ def plot_regressor_psychometric_by_state(
             ax.set_xlabel(xlabel)
             ax.set_title(lbl)
             if k == 0:
-                ax.set_ylabel("P(Right)")
+                ax.set_ylabel("P(Left)")
             else:
                 ax.set_ylabel("")
 

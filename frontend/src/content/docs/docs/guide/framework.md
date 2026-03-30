@@ -122,7 +122,8 @@ Adding a new task should usually mean adding task-owned modules rather than
 editing `glmhmmt`:
 
 1. preprocess the raw data into a cleaned parquet dataset
-2. implement a `TaskAdapter` in `tasks/<task>.py`
+2. implement a `TaskAdapter` in `tasks/<task>.py`, including adapter-level
+   state-assignment scoring (`_SCORING_OPTIONS` and `scoring_key`)
 3. implement a task plot module in `tasks/plots/<task>.py`
 4. register the adapter and use the existing scripts and notebooks with `--task`
 

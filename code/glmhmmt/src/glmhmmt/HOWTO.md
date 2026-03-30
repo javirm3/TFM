@@ -222,6 +222,14 @@ class MyTask(TaskAdapter):
     Data: data/my_task.parquet
     """
     num_classes  = 2                           # number of choice categories
+    _SCORING_OPTIONS: dict = {
+        "stim_vals (-w)": [("stim_vals", "neg")],
+        "stim_vals (|w|)": [("stim_vals", "abs")],
+        "at_choice (|w|)": [("at_choice", "abs")],
+        "wsls (|w|)": [("wsls", "abs")],
+        "bias (|w|)": [("bias", "abs")],
+    }
+    scoring_key: str = "stim_vals (-w)"
 
     def get_plots(self):
         import tasks.plots.two_afc as plots    # or tasks.plots.mcdr
@@ -270,6 +278,10 @@ class MyTask(TaskAdapter):
             session_ids=feature_df["session"].to_numpy(), names=names,
         )
 ```
+
+Adapt the feature names or sign modes to the task, but keep
+`_SCORING_OPTIONS` and `scoring_key` on the adapter so state assignment stays
+task-owned.
 
 ### 3. Register the adapter
 

@@ -4,6 +4,14 @@ __generated_with = "0.21.0"
 app = marimo.App(width="medium")
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Imports
+    """)
+    return
+
+
 @app.cell
 def _():
     import marimo as mo
@@ -59,6 +67,14 @@ def _():
     )
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    We import from the ui widgets and the model adapters
+    """)
+    return
+
+
 @app.cell
 def _(get_adapter, paths, pl, ui_model_manager):
     task_name = ui_model_manager.value.get("task", "MCDR")
@@ -111,23 +127,53 @@ def _(adapter, ui_model_manager):
 
 
 @app.cell
-def _(
-    generate_model_id,
-    mo,
-    task_name,
-    ui_emission_cols,
-    ui_lapse,
-    ui_model_manager,
-    ui_tau,
-):
+def _(generate_model_id, task_name, ui_emission_cols, ui_lapse, ui_tau):
     current_hash = generate_model_id(task_name, ui_tau.value, ui_emission_cols.value, lapse=ui_lapse.value)
+    return (current_hash,)
 
+
+@app.cell
+def _(
+    current_hash,
+    make_plot_saver,
+    mo,
+    paths,
+    resolve_selected_model_id,
+    task_name,
+    ui_alias,
+    ui_existing,
+):
+    selected_model_id = resolve_selected_model_id(
+        current_hash,
+        ui_existing.value,
+        ui_alias.value,
+    )
+    save_plot = make_plot_saver(
+        mo,
+        results_dir=paths.RESULTS,
+        config_path=paths.CONFIG,
+        task_name=task_name,
+        model_id=selected_model_id,
+    )
+    return save_plot, selected_model_id
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Model Configuration
+    """)
+    return
+
+
+@app.cell
+def _(current_hash, mo, save_plot, ui_model_manager):
     mo.vstack([
-        mo.md("### GLM Configuration"),
         ui_model_manager,
+        save_plot.save_all_widget(label="Save all model plots"),
         mo.md(f"**Current params hash:** `{current_hash}`"),
     ])
-    return (current_hash,)
+    return
 
 
 @app.cell
@@ -165,16 +211,13 @@ def _(
 @app.cell
 def _(
     adapter,
-    current_hash,
     df_all,
     load_fit_arrays,
     mo,
     paths,
-    resolve_selected_model_id,
+    selected_model_id,
     task_name,
-    ui_alias,
     ui_emission_cols,
-    ui_existing,
     ui_subjects,
 ):
     def _normalize_glm_arrays(arrays: dict) -> dict:
@@ -192,11 +235,7 @@ def _(
             arrays["emission_weights"] = -_weights
         return arrays
 
-    selected_model_id = resolve_selected_model_id(
-        current_hash,
-        ui_existing.value,
-        ui_alias.value,
-    )
+
     OUT = paths.RESULTS / "fits" / task_name / "glm" / selected_model_id
     arrays_store, names = load_fit_arrays(
         out_dir=OUT,
@@ -209,19 +248,7 @@ def _(
     )
 
     mo.md(f"Loaded {len(arrays_store)} subjects from `{selected_model_id}`")
-    return arrays_store, names, selected_model_id
-
-
-@app.cell
-def _(make_plot_saver, mo, paths, selected_model_id, task_name):
-    save_plot = make_plot_saver(
-        mo,
-        results_dir=paths.RESULTS,
-        config_path=paths.CONFIG,
-        task_name=task_name,
-        model_id=selected_model_id,
-    )
-    return (save_plot,)
+    return arrays_store, names
 
 
 @app.cell

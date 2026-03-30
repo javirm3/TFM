@@ -49,7 +49,7 @@ transition_features = ["A_plus", "A_minus", "A_L", "A_C", "A_R"]
 
 [plots]
 dpi = 300
-save_format = "svg"
+save_format = "pdf"
 style = "white"
 context = "talk"
 font_scale = 1

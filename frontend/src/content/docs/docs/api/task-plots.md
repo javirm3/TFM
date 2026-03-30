@@ -31,6 +31,9 @@ plots.plot_posterior_probs(...)
 plots.plot_state_accuracy(...)
 plots.plot_session_trajectories(...)
 plots.plot_state_occupancy(...)
+plots.plot_state_dwell_times_by_subject(...)
+plots.plot_state_dwell_times_summary(...)
+plots.plot_state_dwell_times(...)
 plots.plot_session_deepdive(...)
 ```
 
@@ -99,21 +102,76 @@ The module also re-exports the standard diagnostics from `glmhmmt.model_plots`, 
 
 ## Emission Weight Convention In The MCDR Notebooks
 
-The MCDR notebook summaries use the following collapse convention when turning the stored emission tensor into interpretable grouped coefficients:
+The MCDR notebook summaries use a post-hoc collapse convention to turn the
+stored multinomial emission tensor into task-level grouped summaries. This does
+not change the fitted model. It is only an interpretation layer on top of the
+softmax parameterisation.
 
 ```python
-# ── emission weights ───────────────────────────────────────────────────────
-# W shape: (K, 2, n_features)  — axis-1: [L-choice=0, R-choice=1]
-# Center = reference class (implicit weight 0).
-#
-# Agonist collapse: for symmetric L/R feature pairs, take
-#   mean(W[k, 0, feat_L], W[k, 1, feat_R])  → one point per group per state
-# For C features (no direct weight): -mean(W[k, 0, feat_C], W[k, 1, feat_C])
-# For shared scalars: mean across both rows.
-#
-# Groups: (label, [(feat_name, class_idx), ...])
-# class_idx int = direct weight; "neg_mean"/"mean" = derived from both rows
-# Coherent = cue and choice on same side; Incoherent = opposite side
+W.shape == (K, 2, n_features)
+# rows: [Left vs Center, Right vs Center]
+# Center is the reference class, so its logit is implicit 0.
+
+logits_f = [W[k, 0, f], 0.0, W[k, 1, f]]
+p_f = softmax(logits_f)
 ```
 
-This convention is specific to the 3-choice MCDR notebook plots. The stored model weights themselves follow the general softmax convention described in [`SoftmaxGLMHMM`](/docs/api/model).
+There are two baselines:
+
+- logit baseline: the reference class has fixed logit `0`
+- probability baseline: after reconstructing the full softmax, probabilities are compared to the uniform baseline `1 / C`, which is `1 / 3` here
+
+So for one isolated feature `f` in state `k`, the aligned readouts are:
+
+- Left-aligned effect: `P(L | f) - 1/3`
+- Center-aligned effect: `P(C | f) - 1/3`
+- Right-aligned effect: `P(R | f) - 1/3`
+
+The grouped MCDR summaries average those aligned readouts over symmetric task
+members. In practice:
+
+- `mode=0` means read out `P(L) - 1/3`
+- `mode=1` means read out `P(R) - 1/3`
+- `mode="neg_mean"` means read out `P(C) - 1/3`
+- `mode="mean"` means read out `((P(L) + P(R)) / 2) - 1/3`
+
+This is the implementation used by the MCDR plot summaries in
+`glmhmmt.model_plots`.
+
+## Weight-Space Shortcut
+
+The shorter notebook comment is a useful mnemonic, but it is only a shortcut:
+
+- for symmetric L/R pairs, `mean(W[k, 0, feat_L], W[k, 1, feat_R])`
+- for Center features, `-mean(W[k, 0, feat_C], W[k, 1, feat_C])`
+- for shared scalars, `mean(...)` across the explicit rows
+
+The sign flip for Center happens because Center has no explicit row in the
+stored tensor. If a feature increases both `L-vs-C` and `R-vs-C` logits, it is
+pushing probability away from Center, so the derived Center summary should go
+down.
+
+The probability-space collapse is more faithful than the raw-weight shortcut,
+because each class probability depends on all logits, not just one stored row.
+
+## Generalising Beyond 3 Choices
+
+For any task with `C` choices, the same generic rule applies:
+
+1. choose a reference class `r`
+2. reconstruct the full logits with `z_r = 0`
+3. compute `p = softmax(z)`
+4. define task-specific symmetry groups such as `(feature, target_class)`
+5. collapse with `mean(p[target_class] - 1 / C)`
+
+If a group member maps to the reference class, use `p[r] - 1 / C`. If it maps
+to a neutral competitor set rather than one class, average over that set before
+subtracting `1 / C`.
+
+For tasks with more than 3 choices, there is no single canonical agonist
+collapse. The symmetry groups have to come from the task geometry, but the
+probability-space rule above stays the same.
+
+This convention is specific to the MCDR notebook plots and their grouped
+readouts. The stored model weights themselves follow the general softmax
+convention described in [`SoftmaxGLMHMM`](/docs/api/model).

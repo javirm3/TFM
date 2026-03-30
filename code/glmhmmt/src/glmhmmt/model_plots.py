@@ -12,10 +12,17 @@ from scipy.special import softmax as _softmax
 import tomllib
 from matplotlib import cm, colors
 from typing import Tuple
+from glmhmmt.views import get_state_palette as _get_config_state_palette
 from glmhmmt.plots_common import (
     plot_state_accuracy as _plot_state_accuracy_common,
+    plot_change_triggered_posteriors_by_subject as _plot_change_triggered_posteriors_by_subject_common,
+    plot_change_triggered_posteriors_summary as _plot_change_triggered_posteriors_summary_common,
+    plot_state_posterior_count_kde as _plot_state_posterior_count_kde_common,
     plot_session_trajectories as _plot_session_trajectories_common,
     plot_state_occupancy as _plot_state_occupancy_common,
+    plot_state_dwell_times_by_subject as _plot_state_dwell_times_by_subject_common,
+    plot_state_dwell_times_summary as _plot_state_dwell_times_summary_common,
+    plot_state_dwell_times as _plot_state_dwell_times_common,
     plot_session_deepdive as _plot_session_deepdive_common,
 )
 sns.set_style("white")
@@ -710,25 +717,26 @@ _LABEL_RANK = {
 }
 
 # ── canonical state colours from config (rank-indexed) ───────────────────────
-_STATE_HEX: list[str] = cfg.get("palettes", {}).get("states_hex", [
-    "#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02",
-])
+_STATE_HEX: list[str] = _get_config_state_palette()
 
 
-def _state_color(label: str, fallback_idx: int = 0) -> str:
+def _state_color(label: str, fallback_idx: int = 0, palette: list[str] | None = None) -> str:
     """Return the config-defined hex colour for a state label."""
+    _palette = list(palette) if palette else _STATE_HEX
     rank = _LABEL_RANK.get(label, fallback_idx)
-    return _STATE_HEX[rank % len(_STATE_HEX)]
+    return _palette[rank % len(_palette)]
 
 
 def _build_state_palette(
     state_labels_per_subj: dict,
+    K: int | None = None,
 ) -> tuple[dict[str, str], list[str]]:
     """
     Build a (palette_dict, hue_order) pair from a {subj: {k: label}} mapping.
 
     Both are rank-ordered (Engaged first) so every seaborn plot that receives
     them uses the same colour and ordering regardless of K or subject set.
+    When an exact-K palette is configured in ``config.toml``, it is preferred.
     """
     seen: dict[str, int] = {}
     for _slbls in state_labels_per_subj.values():
@@ -736,7 +744,8 @@ def _build_state_palette(
             if _lbl not in seen:
                 seen[_lbl] = _LABEL_RANK.get(_lbl, _k)
     ordered = sorted(seen, key=lambda l: seen[l])
-    pal = {lbl: _state_color(lbl, seen[lbl]) for lbl in ordered}
+    _palette = _get_config_state_palette(K if K is not None else len(ordered))
+    pal = {lbl: _state_color(lbl, seen[lbl], palette=_palette) for lbl in ordered}
     return pal, ordered
 
 
@@ -1330,6 +1339,57 @@ def plot_session_trajectories(
     )
 
 
+def plot_state_posterior_count_kde(
+    views: dict,
+    thresh: float | None = None,
+    bins: int = 40,
+    **kwargs,
+):
+    return _plot_state_posterior_count_kde_common(
+        views,
+        thresh=thresh,
+        bins=bins,
+    )
+
+
+def plot_change_triggered_posteriors_summary(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    switch_posterior_threshold: float | None = None,
+    window: int = 15,
+    **kwargs,
+):
+    return _plot_change_triggered_posteriors_summary_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
+        window=window,
+    )
+
+
+def plot_change_triggered_posteriors_by_subject(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    switch_posterior_threshold: float | None = None,
+    window: int = 15,
+    **kwargs,
+):
+    return _plot_change_triggered_posteriors_by_subject_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
+        window=window,
+    )
+
+
 def plot_state_occupancy(
     views: dict,
     trial_df,
@@ -1346,6 +1406,63 @@ def plot_state_occupancy(
     )
 
 
+def plot_state_dwell_times_by_subject(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    max_dwell: int | None = None,
+    ci_level: float = 0.68,
+    **kwargs,
+):
+    return _plot_state_dwell_times_by_subject_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+
+def plot_state_dwell_times_summary(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    max_dwell: int | None = None,
+    ci_level: float = 0.68,
+    **kwargs,
+):
+    return _plot_state_dwell_times_summary_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+
+def plot_state_dwell_times(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    max_dwell: int | None = None,
+    ci_level: float = 0.68,
+    **kwargs,
+):
+    return _plot_state_dwell_times_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+
 def plot_session_deepdive(
     views: dict,
     trial_df,
@@ -1353,6 +1470,7 @@ def plot_session_deepdive(
     sess: int,
     session_col: str = "session",
     sort_col: str = "trial_idx",
+    switch_posterior_threshold: float | None = None,
     stimd_col: str = "stimd_n",
     perf_col: str = "performance",
     resp_col: str = "response",
@@ -1364,6 +1482,8 @@ def plot_session_deepdive(
         subj,
         sess,
         session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
         performance_candidates=(perf_col, "correct_bool", "performance"),
         stim_candidates=(stimd_col, "stimulus", "ILD"),
         response_candidates=(resp_col, "response", "Choice"),
@@ -1474,7 +1594,7 @@ def plot_transition_weights(
         _slbls_map = {
             s: dict(views[s].state_name_by_idx) for s in _selected
         }
-        _state_pal, _states_order = _build_state_palette(_slbls_map)
+        _state_pal, _states_order = _build_state_palette(_slbls_map, K=K)
         _D_first = views[_selected[0]].transition_weights.shape[2]
         _U_cols = list(views[_selected[0]].U_cols)[:_D_first]
 
@@ -1501,21 +1621,7 @@ def plot_transition_weights(
                 (state_labels or {}).get(_subj) or {k: f"State {k}" for k in range(K)}
             )
 
-        _resolved: dict[int, str] = {}
-        for _k in range(K):
-            for _subj in _selected:
-                _lbl = _slbls_map[_subj].get(_k)
-                if _lbl:
-                    _resolved[_k] = _lbl
-                    break
-            if _k not in _resolved:
-                _resolved[_k] = f"State {_k}"
-
-        _states_order = [
-            _resolved[k]
-            for k in sorted(_resolved, key=lambda k: _LABEL_RANK.get(_resolved[k], k))
-        ]
-        _state_pal = {lbl: _state_color(lbl, i) for i, lbl in enumerate(_states_order)}
+        _state_pal, _states_order = _build_state_palette(_slbls_map, K=K)
         _D_first = arrays_store[_selected[0]]["transition_weights"].shape[2]
         _U_cols = (arrays_store[_selected[0]].get("U_cols") or names.get("U_cols", []))[:_D_first]
 

@@ -35,6 +35,7 @@ Each adapter should define:
 - `behavioral_cols`
 - `get_correct_class(df)`
 - `label_states(...)`
+- adapter-level state-assignment scoring (`_SCORING_OPTIONS` and `scoring_key`)
 - `get_plots()`
 
 The adapter owns task-specific filtering, column mappings, feature construction,
@@ -56,6 +57,16 @@ class MyTaskAdapter(TaskAdapter):
     data_file = "my_task.parquet"
     sort_col = ["session", "trial"]
     session_col = "session"
+
+    # State-assignment scoring used by the generic analysis notebooks.
+    _SCORING_OPTIONS: dict = {
+        "stim_vals (-w)": [("stim_vals", "neg")],
+        "stim_vals (|w|)": [("stim_vals", "abs")],
+        "at_choice (|w|)": [("at_choice", "abs")],
+        "wsls (|w|)": [("wsls", "abs")],
+        "bias (|w|)": [("bias", "abs")],
+    }
+    scoring_key: str = "stim_vals (-w)"
 
     def subject_filter(self, df):
         return df
@@ -89,6 +100,10 @@ class MyTaskAdapter(TaskAdapter):
         import tasks.plots.my_task as plots
         return plots
 ```
+
+Adapt the feature names or sign modes to the task, but keep
+`_SCORING_OPTIONS` and `scoring_key` on the adapter. The generic analysis
+notebooks use them to rank and label states.
 
 ## Plot boundary
 

@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
+from scipy.stats import norm
 
 from glmhmmt.views import get_state_palette
 
@@ -45,6 +47,378 @@ def _state_labels_and_colors(view):
     labels = [view.state_name_by_idx.get(k, f"State {k}") for k in rank_order]
     colors = [palette[view.state_rank_by_idx.get(int(k), int(k)) % len(palette)] for k in rank_order]
     return rank_order, labels, colors
+
+
+def _resolve_static_transition_matrix(view) -> np.ndarray | None:
+    transition_matrix = getattr(view, "transition_matrix", None)
+    if transition_matrix is not None:
+        A = np.asarray(transition_matrix, dtype=float)
+        return A if A.ndim == 2 else None
+
+    transition_bias = getattr(view, "transition_bias", None)
+    transition_weights = getattr(view, "transition_weights", None)
+    if transition_bias is None or transition_weights is not None:
+        return None
+
+    bias = np.asarray(transition_bias, dtype=float)
+    if bias.ndim != 2:
+        return None
+
+    shifted = bias - bias.max(axis=-1, keepdims=True)
+    exp_shifted = np.exp(shifted)
+    return exp_shifted / exp_shifted.sum(axis=-1, keepdims=True)
+
+
+def _state_dwell_lengths(
+    state_seq: np.ndarray,
+    session_seq: np.ndarray,
+) -> dict[int, list[int]]:
+    dwell_by_state: dict[int, list[int]] = {}
+    T = min(len(state_seq), len(session_seq))
+    if T == 0:
+        return dwell_by_state
+
+    current_state = int(state_seq[0])
+    current_session = session_seq[0]
+    run_len = 1
+
+    for idx in range(1, T):
+        next_state = int(state_seq[idx])
+        next_session = session_seq[idx]
+        if next_state != current_state or next_session != current_session:
+            dwell_by_state.setdefault(current_state, []).append(run_len)
+            current_state = next_state
+            current_session = next_session
+            run_len = 1
+        else:
+            run_len += 1
+
+    dwell_by_state.setdefault(current_state, []).append(run_len)
+    return dwell_by_state
+
+
+def _geometric_dwell_pmf(self_prob: float, max_dwell: int) -> np.ndarray:
+    p = float(np.clip(self_prob, 0.0, np.nextafter(1.0, 0.0)))
+    dwell = np.arange(1, max_dwell + 1, dtype=float)
+    return (1.0 - p) * np.power(p, dwell - 1.0)
+
+
+def _wilson_interval(
+    counts: np.ndarray,
+    total: int,
+    confidence_level: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    counts = np.asarray(counts, dtype=float)
+    if total <= 0:
+        zeros = np.zeros_like(counts, dtype=float)
+        return zeros, zeros
+
+    z = float(norm.ppf(0.5 + confidence_level / 2.0))
+    total_f = float(total)
+    phat = counts / total_f
+    denom = 1.0 + (z**2) / total_f
+    center = (phat + (z**2) / (2.0 * total_f)) / denom
+    half_width = (
+        z
+        * np.sqrt((phat * (1.0 - phat) + (z**2) / (4.0 * total_f)) / total_f)
+        / denom
+    )
+    return np.clip(center - half_width, 0.0, 1.0), np.clip(center + half_width, 0.0, 1.0)
+
+
+def _empirical_dwell_pmf(
+    dwell_lengths: np.ndarray,
+    max_dwell: int,
+    confidence_level: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    dwell_lengths = np.asarray(dwell_lengths, dtype=int)
+    if dwell_lengths.size == 0:
+        zeros = np.zeros(max_dwell, dtype=float)
+        return zeros, zeros, zeros
+
+    in_range = dwell_lengths[(dwell_lengths >= 1) & (dwell_lengths <= max_dwell)]
+    counts = np.bincount(in_range, minlength=max_dwell + 1)[1 : max_dwell + 1]
+    probs = counts / float(dwell_lengths.size)
+    low, high = _wilson_interval(counts, int(dwell_lengths.size), confidence_level)
+    return probs, low, high
+
+
+def _binned_dwell_summary(
+    self_prob: float,
+    dwell_lengths: np.ndarray,
+    *,
+    max_dwell: int,
+    bin_width: int,
+    confidence_level: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    n_bins = int(np.ceil(max_dwell / float(bin_width)))
+    centers = bin_width * np.arange(n_bins, dtype=float) + (bin_width / 2.0)
+
+    predicted_full = _geometric_dwell_pmf(self_prob, max_dwell)
+    predicted = np.zeros(n_bins, dtype=float)
+    for bi in range(n_bins):
+        lo = bi * bin_width
+        hi = min((bi + 1) * bin_width, max_dwell)
+        predicted[bi] = float(np.sum(predicted_full[lo:hi]))
+
+    dwell_lengths = np.asarray(dwell_lengths, dtype=int)
+    total_runs = int(dwell_lengths.size)
+    if total_runs == 0:
+        zeros = np.zeros(n_bins, dtype=float)
+        return centers, predicted, zeros, zeros
+
+    in_range = dwell_lengths[(dwell_lengths >= 1) & (dwell_lengths <= max_dwell)]
+    if in_range.size == 0:
+        zeros = np.zeros(n_bins, dtype=float)
+        return centers, predicted, zeros, zeros
+
+    bin_idx = (in_range - 1) // int(bin_width)
+    counts = np.bincount(bin_idx, minlength=n_bins)[:n_bins]
+    empirical = counts / float(total_runs)
+    ci_low, ci_high = _wilson_interval(counts, total_runs, confidence_level)
+    yerr = np.vstack(
+        [
+            np.clip(empirical - ci_low, 0.0, None),
+            np.clip(ci_high - empirical, 0.0, None),
+        ]
+    )
+    return centers, predicted, empirical, yerr
+
+
+def _sort_subject_trials(df_sub, session_col: str, sort_col: str | Sequence[str] | None):
+    if df_sub is None:
+        return df_sub
+
+    columns = df_sub.columns
+    sort_keys: list[str] = []
+    if session_col in columns:
+        sort_keys.append(session_col)
+
+    if sort_col is None:
+        pass
+    elif isinstance(sort_col, str):
+        if sort_col in columns and sort_col not in sort_keys:
+            sort_keys.append(sort_col)
+    else:
+        for col in sort_col:
+            if col in columns and col not in sort_keys:
+                sort_keys.append(col)
+
+    if not sort_keys:
+        return df_sub
+    if _is_polars_df(df_sub):
+        return df_sub.sort(sort_keys)
+    return df_sub.sort_values(sort_keys, kind="stable")
+
+
+def _confident_change_event_indices(
+    p_s: np.ndarray,
+    posterior_threshold: float | None = None,
+) -> np.ndarray:
+    if len(p_s) <= 1:
+        return np.array([], dtype=int)
+
+    if posterior_threshold is None:
+        v = np.argmax(p_s, axis=1)
+        return np.flatnonzero(np.diff(v) != 0) + 1
+
+    keep_idx = np.flatnonzero(np.max(p_s, axis=1) >= posterior_threshold)
+    if keep_idx.size <= 1:
+        return np.array([], dtype=int)
+
+    v_conf = np.argmax(p_s[keep_idx], axis=1)
+    return keep_idx[1:][np.diff(v_conf) != 0]
+
+
+def _confident_change_events_by_direction(
+    p_s: np.ndarray,
+    engaged_k: int,
+    posterior_threshold: float | None = None,
+) -> dict[str, np.ndarray]:
+    empty = {
+        "into_engaged": np.array([], dtype=int),
+        "out_of_engaged": np.array([], dtype=int),
+    }
+    if len(p_s) <= 1:
+        return empty
+
+    if posterior_threshold is None:
+        keep_idx = np.arange(len(p_s), dtype=int)
+        v_conf = np.argmax(p_s, axis=1)
+    else:
+        keep_idx = np.flatnonzero(np.max(p_s, axis=1) >= posterior_threshold)
+        if keep_idx.size <= 1:
+            return empty
+        v_conf = np.argmax(p_s[keep_idx], axis=1)
+
+    change_mask = np.diff(v_conf) != 0
+    if not np.any(change_mask):
+        return empty
+
+    prev_states = v_conf[:-1][change_mask]
+    next_states = v_conf[1:][change_mask]
+    change_idx = keep_idx[1:][change_mask]
+
+    into_mask = (prev_states != engaged_k) & (next_states == engaged_k)
+    out_mask = (prev_states == engaged_k) & (next_states != engaged_k)
+    return {
+        "into_engaged": change_idx[into_mask],
+        "out_of_engaged": change_idx[out_mask],
+    }
+
+
+def _nanmean_sem(arr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    arr = np.asarray(arr, dtype=float)
+    mean = np.nanmean(arr, axis=0)
+    n_obs = np.sum(np.isfinite(arr), axis=0)
+    sem = np.zeros_like(mean, dtype=float)
+    valid = n_obs > 1
+    if np.any(valid):
+        sem[valid] = np.nanstd(arr[:, valid], axis=0, ddof=1) / np.sqrt(n_obs[valid])
+    return mean, sem
+
+
+def _change_triggered_traces(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    switch_posterior_threshold: float | None = None,
+    window: int = 50,
+) -> dict[str, dict[str, np.ndarray]]:
+    traces_by_subject: dict[str, dict[str, dict[str, np.ndarray]]] = {}
+
+    for subj, view in views.items():
+        df_sub = _sort_subject_trials(_subject_df(trial_df, subj), session_col, sort_col)
+        if session_col not in df_sub.columns:
+            continue
+
+        P = np.asarray(view.smoothed_probs, dtype=float)
+        sess_arr = np.asarray(df_sub[session_col])
+        T = min(len(P), len(sess_arr))
+        if T <= 1:
+            continue
+
+        P = P[:T]
+        sess_arr = sess_arr[:T]
+        engaged_k = int(view.engaged_k())
+        subject_traces = {
+            "into_engaged": {"engaged": [], "disengaged": []},
+            "out_of_engaged": {"engaged": [], "disengaged": []},
+        }
+
+        for sess in np.unique(sess_arr):
+            p_s = P[sess_arr == sess]
+            change_idx_by_direction = _confident_change_events_by_direction(
+                p_s,
+                engaged_k,
+                switch_posterior_threshold,
+            )
+
+            for direction, change_idx in change_idx_by_direction.items():
+                for idx in change_idx:
+                    trace_eng = np.full(2 * window + 1, np.nan, dtype=float)
+                    trace_dis = np.full(2 * window + 1, np.nan, dtype=float)
+                    lo = max(0, int(idx) - window)
+                    hi = min(len(p_s), int(idx) + window + 1)
+                    dst_lo = window - (int(idx) - lo)
+                    dst_hi = dst_lo + (hi - lo)
+                    trace_eng[dst_lo:dst_hi] = p_s[lo:hi, engaged_k]
+                    trace_dis[dst_lo:dst_hi] = 1.0 - p_s[lo:hi, engaged_k]
+                    subject_traces[direction]["engaged"].append(trace_eng)
+                    subject_traces[direction]["disengaged"].append(trace_dis)
+
+        subject_traces_arr = {}
+        for direction, traces in subject_traces.items():
+            if not traces["engaged"]:
+                continue
+            subject_traces_arr[direction] = {
+                "engaged": np.vstack(traces["engaged"]),
+                "disengaged": np.vstack(traces["disengaged"]),
+            }
+        if subject_traces_arr:
+            traces_by_subject[subj] = subject_traces_arr
+
+    return traces_by_subject
+
+
+def _change_posterior_meta(view) -> tuple[str, str, str, str]:
+    palette = get_state_palette(view.K)
+    engaged_k = int(view.engaged_k())
+    engaged_rank = view.state_rank_by_idx.get(engaged_k, 0)
+    engaged_color = palette[engaged_rank % len(palette)]
+    engaged_label = view.state_name_by_idx.get(engaged_k, "Engaged")
+
+    other_states = [k for k in view.state_idx_order if int(k) != engaged_k]
+    if len(other_states) == 1:
+        other_k = int(other_states[0])
+        disengaged_label = view.state_name_by_idx.get(other_k, "Disengaged")
+        disengaged_rank = view.state_rank_by_idx.get(other_k, 1)
+        disengaged_color = palette[disengaged_rank % len(palette)]
+    else:
+        disengaged_label = "Non-engaged"
+        disengaged_color = "#7f7f7f"
+
+    return engaged_label, disengaged_label, engaged_color, disengaged_color
+
+
+def _plot_change_triggered_mean(
+    ax,
+    x: np.ndarray,
+    engaged_mean: np.ndarray,
+    engaged_sem: np.ndarray,
+    disengaged_mean: np.ndarray,
+    disengaged_sem: np.ndarray,
+    *,
+    engaged_label: str,
+    disengaged_label: str,
+    engaged_color: str,
+    disengaged_color: str,
+    title: str,
+) -> None:
+    x = np.asarray(x, dtype=float)
+    ax.plot(x, engaged_mean, color=engaged_color, lw=2.2, label=f"P({engaged_label})")
+    ax.fill_between(
+        x,
+        np.clip(engaged_mean - engaged_sem, 0.0, 1.0),
+        np.clip(engaged_mean + engaged_sem, 0.0, 1.0),
+        color=engaged_color,
+        alpha=0.2,
+    )
+    ax.plot(x, disengaged_mean, color=disengaged_color, lw=2.0, label=f"P({disengaged_label})")
+    ax.fill_between(
+        x,
+        np.clip(disengaged_mean - disengaged_sem, 0.0, 1.0),
+        np.clip(disengaged_mean + disengaged_sem, 0.0, 1.0),
+        color=disengaged_color,
+        alpha=0.16,
+    )
+    ax.axvline(0, color="black", linestyle="--", linewidth=1.0, alpha=0.65)
+    tick_start = int(np.ceil(x[0] / 5.0) * 5)
+    tick_stop = int(np.floor(x[-1] / 5.0) * 5)
+    xticks = np.arange(tick_start, tick_stop + 1, 5, dtype=int)
+    if xticks.size:
+        ax.set_xticks(xticks)
+        ax.grid(axis="x", which="major", color="0.5", linestyle=":", linewidth=0.8, alpha=0.35)
+        ax.set_axisbelow(True)
+    ax.set_ylim(0.0, 1.0)
+    ax.set_xlim(x[0], x[-1])
+    ax.set_title(title)
+    ax.set_ylabel("Posterior probability")
+    ax.legend(frameon=False, fontsize=8, loc="upper right")
+
+
+def _change_direction_title(
+    direction: str,
+    engaged_label: str,
+    disengaged_label: str,
+) -> str:
+    if direction == "into_engaged":
+        return f"{disengaged_label} -> {engaged_label}"
+    if direction == "out_of_engaged":
+        return f"{engaged_label} -> {disengaged_label}"
+    return direction.replace("_", " ").title()
 
 
 def plot_state_accuracy(
@@ -125,7 +499,7 @@ def plot_state_accuracy(
         .round(1)
     )
 
-    fig, ax = plt.subplots(figsize=(2 + len(x_labels) * 1.0, 4.5))
+    fig, ax = plt.subplots(figsize=(4, 4))
     rng = np.random.default_rng(42)
     for li, lbl in enumerate(x_labels):
         rows = df_acc[df_acc["label"] == lbl]["acc"].dropna().values
@@ -173,10 +547,93 @@ def plot_state_accuracy(
     ax.set_xlabel("State")
     ax.set_ylabel("Accuracy (%)")
     ax.set_ylim(max(0.0, chance_level - 10), 105)
-    ax.set_title(f"Per-state accuracy  (K={first_view.K}, posterior ≥ {thresh}, {stim_label})")
     fig.tight_layout()
     sns.despine(fig=fig)
     return fig, tbl
+
+
+def plot_state_posterior_count_kde(
+    views: dict,
+    *,
+    bins: int = 20,
+    thresh: float | None = None,
+) -> plt.Figure:
+    subjects = list(views.keys())
+    if not subjects:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    first_view = views[subjects[0]]
+    _, labels, colors = _state_labels_and_colors(first_view)
+    posterior_by_state: dict[str, list[np.ndarray]] = {lbl: [] for lbl in labels}
+    edges = np.linspace(0.0, 1.0, int(bins) + 1)
+    bin_width = float(edges[1] - edges[0]) if len(edges) > 1 else 1.0
+
+    for subj in subjects:
+        view = views[subj]
+        P = np.asarray(view.smoothed_probs, dtype=float)
+        if P.ndim != 2:
+            continue
+
+        for k in view.state_idx_order:
+            lbl = view.state_name_by_idx.get(k, f"State {k}")
+            vals = np.clip(P[:, k], 0.0, 1.0)
+            vals = vals[np.isfinite(vals)]
+            if vals.size == 0:
+                continue
+
+            posterior_by_state.setdefault(lbl, []).append(vals)
+
+    if not any(posterior_by_state.values()):
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+
+    legend_handles = []
+    for lbl, color in zip(labels, colors):
+        posterior_vals = posterior_by_state.get(lbl, [])
+        posterior_vals = np.concatenate(posterior_vals) if posterior_vals else np.array([], dtype=float)
+        if posterior_vals.size <= 1 or np.unique(posterior_vals).size <= 1:
+            continue
+
+        weights = np.full(posterior_vals.shape, 100.0 / float(posterior_vals.size))
+        ax.hist(
+            posterior_vals,
+            bins=edges,
+            weights=weights,
+            histtype="stepfilled",
+            color=color,
+            alpha=0.18,
+            edgecolor="none",
+        )
+        ax.hist(
+            posterior_vals,
+            bins=edges,
+            weights=weights,
+            histtype="step",
+            color=color,
+            linewidth=2.0,
+        )
+
+        legend_handles.append(Line2D([0], [0], color=color, lw=2.0, label=lbl))
+
+    if thresh is not None:
+        ax.axvline(thresh, color="black", linestyle="--", linewidth=1.0, alpha=0.6)
+
+    ax.set_xlim(0.0, 1.0)
+    ax.set_xlabel("Posterior probability")
+    ax.set_ylabel("Trials (%)")
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+
+    if legend_handles:
+        ax.legend(handles=legend_handles, loc="upper right", frameon=False, fontsize=8)
+
+    sns.despine(fig=fig)
+    fig.tight_layout()
+    return fig
 
 
 def plot_session_trajectories(
@@ -242,6 +699,165 @@ def plot_session_trajectories(
     return fig
 
 
+def plot_change_triggered_posteriors_summary(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    switch_posterior_threshold: float | None = None,
+    window: int = 15,
+) -> plt.Figure:
+    subjects = list(views.keys())
+    directions = ("into_engaged", "out_of_engaged")
+    if not subjects:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    traces_by_subject = _change_triggered_traces(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
+        window=window,
+    )
+    if not traces_by_subject:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No confident changes", ha="center", va="center")
+        ax.axis("off")
+        return fig
+
+    first_view = views[subjects[0]]
+    engaged_label, disengaged_label, engaged_color, disengaged_color = _change_posterior_meta(first_view)
+    x = np.arange(-window, window + 1)
+
+    fig, axes = plt.subplots(1, len(directions), figsize=(14.0, 4.4), squeeze=False, sharex=True, sharey=True)
+    for ax, direction in zip(axes[0], directions, strict=False):
+        engaged_subject_means = []
+        disengaged_subject_means = []
+        total_changes = 0
+        for subj in subjects:
+            traces = traces_by_subject.get(subj, {}).get(direction)
+            if traces is None:
+                continue
+            engaged_subject_means.append(np.nanmean(traces["engaged"], axis=0))
+            disengaged_subject_means.append(np.nanmean(traces["disengaged"], axis=0))
+            total_changes += int(traces["engaged"].shape[0])
+
+        direction_title = _change_direction_title(direction, engaged_label, disengaged_label)
+        if not engaged_subject_means:
+            ax.text(0.5, 0.5, "No confident changes", ha="center", va="center")
+            ax.set_title(direction_title)
+            ax.set_ylim(0.0, 1.0)
+            ax.set_xlim(x[0], x[-1])
+            continue
+
+        engaged_arr = np.vstack(engaged_subject_means)
+        disengaged_arr = np.vstack(disengaged_subject_means)
+        engaged_mean, engaged_sem = _nanmean_sem(engaged_arr)
+        disengaged_mean, disengaged_sem = _nanmean_sem(disengaged_arr)
+        _plot_change_triggered_mean(
+            ax,
+            x,
+            engaged_mean,
+            engaged_sem,
+            disengaged_mean,
+            disengaged_sem,
+            engaged_label=engaged_label,
+            disengaged_label=disengaged_label,
+            engaged_color=engaged_color,
+            disengaged_color=disengaged_color,
+            title=f"{direction_title}  (n={len(engaged_subject_means)} subjects, {total_changes} changes)",
+        )
+        ax.set_xlabel("Trials relative to confident state change")
+
+    if len(directions) > 1:
+        axes[0, 1].set_ylabel("")
+    axes[0, 0].set_xlabel("Trials relative to confident state change")
+    if len(directions) > 1:
+        axes[0, 1].set_xlabel("Trials relative to confident state change")
+    sns.despine(fig=fig)
+    fig.tight_layout()
+    return fig
+
+
+def plot_change_triggered_posteriors_by_subject(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    switch_posterior_threshold: float | None = None,
+    window: int = 15,
+) -> plt.Figure:
+    subjects = list(views.keys())
+    directions = ("into_engaged", "out_of_engaged")
+    if not subjects:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    traces_by_subject = _change_triggered_traces(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
+        window=window,
+    )
+
+    fig, axes = plt.subplots(
+        len(subjects),
+        len(directions),
+        figsize=(14.0, max(3.0, 2.8 * len(subjects))),
+        squeeze=False,
+        sharex=True,
+        sharey=True,
+    )
+    x = np.arange(-window, window + 1)
+
+    for i, subj in enumerate(subjects):
+        view = views[subj]
+        engaged_label, disengaged_label, engaged_color, disengaged_color = _change_posterior_meta(view)
+        for j, direction in enumerate(directions):
+            ax = axes[i, j]
+            traces = traces_by_subject.get(subj, {}).get(direction)
+            direction_title = _change_direction_title(direction, engaged_label, disengaged_label)
+            if traces is None:
+                ax.text(0.5, 0.5, "No confident changes", ha="center", va="center")
+                ax.set_title(f"Subject {subj} — {direction_title}")
+                ax.set_ylim(0.0, 1.0)
+                ax.set_xlim(x[0], x[-1])
+                continue
+
+            engaged_mean, engaged_sem = _nanmean_sem(traces["engaged"])
+            disengaged_mean, disengaged_sem = _nanmean_sem(traces["disengaged"])
+            _plot_change_triggered_mean(
+                ax,
+                x,
+                engaged_mean,
+                engaged_sem,
+                disengaged_mean,
+                disengaged_sem,
+                engaged_label=engaged_label,
+                disengaged_label=disengaged_label,
+                engaged_color=engaged_color,
+                disengaged_color=disengaged_color,
+                title=f"Subject {subj} — {direction_title}  (n={traces['engaged'].shape[0]} changes)",
+            )
+
+    for j in range(len(directions)):
+        axes[-1, j].set_xlabel("Trials relative to confident state change")
+    if len(directions) > 1:
+        for i in range(len(subjects)):
+            axes[i, 1].set_ylabel("")
+    sns.despine(fig=fig)
+    fig.tight_layout()
+    return fig
+
+
 def plot_state_occupancy(
     views: dict,
     trial_df,
@@ -297,17 +913,7 @@ def plot_state_occupancy(
         ax.set_ylim(0, 1)
 
     def _count_switches(p_s: np.ndarray) -> int:
-        if len(p_s) == 0:
-            return 0
-        if switch_posterior_threshold is None:
-            v = np.argmax(p_s, axis=1)
-            return int(np.sum(np.diff(v) != 0))
-
-        keep = np.max(p_s, axis=1) >= switch_posterior_threshold
-        if np.count_nonzero(keep) <= 1:
-            return 0
-        v_conf = np.argmax(p_s[keep], axis=1)
-        return int(np.sum(np.diff(v_conf) != 0))
+        return int(len(_confident_change_event_indices(p_s, switch_posterior_threshold)))
 
     def _plot_switch_hist(ax, changes_per_sess: list[int], title: str) -> None:
         xlabel = "# state switches / session"
@@ -442,6 +1048,299 @@ def plot_state_occupancy(
     return fig
 
 
+def _prepare_state_dwell_entries(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str,
+    sort_col: str | Sequence[str] | None,
+    max_dwell: int | None,
+    ci_level: float,
+) -> tuple[list[dict], int, float, int]:
+    if not views:
+        raise ValueError("No views provided.")
+    if not 0.0 < ci_level < 1.0:
+        raise ValueError("ci_level must be between 0 and 1.")
+
+    raw_entries: list[dict] = []
+    max_states = 0
+    bin_width = 10
+    inferred_max_dwell = 0
+
+    for subj, view in views.items():
+        A = _resolve_static_transition_matrix(view)
+        if A is None:
+            continue
+
+        df_sub = _sort_subject_trials(_subject_df(trial_df, subj), session_col, sort_col)
+        if df_sub is None or session_col not in df_sub.columns:
+            continue
+
+        session_arr = np.asarray(df_sub[session_col])
+        map_states = np.asarray(view.map_states(), dtype=int)
+        T = min(len(session_arr), len(map_states))
+        if T == 0:
+            continue
+
+        session_arr = session_arr[:T]
+        map_states = map_states[:T]
+        dwell_by_state = _state_dwell_lengths(map_states, session_arr)
+        rank_order, _labels, colors = _state_labels_and_colors(view)
+        _, session_counts = np.unique(session_arr, return_counts=True)
+        if session_counts.size > 0:
+            inferred_max_dwell = max(inferred_max_dwell, int(np.max(session_counts)))
+
+        max_states = max(max_states, len(rank_order))
+        raw_entries.append(
+            {
+                "subject": subj,
+                "rank_order": [int(k) for k in rank_order],
+                "colors": colors,
+                "dwell_by_state": dwell_by_state,
+                "A": A,
+            }
+        )
+
+    if max_dwell is None:
+        max_dwell = inferred_max_dwell
+    max_dwell = int(max_dwell)
+    if max_dwell < 1:
+        raise ValueError("max_dwell must be at least 1.")
+
+    subject_entries: list[dict] = []
+    y_max = 0.0
+    for entry in raw_entries:
+        panels: list[dict] = []
+        for col_idx, state_idx in enumerate(entry["rank_order"]):
+            dwell_lengths = np.asarray(entry["dwell_by_state"].get(int(state_idx), []), dtype=int)
+            centers, predicted, empirical, yerr = _binned_dwell_summary(
+                float(entry["A"][int(state_idx), int(state_idx)]),
+                dwell_lengths,
+                max_dwell=max_dwell,
+                bin_width=bin_width,
+                confidence_level=ci_level,
+            )
+            panels.append(
+                {
+                    "title": f"state {col_idx + 1}",
+                    "color": entry["colors"][col_idx],
+                    "x": centers,
+                    "self_prob": float(entry["A"][int(state_idx), int(state_idx)]),
+                    "dwell_lengths": dwell_lengths,
+                    "predicted": predicted,
+                    "empirical": empirical,
+                    "yerr": yerr,
+                    "n_runs": int(dwell_lengths.size),
+                }
+            )
+            y_max = max(
+                y_max,
+                float(np.max(predicted)),
+                float(np.max(empirical)),
+                float(np.max(empirical + yerr[1])),
+            )
+        subject_entries.append({"subject": entry["subject"], "panels": panels})
+
+    if not subject_entries:
+        raise ValueError(
+            "No subjects with both trial data and a homogeneous transition matrix were found."
+        )
+
+    resolved_y_max = float(y_max) if y_max > 0 else 1.0
+    return subject_entries, max_states, resolved_y_max, max_dwell
+
+
+def _draw_state_dwell_panel(
+    ax,
+    panel: dict,
+    *,
+    max_dwell: int,
+    y_max: float,
+    show_title: bool,
+) -> None:
+    ax.plot(
+        panel["x"],
+        panel["predicted"],
+        color=panel["color"],
+        lw=2.6,
+        marker="o",
+        ms=5.5,
+    )
+    ax.errorbar(
+        panel["x"],
+        panel["empirical"],
+        yerr=panel["yerr"],
+        color=panel["color"],
+        lw=2.4,
+        linestyle="--",
+        marker="o",
+        ms=5.5,
+        capsize=0,
+        elinewidth=2.2,
+    )
+    if show_title:
+        ax.set_title(panel["title"], color=panel["color"], fontsize=18, pad=14)
+    ax.set_xlim(0, max_dwell)
+    ax.set_ylim(0.0, 1.08 * y_max)
+    ax.set_xticks([0, max_dwell // 3, (2 * max_dwell) // 3, max_dwell])
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+
+
+def _attach_state_dwell_axis_labels(fig, axes, *, max_states: int, max_dwell: int) -> None:
+    fig.supylabel("frac. dwell times in state")
+    fig.supxlabel("state dwell time\n# trials")
+    legend_handles = [
+        Line2D([0], [0], color="black", lw=2.6, linestyle="-", label="predicted"),
+        Line2D([0], [0], color="black", lw=2.4, linestyle="--", marker="o", ms=5.5, label="empirical"),
+    ]
+    legend_ax = axes[0, min(1, max_states - 1)]
+    legend_ax.legend(handles=legend_handles, loc="upper right", frameon=False)
+
+
+def plot_state_dwell_times_by_subject(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+) -> plt.Figure:
+    subject_entries, max_states, y_max, resolved_max_dwell = _prepare_state_dwell_entries(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+    fig, axes = plt.subplots(
+        len(subject_entries),
+        max_states,
+        figsize=(4.1 * max_states, 3.1 * len(subject_entries)),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+
+    for row_idx, entry in enumerate(subject_entries):
+        for col_idx in range(max_states):
+            ax = axes[row_idx, col_idx]
+            if col_idx >= len(entry["panels"]):
+                ax.set_visible(False)
+                continue
+
+            _draw_state_dwell_panel(
+                ax,
+                entry["panels"][col_idx],
+                max_dwell=resolved_max_dwell,
+                y_max=y_max,
+                show_title=(len(subject_entries) == 1 or row_idx == 0),
+            )
+            if len(subject_entries) > 1 and col_idx == 0:
+                ax.set_ylabel(entry["subject"])
+
+    _attach_state_dwell_axis_labels(fig, axes, max_states=max_states, max_dwell=resolved_max_dwell)
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
+    sns.despine(fig=fig)
+    return fig
+
+
+def plot_state_dwell_times_summary(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+) -> plt.Figure:
+    subject_entries, max_states, y_max, resolved_max_dwell = _prepare_state_dwell_entries(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+    fig, axes = plt.subplots(
+        1,
+        max_states,
+        figsize=(4.1 * max_states, 3.3),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+
+    for col_idx in range(max_states):
+        ax = axes[0, col_idx]
+        available_panels = [
+            entry["panels"][col_idx]
+            for entry in subject_entries
+            if col_idx < len(entry["panels"])
+        ]
+        if not available_panels:
+            ax.set_visible(False)
+            continue
+
+        predicted_stack = np.vstack([panel["predicted"] for panel in available_panels])
+        pooled_dwell_lengths = np.concatenate(
+            [np.asarray(panel["dwell_lengths"], dtype=int) for panel in available_panels],
+            axis=0,
+        )
+        pooled_weights = np.asarray([panel["n_runs"] for panel in available_panels], dtype=float)
+        if not np.any(pooled_weights > 0):
+            pooled_weights = np.ones(len(available_panels), dtype=float)
+        _, _, empirical_pooled, yerr_pooled = _binned_dwell_summary(
+            float(np.average([panel["self_prob"] for panel in available_panels], weights=pooled_weights)),
+            pooled_dwell_lengths,
+            max_dwell=resolved_max_dwell,
+            bin_width=10,
+            confidence_level=ci_level,
+        )
+        summary_panel = {
+            "title": available_panels[0]["title"],
+            "color": available_panels[0]["color"],
+            "x": available_panels[0]["x"],
+            "predicted": np.average(predicted_stack, axis=0, weights=pooled_weights),
+            "empirical": empirical_pooled,
+            "yerr": yerr_pooled,
+        }
+        _draw_state_dwell_panel(
+            ax,
+            summary_panel,
+            max_dwell=resolved_max_dwell,
+            y_max=y_max,
+            show_title=True,
+        )
+
+    _attach_state_dwell_axis_labels(fig, axes, max_states=max_states, max_dwell=resolved_max_dwell)
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
+    sns.despine(fig=fig)
+    return fig
+
+
+def plot_state_dwell_times(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+) -> plt.Figure:
+    return plot_state_dwell_times_by_subject(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+
 def plot_session_deepdive(
     views: dict,
     trial_df,
@@ -449,6 +1348,8 @@ def plot_session_deepdive(
     sess,
     *,
     session_col: str = "session",
+    sort_col: str | Sequence[str] | None = None,
+    switch_posterior_threshold: float | None = None,
     performance_candidates: Sequence[str] = ("correct_bool", "performance"),
     stim_candidates: Sequence[str] = ("stimd_n", "ILD", "stimulus"),
     response_candidates: Sequence[str] = ("response", "Choice"),
@@ -461,15 +1362,28 @@ def plot_session_deepdive(
         sess = int(sess)
     except (TypeError, ValueError):
         pass
+    if switch_posterior_threshold is not None:
+        switch_posterior_threshold = float(switch_posterior_threshold)
+        if not 0.0 <= switch_posterior_threshold <= 1.0:
+            raise ValueError("switch_posterior_threshold must be between 0 and 1.")
 
     df_sub_all = _subject_df(trial_df, subj)
     if _is_polars_df(df_sub_all):
-        sess_row_indices = df_sub_all.with_row_index("_r").filter(pl.col(session_col) == sess)["_r"].to_numpy()
-        df_sess = df_sub_all.filter(pl.col(session_col) == sess)
+        df_sub_all = df_sub_all.with_row_index("_align_idx")
+        df_sub_all = _sort_subject_trials(df_sub_all, session_col, sort_col)
+        sess_row_indices = (
+            df_sub_all.filter(pl.col(session_col) == sess)["_align_idx"].to_numpy()
+        )
+        df_sess = df_sub_all.filter(pl.col(session_col) == sess).drop("_align_idx")
     else:
         df_sub_all = df_sub_all.reset_index(drop=True)
-        sess_row_indices = df_sub_all.index[df_sub_all[session_col] == sess].to_numpy()
-        df_sess = df_sub_all[df_sub_all[session_col] == sess]
+        df_sub_all["_align_idx"] = np.arange(len(df_sub_all), dtype=int)
+        df_sub_all = _sort_subject_trials(df_sub_all, session_col, sort_col)
+        sess_row_indices = np.asarray(
+            df_sub_all.loc[df_sub_all[session_col] == sess, "_align_idx"],
+            dtype=int,
+        )
+        df_sess = df_sub_all[df_sub_all[session_col] == sess].drop(columns="_align_idx")
 
     perf_col = _pick_col(df_sess.columns, performance_candidates)
     stim_col = _pick_col(df_sess.columns, stim_candidates)
@@ -482,6 +1396,8 @@ def plot_session_deepdive(
     probs = probs_all[sess_row_indices]
     T = min(probs.shape[0], len(hits))
     probs, hits, stim, response = probs[:T], hits[:T], stim[:T], response[:T]
+    change_idx = _confident_change_event_indices(probs, switch_posterior_threshold)
+    n_changes = int(len(change_idx))
     x = np.arange(T)
 
     X_sess = np.asarray(views[subj].X)[sess_row_indices][:T]
@@ -545,6 +1461,20 @@ def plot_session_deepdive(
         lw=2,
         label=f"P({views[subj].state_name_by_idx.get(engaged_k, 'Engaged')})",
     )
+    if change_idx.size:
+        change_label = "State change"
+        if switch_posterior_threshold is not None:
+            change_label = "Confident state change"
+        ax1.scatter(
+            x[change_idx],
+            probs[change_idx, engaged_k],
+            s=34,
+            color="crimson",
+            edgecolors="white",
+            linewidths=0.8,
+            zorder=6,
+            label=change_label,
+        )
 
     for resp, color in choice_colors.items():
         mask = response == resp
@@ -563,7 +1493,10 @@ def plot_session_deepdive(
 
     ax1.set_ylim(0, 1)
     ax1.set_ylabel("State probability")
-    ax1.set_title(f"Subject {subj}  —  session {sess}  ({T} trials)")
+    title = f"Subject {subj}  —  session {sess}  ({T} trials, {n_changes} state changes)"
+    if switch_posterior_threshold is not None:
+        title += f"\nconfident MAP posterior ≥ {switch_posterior_threshold:.2f}"
+    ax1.set_title(title)
 
     ax1r = ax1.twinx()
     ax1r.plot(x, rolling_acc, color="black", lw=1.8, linestyle="-", alpha=0.7, label="Rolling accuracy (5 trials)")

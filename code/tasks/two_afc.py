@@ -9,6 +9,12 @@ import pandas as pd
 import jax.numpy as jnp
 import polars as pl
 
+from tasks.fitted_regressors import (
+    FittedWeightRegressorSpec,
+    mean_feature_weights_from_fit,
+    resolved_source_features,
+    weighted_sum_regressor,
+)
 from tasks import TaskAdapter, _register
 
 # Default experiments to keep (avoids habituation / drug sessions)
@@ -18,6 +24,7 @@ _STIM_ABS_COL_PREFIX = "stim_"
 _ALL_2AFC_EMISSION_COLS: list[str] = [
     "bias",
     "stim_vals",
+    "stim_param",
     "stim_strength",
     "at_choice",
     "at_error",
@@ -40,6 +47,17 @@ _ALL_2AFC_TRANSITION_COLS: list[str] = [
     "cumulative_reward",
 ]
 _AVAILABLE_2AFC_TRANSITION_COLS: list[str] = list(_ALL_2AFC_TRANSITION_COLS)
+_STIM_PARAM_COL = "stim_param"
+_STIM_PARAM_SPEC = FittedWeightRegressorSpec(
+    target_name="stim_param",
+    fit_task="2AFC",
+    fit_model_kind="glm",
+    fit_model_id="one hot lapses",
+    arrays_suffix="glm_arrays.npz",
+    exclude_features=("bias", "stim_0"),
+    excluded_subjects=("325", "325.0"),
+    sign=-1.0,
+)
 
 
 def _sf_sort_key(name: str) -> tuple[int, str]:
@@ -76,6 +94,34 @@ def _infer_stim_abs_cols_from_df(df: pl.DataFrame | pd.DataFrame) -> list[str]:
     return [f"{_STIM_ABS_COL_PREFIX}{stim_abs}" for stim_abs in stim_abs_levels]
 
 
+def _stim_param_weight_map() -> dict[int, float]:
+    """Return pooled one-hot stimulus weights used to build ``stim_param``."""
+    feature_weights = mean_feature_weights_from_fit(_STIM_PARAM_SPEC)
+    return {
+        int(feat.removeprefix(_STIM_ABS_COL_PREFIX)): weight
+        for feat, weight in feature_weights.items()
+        if feat.startswith(_STIM_ABS_COL_PREFIX)
+        and feat.removeprefix(_STIM_ABS_COL_PREFIX).isdigit()
+    }
+
+
+def _build_stim_param(part: pd.DataFrame, stim_abs_levels: list[int]) -> np.ndarray:
+    """Return the pooled one-hot stimulus contribution for each trial."""
+    required_features = {
+        f"{_STIM_ABS_COL_PREFIX}{stim_abs}"
+        for stim_abs in stim_abs_levels
+        if stim_abs != 0
+    }
+    source_features = set(resolved_source_features(_STIM_PARAM_SPEC))
+    missing = sorted(required_features - source_features)
+    if missing:
+        raise ValueError(
+            "stim_param is missing pooled weights for absolute ILD levels "
+            f"{missing}. Available fitted features: {sorted(source_features)}"
+        )
+    return weighted_sum_regressor(part, _STIM_PARAM_SPEC, dtype=np.float32)
+
+
 @_register(["two_afc", "2afc"])
 class TwoAFCAdapter(TaskAdapter):
     """Adapter for the binary 2-AFC human data (Alexis)."""
@@ -100,6 +146,8 @@ class TwoAFCAdapter(TaskAdapter):
     _SCORING_OPTIONS: dict = {
         "stim_vals (-w)": [("stim_vals", "neg")],
         "stim_vals (|w|)": [("stim_vals", "abs")],
+        "stim_param (-w)": [("stim_param", "neg")],
+        "stim_param (|w|)": [("stim_param", "abs")],
         "at_choice (|w|)": [("at_choice", "abs")],
         "wsls (|w|)": [("wsls", "abs")],
         "bias (|w|)": [("bias", "abs")],
@@ -151,6 +199,7 @@ class TwoAFCAdapter(TaskAdapter):
                         default=0.0,
                     ).astype(np.float32)
                 part[f"{_STIM_ABS_COL_PREFIX}{stim_abs}"] = stim_col
+            part[_STIM_PARAM_COL] = _build_stim_param(part, stim_abs_levels)
 
             existing_sf_cols = [
                 c for c in part.columns if str(c).startswith(_SF_COL_PREFIX)
@@ -270,8 +319,9 @@ class TwoAFCAdapter(TaskAdapter):
     # ── column defaults ─────────────────────────────────────────────────────
 
     def default_emission_cols(self) -> List[str]:
-        # Exclude stim_strength (multi-column) by default; include sf_ cols at runtime
-        return [c for c in _ALL_2AFC_EMISSION_COLS if c != "stim_strength"]
+        # Exclude stim_strength (multi-column) and stim_param (alternate stimulus
+        # encoding) by default; include sf_ cols at runtime.
+        return [c for c in _ALL_2AFC_EMISSION_COLS if c not in {"stim_strength", _STIM_PARAM_COL}]
 
     def default_transition_cols(self) -> List[str]:
         return list(_ALL_2AFC_TRANSITION_COLS)
@@ -380,14 +430,56 @@ class TwoAFCAdapter(TaskAdapter):
     ) -> tuple:
         """2AFC engagement scoring.
 
-        K=2: Engaged = argmax(-stim_vals raw), Disengaged = the other.
-        K=3: Engaged = argmax(-stim_vals raw); the remaining two are split
+        K=2: Engaged = argmax(selected score), Disengaged = the other.
+        K=3: Engaged = argmax(selected score); the remaining two are split
              by bias weight: min(displayed bias) = "Biased L",
              max(displayed bias) = "Biased R".
         K>3: remaining states labelled "Disengaged 1", "Disengaged 2", ...
-             ordered by descending -stim_vals score.
+             ordered by descending selected score.
         """
         import numpy as np
+
+        pairs = self._SCORING_OPTIONS.get(
+            getattr(self, "scoring_key", "stim_vals (-w)"),
+            self._SCORING_OPTIONS["stim_vals (-w)"],
+        )
+
+        def _score_states(
+            W_np: np.ndarray,
+            feat_names: list[str],
+            *,
+            stim: str = "stim_vals",
+        ) -> np.ndarray:
+            name2fi_local = {n: i for i, n in enumerate(feat_names)}
+            scores = np.zeros(W_np.shape[0], dtype=float)
+            n_terms = 0
+            for feat_name, mode in pairs:
+                fi = name2fi_local.get(feat_name)
+                if fi is None:
+                    continue
+                vals = W_np[:, 0, fi].astype(float)
+                if mode == "neg":
+                    vals = -vals
+                elif mode == "abs":
+                    vals = np.abs(vals)
+                elif mode == "pos":
+                    vals = vals
+                else:
+                    raise ValueError(f"Unknown 2AFC scoring mode {mode!r}.")
+                scores += vals
+                n_terms += 1
+
+            if n_terms > 0:
+                return scores / n_terms
+
+            stim_candidates = [stim]
+            if stim != "stim_vals":
+                stim_candidates.append("stim_vals")
+            for stim_name in stim_candidates:
+                stim_fi_local = name2fi_local.get(stim_name)
+                if stim_fi_local is not None:
+                    return -W_np[:, 0, stim_fi_local]
+            return -W_np[:, 0, :].mean(axis=1)
 
         base_feat = list(names.get("X_cols", []))
         state_labels: dict = {}
@@ -404,14 +496,10 @@ class TwoAFCAdapter(TaskAdapter):
             W       = np.asarray(W)   # (K, 1, M)
             name2fi = {n: i for i, n in enumerate(feat)}
 
-            # displayed weight = -raw; argmax(-raw) = most stimulus-following
-            stim_fi = name2fi.get("stim_vals")
-            if stim_fi is not None:
-                stim_scores = -W[:, 0, stim_fi]
-            else:
-                stim_scores = -W[:, 0, :].mean(axis=1)  # fallback
+            selected_stim = "stim_param" if getattr(self, "scoring_key", "").startswith("stim_param") else "stim_vals"
+            state_scores = _score_states(W, feat, stim=selected_stim)
 
-            engaged_k = int(np.argmax(stim_scores))
+            engaged_k = int(np.argmax(state_scores))
             others    = [k for k in range(K) if k != engaged_k]
 
             labels: dict = {engaged_k: "Engaged"}
@@ -434,8 +522,8 @@ class TwoAFCAdapter(TaskAdapter):
                 order = [engaged_k, biased_l, biased_r]
 
             else:
-                # K>3: rank remaining by stim score descending
-                others_sorted = sorted(others, key=lambda k: stim_scores[k], reverse=True)
+                # K>3: rank remaining by selected score descending
+                others_sorted = sorted(others, key=lambda k: state_scores[k], reverse=True)
                 for dis, k in enumerate(others_sorted, start=1):
                     labels[k] = f"Disengaged {dis}"
                 order = [engaged_k] + others_sorted

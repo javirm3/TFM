@@ -23,12 +23,18 @@ from scipy.stats import t
 import paths
 from glmhmmt.model_plots import (
     _state_color,
-    plot_emission_weights,
-    plot_emission_weights_by_subject,
+    plot_emission_weights as _plot_emission_weights_generic,
+    plot_emission_weights_by_subject as _plot_emission_weights_by_subject_generic,
     plot_posterior_probs,
+    plot_change_triggered_posteriors_by_subject,
+    plot_change_triggered_posteriors_summary,
     plot_session_deepdive,
     plot_session_trajectories,
     plot_state_accuracy,
+    plot_state_dwell_times_by_subject,
+    plot_state_dwell_times_summary,
+    plot_state_dwell_times,
+    plot_state_posterior_count_kde,
     plot_state_occupancy,
     plot_transition_matrix,
     plot_transition_matrix_by_subject,
@@ -40,6 +46,185 @@ sns.set_style("white")
 
 with paths.CONFIG.open("rb") as f:
     cfg = tomllib.load(f)
+
+
+def _empty_plot(message: str = "No data") -> plt.Figure:
+    """Return a minimal placeholder figure for empty selections."""
+    fig, ax = plt.subplots()
+    ax.text(0.5, 0.5, message, ha="center", va="center")
+    ax.axis("off")
+    return fig
+
+
+def _resolve_emission_plot_inputs(
+    *,
+    views: Optional[dict] = None,
+    arrays_store: Optional[dict] = None,
+    state_labels: Optional[dict] = None,
+    names: Optional[dict] = None,
+    subjects: Optional[Sequence[str]] = None,
+) -> tuple[dict, dict, dict, list[str]]:
+    """Normalize either `views` or legacy arrays inputs for emission plots."""
+    if views is not None:
+        arrays_from_views: dict = {}
+        labels_from_views: dict = {}
+        feat_names: list[str] = []
+
+        for subj, view in views.items():
+            if view is None or getattr(view, "emission_weights", None) is None:
+                continue
+            arrays_from_views[subj] = {
+                "emission_weights": np.asarray(view.emission_weights),
+                "X_cols": list(getattr(view, "feat_names", []) or []),
+            }
+            labels_from_views[subj] = {int(k): lbl for k, lbl in view.state_name_by_idx.items()}
+            if not feat_names:
+                feat_names = list(getattr(view, "feat_names", []) or [])
+
+        return arrays_from_views, labels_from_views, {"X_cols": feat_names}, list(arrays_from_views.keys())
+
+    if arrays_store is None:
+        raise ValueError("Provide either `views` or `arrays_store` for emission plots.")
+    if state_labels is None:
+        raise ValueError("`state_labels` is required when `views` is not provided.")
+    if names is None:
+        raise ValueError("`names` is required when `views` is not provided.")
+
+    resolved_subjects = list(subjects) if subjects is not None else list(arrays_store.keys())
+    return arrays_store, state_labels, names, resolved_subjects
+
+
+def _infer_emission_K(
+    *,
+    views: Optional[dict] = None,
+    arrays_store: Optional[dict] = None,
+    subjects: Optional[Sequence[str]] = None,
+) -> int:
+    """Infer K from views or the first available emission-weight array."""
+    if views:
+        first_view = next(iter(views.values()), None)
+        if first_view is not None:
+            return int(first_view.K)
+
+    if arrays_store:
+        candidate_subjects = list(subjects) if subjects is not None else list(arrays_store.keys())
+        for subj in candidate_subjects:
+            subj_arrays = arrays_store.get(subj, {})
+            weights = subj_arrays.get("emission_weights")
+            if weights is not None:
+                return int(np.asarray(weights).shape[0])
+
+    raise ValueError("Could not infer `K` for emission plots; pass it explicitly.")
+
+
+def plot_emission_weights_by_subject(
+    views: Optional[dict] = None,
+    K: Optional[int] = None,
+    save_path=None,
+    *,
+    arrays_store: Optional[dict] = None,
+    state_labels: Optional[dict] = None,
+    names: Optional[dict] = None,
+    subjects: Optional[Sequence[str]] = None,
+) -> plt.Figure:
+    """Per-subject emission bars with either `views` or legacy arrays inputs."""
+    arrays_store, state_labels, names, subjects = _resolve_emission_plot_inputs(
+        views=views,
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+    if not subjects:
+        return _empty_plot()
+
+    K = int(K) if K is not None else _infer_emission_K(
+        views=views,
+        arrays_store=arrays_store,
+        subjects=subjects,
+    )
+    return _plot_emission_weights_by_subject_generic(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        K=K,
+        subjects=subjects,
+        save_path=save_path,
+    )
+
+
+def plot_emission_weights_summary(
+    views: Optional[dict] = None,
+    K: Optional[int] = None,
+    save_path=None,
+    *,
+    arrays_store: Optional[dict] = None,
+    state_labels: Optional[dict] = None,
+    names: Optional[dict] = None,
+    subjects: Optional[Sequence[str]] = None,
+) -> plt.Figure:
+    """Notebook-friendly high-level emission summary, aligned with 2AFC API."""
+    _ = save_path
+    arrays_store, state_labels, names, subjects = _resolve_emission_plot_inputs(
+        views=views,
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+    if not subjects:
+        return _empty_plot()
+
+    K = int(K) if K is not None else _infer_emission_K(
+        views=views,
+        arrays_store=arrays_store,
+        subjects=subjects,
+    )
+    fig_summary, fig_detail = _plot_emission_weights_generic(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        K=K,
+        subjects=subjects,
+    )
+    plt.close(fig_detail)
+    return fig_summary
+
+
+def plot_emission_weights(
+    views: Optional[dict] = None,
+    K: Optional[int] = None,
+    save_path=None,
+    *,
+    arrays_store: Optional[dict] = None,
+    state_labels: Optional[dict] = None,
+    names: Optional[dict] = None,
+    subjects: Optional[Sequence[str]] = None,
+):
+    """Emission summaries with `views` support and backward-compatible kwargs."""
+    _ = save_path
+    arrays_store, state_labels, names, subjects = _resolve_emission_plot_inputs(
+        views=views,
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+    if not subjects:
+        return _empty_plot(), _empty_plot()
+
+    K = int(K) if K is not None else _infer_emission_K(
+        views=views,
+        arrays_store=arrays_store,
+        subjects=subjects,
+    )
+    return _plot_emission_weights_generic(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        K=K,
+        subjects=subjects,
+    )
 
 
 def truncate_colormap(cmap_name, minval=0.2, maxval=0.9, n=256):

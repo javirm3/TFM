@@ -95,7 +95,7 @@ def _(mo):
 
 
 @app.cell
-def _(mo, task_name, ui_model_manager):
+def _(task_name, ui_model_manager):
     from scripts.fit_glmhmmt import generate_model_id as _gen_id
 
     class _V:
@@ -125,11 +125,6 @@ def _(mo, task_name, ui_model_manager):
     ui_cv_repeats = _V(_val.get("cv_repeats", 5))
     fit_clicks = _V(_val.get("run_fit_clicks", 0))
 
-    mo.vstack([
-        mo.md("### Model Configuration"),
-        ui_model_manager,
-        mo.md(f"**Hash:** `{current_hash}`"),
-    ])
     return (
         current_hash,
         fit_clicks,
@@ -144,6 +139,34 @@ def _(mo, task_name, ui_model_manager):
         ui_tau,
         ui_transition_cols,
     )
+
+
+@app.cell
+def _(current_hash, make_plot_saver, mo, paths, resolve_selected_model_id, task_name, ui_alias, ui_existing):
+    selected_model_id = resolve_selected_model_id(
+        current_hash,
+        ui_existing.value,
+        ui_alias.value,
+    )
+    save_plot = make_plot_saver(
+        mo,
+        results_dir=paths.RESULTS,
+        config_path=paths.CONFIG,
+        task_name=task_name,
+        model_id=selected_model_id,
+    )
+    return save_plot, selected_model_id
+
+
+@app.cell
+def _(current_hash, mo, save_plot, ui_model_manager):
+    mo.vstack([
+        mo.md("### Model Configuration"),
+        ui_model_manager,
+        save_plot.save_all_widget(label="Save all model plots"),
+        mo.md(f"**Hash:** `{current_hash}`"),
+    ])
+    return
 
 
 @app.cell
@@ -352,26 +375,17 @@ def _(mo, paths, pd, pl, plt, selected_model_id, sns, task_name, ui_cv_mode):
 @app.cell
 def _(
     adapter,
-    current_hash,
     df_all,
     load_fit_arrays,
     paths,
-    resolve_selected_model_id,
     task_name,
     ui_K,
-    ui_alias,
     ui_emission_cols,
-    ui_existing,
     ui_subjects,
     ui_transition_cols,
+    selected_model_id,
 ):
     K = ui_K.value
-
-    selected_model_id = resolve_selected_model_id(
-        current_hash,
-        ui_existing.value,
-        ui_alias.value,
-    )
     OUT = paths.RESULTS / "fits" / task_name / "glmhmmt" / selected_model_id
     arrays_store, names = load_fit_arrays(
         out_dir=OUT,
@@ -383,19 +397,8 @@ def _(
         transition_cols=list(ui_transition_cols.value),
         k=K,
     )
-    return K, arrays_store, names, selected_model_id
-
-
-@app.cell
-def _(make_plot_saver, mo, paths, selected_model_id, task_name):
-    save_plot = make_plot_saver(
-        mo,
-        results_dir=paths.RESULTS,
-        config_path=paths.CONFIG,
-        task_name=task_name,
-        model_id=selected_model_id,
-    )
-    return (save_plot,)
+    _ = names
+    return K, arrays_store
 
 
 @app.cell
@@ -415,14 +418,14 @@ def _(adapter, mo):
 
 @app.cell
 def _(K, adapter, arrays_store, build_views, mo, ui_scoring_key, ui_subjects):
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+    selected = [s for s in ui_subjects.value if s in arrays_store]
+    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
 
     if hasattr(adapter, "scoring_key"):
         adapter.scoring_key = ui_scoring_key.value
-    views = build_views(arrays_store, adapter, K, _selected)
+    views = build_views(arrays_store, adapter, K, selected)
     state_labels = {s: v.state_name_by_idx for s, v in views.items()}
-    return state_labels, views
+    return selected, state_labels, views
 
 
 @app.cell
@@ -445,82 +448,69 @@ def _(adapter, build_trial_and_weights_df, df_all, mo, views):
     return (trial_df,)
 
 
-@app.cell
-def _(
-    K,
-    arrays_store,
-    is_2afc,
-    mo,
-    names,
-    paths,
-    plots,
-    state_labels,
-    ui_subjects,
-    views,
-):
-    # ── emission weights ───────────────────────────────────────────────────────
-    #
-    # Agonist collapse: for symmetric L/R feature pairs, take
-    #   mean(W[k, 0, feat_L], W[k, 1, feat_R])  → one point per group per state
-    # For C features (no direct weight): -mean(W[k, 0, feat_C], W[k, 1, feat_C])
-    # For shared scalars: mean across both rows.
-    #
-    # Groups: (label, [(feat_name, class_idx), ...])
-    # class_idx int = direct weight; "neg_mean"/"mean" = derived from both rows
-    # Coherent = cue and choice on same side; Incoherent = opposite side
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
-    _save_path = paths.RESULTS / "plots/GLMHMMT/emissions_coefs.png"
-    _views_sel = {s: views[s] for s in _selected}
-    if is_2afc:
-        _fig_by_subject = plots.plot_emission_weights_by_subject(
-            views=_views_sel,
-            K=K,
-            save_path=_save_path,
-        )
-        _summary_figs = [plots.plot_emission_weights_summary(views=_views_sel, K=K)]
-    else:
-        _fig_by_subject = plots.plot_emission_weights_by_subject(
-            arrays_store=arrays_store,
-            state_labels=state_labels,
-            names=names,
-            K=K,
-            subjects=_selected,
-            save_path=_save_path,
-        )
-        _summary_figs = list(
-            plots.plot_emission_weights(
-                arrays_store=arrays_store,
-                state_labels=state_labels,
-                names=names,
-                K=K,
-                subjects=_selected,
-            )
-        )
-    mo.vstack([mo.md("### Emission weights"), mo.md("#### By subject"), _fig_by_subject, mo.md("#### Summary"), *_summary_figs])
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md("### Emission weights").center()
     return
 
 
 @app.cell
-def _(K, arrays_store, mo, plots, state_labels, ui_subjects):
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+def _(K, mo, paths, plots, save_plot, selected, views):
+    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
+    _save_path = paths.RESULTS / "plots/GLMHMMT/emissions_coefs.png"
+    _views_sel = {s: views[s] for s in selected}
+    _fig_by_subject = plots.plot_emission_weights_by_subject(
+        views=_views_sel,
+        K=K,
+        save_path=_save_path,
+    )
+
+    _subject_figs, _summary_figs = plots.plot_emission_weights(views=_views_sel, K=K)
+
+    mo.vstack([
+               # _subject_figs,
+               _summary_figs,
+               mo.hstack([save_plot(_summary_figs, f"Emission Weights lineplot",
+                                    stem=f"emissions_lineplot",), 
+                          save_plot(_summary_figs, f"Emission Weights boxplot",
+                                    stem=f"emissions_boxplot",),
+             ], gap = "15"), ], align="center")
+    return
+
+
+@app.cell
+def _(K, mo, plots, selected, views):
+    mo.stop(
+        not selected or getattr(views.get(selected[0]), "transition_weights", None) is None,
+        mo.md("No transition weights found — run the glmhmm-t fit first."),
+    )
+    _fig_line, _fig_box = plots.plot_transition_weights(views=views, K=K, subjects=selected)
+    mo.vstack([
+        mo.md("### Transition weights"),
+        mo.hstack([_fig_line, _fig_box]),
+    ])
+    return
+
+
+@app.cell
+def _(K, arrays_store, mo, plots, selected, state_labels):
+    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
     _fig_by_subject = plots.plot_transition_matrix_by_subject(
         arrays_store=arrays_store,
         state_labels=state_labels,
         K=K,
-        subjects=_selected,
+        subjects=selected,
     )
     _fig_summary = plots.plot_transition_matrix(
         arrays_store=arrays_store,
         state_labels=state_labels,
         K=K,
-        subjects=_selected,
+        subjects=selected,
     )
     mo.vstack([
         mo.md(f"### Transition matrices — bias-only component  (K={K})"),
         mo.md("#### By subject"),
-        _fig_by_subject,
+        # _fig_by_subject,
         mo.md("#### Summary"),
         _fig_summary,
     ])
@@ -1037,21 +1027,6 @@ def _(
 
 
 @app.cell
-def _(K, mo, plots, ui_subjects, views):
-    _selected = [s for s in ui_subjects.value if s in views]
-    mo.stop(
-        not _selected or getattr(views.get(_selected[0]), "transition_weights", None) is None,
-        mo.md("No transition weights found — run the glmhmm-t fit first."),
-    )
-    _fig_line, _fig_box = plots.plot_transition_weights(views=views, K=K, subjects=_selected)
-    mo.vstack([
-        mo.md("### Transition weights"),
-        mo.hstack([_fig_line, _fig_box]),
-    ])
-    return
-
-
-@app.cell
 def _(mo):
     from wigglystuff import TangleSlider
 
@@ -1078,10 +1053,25 @@ def _(THRESH_ui, adapter, mo, plots, trial_df, ui_subjects, views):
         session_col=adapter.session_col,
         sort_col=adapter.sort_col,
     )
+    _fig_post = plots.plot_state_posterior_count_kde(
+        views={s: views[s] for s in _selected},
+        thresh=THRESH_ui.amount,
+    )
     mo.vstack([
-        mo.md("### Accuracy by state"),
-        _fig_acc,
-        mo.md(f"> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ {THRESH_ui}"),
+        mo.hstack([
+            mo.vstack([
+                mo.md("### Accuracy by state"),
+                _fig_acc,
+            ]),
+            mo.vstack([
+                mo.md("### Posterior histogram by state"),
+                _fig_post,
+            ]),
+        ], align="start"),
+        mo.md(
+            f"> **Accuracy**: **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ {THRESH_ui}. "
+            f"**Histogram**: pooled posterior percentages by state from `views`, using 0.05-wide posterior bins and the same threshold marked by the dashed line."
+        ),
         mo.md("**Trial counts & mean accuracy per label:**"),
         mo.plain_text(_tbl.to_string()),
     ])
@@ -1148,6 +1138,37 @@ def _(K, THRESH_ui, mo, plots, trial_df, ui_subjects_traj, views):
 
 
 @app.cell
+def _(K, THRESH_ui, mo, plots, trial_df, ui_subjects_traj, views):
+    _selected_change = [s for s in ui_subjects_traj.value if s in views]
+    mo.stop(not _selected_change, mo.md("Select subjects above."))
+    _views_sel = {s: views[s] for s in _selected_change}
+    _fig_change_summary = plots.plot_change_triggered_posteriors_summary(
+        views=_views_sel,
+        trial_df=trial_df,
+        session_col="session",
+        sort_col="trial_idx",
+        switch_posterior_threshold=THRESH_ui.amount,
+    )
+    _fig_change_by_subject = plots.plot_change_triggered_posteriors_by_subject(
+        views=_views_sel,
+        trial_df=trial_df,
+        session_col="session",
+        sort_col="trial_idx",
+        switch_posterior_threshold=THRESH_ui.amount,
+    )
+    mo.vstack([
+        mo.md(f"### e. Change-triggered posteriors  (K={K})"),
+        mo.md(
+            f"> Change events use the same confident MAP switch rule as the histogram above: posterior ≥ {THRESH_ui.amount:.2f}. "
+            "> Trial 0 is the later confident trial in each detected change, and the mean traces are split into non-engaged -> engaged versus engaged -> non-engaged."
+        ),
+        _fig_change_summary,
+        _fig_change_by_subject,
+    ], align="center")
+    return
+
+
+@app.cell
 def _(mo, ui_subjects, views):
     # ── Session deep-dive controls ─────────────────────────────────────────────
     _selected = sorted((s for s in ui_subjects.value if s in views), key=str)
@@ -1186,7 +1207,7 @@ def _(mo, pl, trial_df, ui_session_subj, views):
 
 
 @app.cell
-def _(K, mo, plots, trial_df, ui_session_id, ui_session_subj, views):
+def _(K, THRESH_ui, mo, plots, trial_df, ui_session_id, ui_session_subj, views):
     # ── Session deep-dive plot ─────────────────────────────────────────────────
     _subj = ui_session_subj.value
     mo.stop(
@@ -1202,6 +1223,7 @@ def _(K, mo, plots, trial_df, ui_session_id, ui_session_subj, views):
         sess=_sess,
         session_col="session",
         sort_col="trial_idx",
+        switch_posterior_threshold=THRESH_ui.amount,
     )
     mo.vstack([
         mo.md(f"### Session deep-dive  (K={K})"),

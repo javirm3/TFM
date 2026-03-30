@@ -97,6 +97,26 @@ options = get_task_options()
 | `label_states(arrays_store, names, K, subjects)` | Return task-specific state labels and state ordering. |
 | `cv_balance_labels(feature_df)` | Optional per-trial labels used for balanced cross-validation. |
 
+## State-assignment scoring convention
+
+Keep state-assignment scoring on the adapter via `_SCORING_OPTIONS` and
+`scoring_key`, rather than hardcoding it in notebooks. For the current binary
+2AFC-style default:
+
+```python
+_SCORING_OPTIONS: dict = {
+    "stim_vals (-w)": [("stim_vals", "neg")],
+    "stim_vals (|w|)": [("stim_vals", "abs")],
+    "at_choice (|w|)": [("at_choice", "abs")],
+    "wsls (|w|)": [("wsls", "abs")],
+    "bias (|w|)": [("bias", "abs")],
+}
+scoring_key: str = "stim_vals (-w)"
+```
+
+Other tasks can use task-appropriate scoring pairs, but the adapter should own
+the scoring rule and its default `scoring_key`.
+
 ### Typical use
 
 ```python

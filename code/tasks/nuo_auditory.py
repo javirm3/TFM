@@ -54,6 +54,15 @@ class NuoAuditoryAdapter(TaskAdapter):
     session_col: str = "session"
     psychometric_x_col: str = "total_evidence_strength"
 
+    _SCORING_OPTIONS: dict = {
+        "stim_vals (-w)": [("stim_vals", "neg")],
+        "stim_vals (|w|)": [("stim_vals", "abs")],
+        "at_choice (|w|)": [("at_choice", "abs")],
+        "wsls (|w|)": [("wsls", "abs")],
+        "bias (|w|)": [("bias", "abs")],
+    }
+    scoring_key: str = "stim_vals (-w)"
+
     def subject_filter(self, df: pl.DataFrame) -> pl.DataFrame:
         """Drop miss trials and add the canonical binary-task columns.
 

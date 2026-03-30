@@ -96,8 +96,16 @@ def _(mo):
     return get_last_fit_click, set_last_fit_click
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Configuration
+    """)
+    return
+
+
 @app.cell
-def _(mo, task_name, ui_model_manager):
+def _(task_name, ui_model_manager):
     from scripts.fit_glmhmm import generate_model_id as _gen_id
 
     class _V:
@@ -124,15 +132,6 @@ def _(mo, task_name, ui_model_manager):
     ui_cv_mode = _V(_val.get("cv_mode", "none"))
     ui_cv_repeats = _V(_val.get("cv_repeats", 5))
     fit_clicks = _val.get("run_fit_clicks", 0)
-
-    mo.vstack(
-        [
-            mo.md("### Configuration"),
-            ui_model_manager,
-            mo.md(f"**Current params hash:** `{current_hash}`"),
-        ],
-        align="center",
-    )
     return (
         current_hash,
         fit_clicks,
@@ -146,6 +145,45 @@ def _(mo, task_name, ui_model_manager):
         ui_subjects,
         ui_tau,
     )
+
+
+@app.cell
+def _(
+    current_hash,
+    make_plot_saver,
+    mo,
+    paths,
+    resolve_selected_model_id,
+    task_name,
+    ui_alias,
+    ui_existing,
+):
+    selected_model_id = resolve_selected_model_id(
+        current_hash,
+        ui_existing.value,
+        ui_alias.value,
+    )
+    save_plot = make_plot_saver(
+        mo,
+        results_dir=paths.RESULTS,
+        config_path=paths.CONFIG,
+        task_name=task_name,
+        model_id=selected_model_id,
+    )
+    return save_plot, selected_model_id
+
+
+@app.cell
+def _(current_hash, mo, save_plot, ui_model_manager):
+    mo.vstack(
+        [
+            ui_model_manager,
+            save_plot.save_all_widget(label="Save all model plots"),
+            mo.md(f"**Current params hash:** `{current_hash}`"),
+        ],
+        align="center",
+    )
+    return
 
 
 @app.cell
@@ -269,7 +307,7 @@ def _(
 
 
 @app.cell
-def _(OUT, mo, pd, pl, plt, sns, ui_cv_mode):
+def _(OUT, mo, pd, pl, plt, save_plot, sns, ui_cv_mode):
     import json
     mo.stop(ui_cv_mode.value == "none", mo.md(""))
 
@@ -337,8 +375,18 @@ def _(OUT, mo, pd, pl, plt, sns, ui_cv_mode):
         axes[ax_idx].set_xlabel("Subject / Repeat")
         axes[ax_idx].set_ylabel("Signed ILD")
 
-    plt.tight_layout()
-    plt.show()
+    fig.tight_layout()
+    mo.vstack(
+        [
+            fig,
+            save_plot(
+                fig,
+                "cv repeat diagnostics",
+                stem="cv_repeat_diagnostics",
+            ),
+        ],
+        align="center",
+    )
     # summary_cols = [
     #     "subject",
     #     "repeat_index",
@@ -354,25 +402,17 @@ def _(OUT, mo, pd, pl, plt, sns, ui_cv_mode):
 @app.cell
 def _(
     adapter,
-    current_hash,
     df_all,
     load_fit_arrays,
     paths,
-    resolve_selected_model_id,
+    selected_model_id,
     task_name,
     ui_K,
-    ui_alias,
     ui_emission_cols,
-    ui_existing,
     ui_subjects,
 ):
     K = ui_K.value
 
-    selected_model_id = resolve_selected_model_id(
-        current_hash,
-        ui_existing.value,
-        ui_alias.value,
-    )
     OUT = paths.RESULTS / "fits" / task_name / "glmhmm" / selected_model_id
     arrays_store, names = load_fit_arrays(
         out_dir=OUT,
@@ -383,19 +423,10 @@ def _(
         emission_cols=list(ui_emission_cols.value),
         k=K,
     )
-    return K, OUT, arrays_store, names, selected_model_id
 
-
-@app.cell
-def _(make_plot_saver, mo, paths, selected_model_id, task_name):
-    save_plot = make_plot_saver(
-        mo,
-        results_dir=paths.RESULTS,
-        config_path=paths.CONFIG,
-        task_name=task_name,
-        model_id=selected_model_id,
-    )
-    return (save_plot,)
+    selected = [s for s in ui_subjects.value if s in arrays_store]
+    _ = names
+    return K, OUT, arrays_store, selected
 
 
 @app.cell
@@ -415,23 +446,15 @@ def _(adapter, mo):
 
 
 @app.cell
-def _(K, adapter, arrays_store, build_views, mo, ui_scoring_key, ui_subjects):
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+def _(K, adapter, arrays_store, build_views, mo, selected, ui_scoring_key):
+    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
 
     if hasattr(adapter, "scoring_key"):
         adapter.scoring_key = ui_scoring_key.value
-    views = build_views(arrays_store, adapter, K, _selected)
+    views = build_views(arrays_store, adapter, K, selected)
+    editor_views = views.copy()
     state_labels = {s: v.state_name_by_idx for s, v in views.items()}
-    return state_labels, views
-
-
-@app.cell
-def _(K, adapter, arrays_store, build_views, ui_scoring_key):
-    if hasattr(adapter, "scoring_key"):
-        adapter.scoring_key = ui_scoring_key.value
-    editor_views = build_views(arrays_store, adapter, K, list(arrays_store.keys()))
-    return (editor_views,)
+    return editor_views, state_labels, views
 
 
 @app.cell
@@ -446,82 +469,116 @@ def _(adapter, build_trial_and_weights_df, df_all, mo, views):
     return (trial_df,)
 
 
-@app.cell
-def _(
-    K,
-    arrays_store,
-    is_2afc,
-    mo,
-    names,
-    paths,
-    plots,
-    state_labels,
-    ui_subjects,
-    views,
-):
-    # ── emission weights ───────────────────────────────────────────────────────
-    # W shape: (K, 2, n_features)  — axis-1: [L-choice=0, R-choice=1]
-    # Center = reference class (implicit weight 0).
-    #
-    # Agonist collapse: for symmetric L/R feature pairs, take
-    #   mean(W[k, 0, feat_L], W[k, 1, feat_R])  → one point per group per state
-    # For C features (no direct weight): -mean(W[k, 0, feat_C], W[k, 1, feat_C])
-    # For shared scalars: mean across both rows.
-    #
-    # Groups: (label, [(feat_name, class_idx), ...])
-    # class_idx int = direct weight; "neg_mean"/"mean" = derived from both rows
-    # Coherent = cue and choice on same side; Incoherent = opposite side
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Plots
+    """)
+    return
 
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
-    _save_path = paths.RESULTS / "plots/GLMHMM/emissions_coefs.png"
-    _views_sel = {s: views[s] for s in _selected}
-    if is_2afc:
-        _fig_by_subject = plots.plot_emission_weights_by_subject(
-            views=_views_sel,
-            K=K,
-            save_path=_save_path,
-        )
-        _summary_figs = [plots.plot_emission_weights_summary(views=_views_sel, K=K)]
-    else:
-        _fig_by_subject = plots.plot_emission_weights_by_subject(
-            arrays_store=arrays_store,
-            state_labels=state_labels,
-            names=names,
-            K=K,
-            subjects=_selected,
-            save_path=_save_path,
-        )
-        _summary_figs = list(
-            plots.plot_emission_weights(
-                arrays_store=arrays_store,
-                state_labels=state_labels,
-                names=names,
-                K=K,
-                subjects=_selected,
-            )
-        )
-    mo.vstack([mo.md("### Emission weights"), mo.md("#### By subject"), _fig_by_subject, mo.md("#### Summary"), *_summary_figs])
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Emission weights
+    """)
     return
 
 
 @app.cell
-def _(K, arrays_store, mo, plots, state_labels, ui_subjects):
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+def _(K, mo, paths, plots, save_plot, selected, views):
+    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
+    _save_path = paths.RESULTS / "plots/GLMHMM/emissions_coefs.png"
+    _views_sel = {s: views[s] for s in selected}
+    _fig_by_subject = plots.plot_emission_weights_by_subject(
+        views=_views_sel,
+        K=K,
+        save_path=_save_path,
+    )
+
+    _subject_figs, _summary_figs = plots.plot_emission_weights(views=_views_sel, K=K)
+
+    mo.vstack([
+               # _subject_figs,
+                save_plot(_subject_figs, f"Emission Weights",
+                                    stem=f"emissions_summary",),
+               _summary_figs,
+               mo.hstack([save_plot(_summary_figs, f"Emission Weights lineplot",
+                                    stem=f"emissions_lineplot",), 
+                          save_plot(_summary_figs, f"Emission Weights boxplot",
+                                    stem=f"emissions_boxplot",),
+             ], gap = "15"), ], align="center")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(rf"""
+    ### Transition matrices
+    """)
+    return
+
+
+@app.cell
+def _(K, arrays_store, mo, plots, save_plot, selected, state_labels):
+    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
     _fig_by_subject = plots.plot_transition_matrix_by_subject(
         arrays_store=arrays_store,
         state_labels=state_labels,
         K=K,
-        subjects=_selected,
+        subjects=selected,
     )
+
     _fig_summary = plots.plot_transition_matrix(
         arrays_store=arrays_store,
         state_labels=state_labels,
         K=K,
-        subjects=_selected,
+        subjects=selected,
     )
-    mo.vstack([mo.md(f"### Transition matrices  (K={K})"), mo.md("#### By subject"), _fig_by_subject, mo.md("#### Summary"), _fig_summary])
+    mo.vstack([_fig_summary, save_plot(_fig_summary, f"Mean Transition Matrix", stem=f"mean_transition_matrix",),], align="center")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### State dwell times
+    """)
+    return
+
+
+@app.cell
+def _(mo, plots, save_plot, selected, trial_df, views):
+    _views_sel = {s: views[s] for s in selected}
+    mo.stop(not _views_sel, mo.md("No fitted arrays found — run the fit first."))
+    _fig_dwell_summary = plots.plot_state_dwell_times_summary(
+        views=_views_sel,
+        trial_df=trial_df,
+        session_col="session",
+        sort_col="trial_idx",
+        ci_level=0.68,
+    )
+    _fig_dwell_by_subject = plots.plot_state_dwell_times_by_subject(
+        views=_views_sel,
+        trial_df=trial_df,
+        session_col="session",
+        sort_col="trial_idx",
+        ci_level=0.68,
+    )
+    mo.vstack(
+        [
+            _fig_dwell_summary,
+            save_plot(_fig_dwell_summary, "state dwell times summary", stem="state_dwell_times_summary"),
+            _fig_dwell_by_subject,
+            save_plot(_fig_dwell_by_subject, "state dwell times by subject", stem="state_dwell_times_by_subject"),
+            mo.md(
+                "> Solid line: geometric dwell-time prediction from the fitted self-transition probability "
+                "`A_kk`. Dashed line: empirical MAP dwell distribution in 10-trial bins. Error bars: 68% CI. "
+                "The summary and by-subject plots share the same y-limit, computed from the by-subject panels."
+            ),
+        ],
+        align="center",
+    )
     return
 
 
@@ -537,26 +594,21 @@ def _(mo):
         inline=False,
         label="Psychometric background",
     )
-    return (ui_psychometric_background,)
-
-
-@app.cell
-def _(mo):
     ui_state_show_weighted_points = mo.ui.checkbox(value=True, label="Weighted dots")
-    ui_state_show_data_smooth = mo.ui.checkbox(value=True, label="Data smooth")
+    ui_state_show_data_smooth = mo.ui.checkbox(value=False, label="Data smooth")
     ui_state_assignment_mode = mo.ui.radio(
         options={
             "Predictive weights": "weighted",
             "MAP state": "map",
         },
-        value="Predictive weights",
+        value="MAP state",
         inline=False,
         label="State assignment",
     )
     ui_state_model_line_mode = mo.ui.radio(
         options={
             "Smooth curve": "smooth",
-            "Trial-matched line": "trial_matched",
+            "Trial-matched": "trial_matched",
             "None": "none",
         },
         value="Smooth curve",
@@ -564,6 +616,7 @@ def _(mo):
         label="Model line",
     )
     return (
+        ui_psychometric_background,
         ui_state_assignment_mode,
         ui_state_model_line_mode,
         ui_state_show_data_smooth,
@@ -591,6 +644,14 @@ def _(is_2afc, mo, views):
     return (ui_psychometric_regressor,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Task accuracy plots
+    """)
+    return
+
+
 @app.cell
 def _(
     K,
@@ -599,6 +660,7 @@ def _(
     pl,
     plots,
     save_plot,
+    selected,
     trial_df,
     ui_psychometric_background,
     ui_psychometric_regressor,
@@ -606,14 +668,12 @@ def _(
     ui_state_model_line_mode,
     ui_state_show_data_smooth,
     ui_state_show_weighted_points,
-    ui_subjects,
     views,
 ):
-    _selected = [s for s in ui_subjects.value if s in views]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
 
-    _views_sel = {s: views[s] for s in _selected}
-    _trial_df_sel = trial_df.filter(pl.col("subject").is_in(_selected))
+    _views_sel = {s: views[s] for s in selected}
+    _trial_df_sel = trial_df.filter(pl.col("subject").is_in(selected))
 
     mo.stop(_trial_df_sel.height == 0, mo.md("No subjects with matching data lengths."))
 
@@ -645,19 +705,19 @@ def _(
         state_assignment_mode=ui_state_assignment_mode.value,
         figure_dpi=80,
     )
-    _fig_state_overlay, _ = plots.plot_categorical_performance_by_state(
-        df=_plot_df_state,
-        views=_views_sel,
-        model_name=f"glmhmm K={K} — all states",
-        background_style=ui_psychometric_background.value,
-        show_weighted_points=ui_state_show_weighted_points.value,
-        show_data_smooth=ui_state_show_data_smooth.value,
-        show_model_smooth=ui_state_model_line_mode.value != "none",
-        model_line_mode=ui_state_model_line_mode.value,
-        state_assignment_mode=ui_state_assignment_mode.value,
-        figure_dpi=80,
-        overlay_only=True,
-    )
+    # _fig_state_overlay, _ = plots.plot_categorical_performance_by_state(
+    #     df=_plot_df_state,
+    #     views=_views_sel,
+    #     model_name=f"glmhmm K={K} — all states",
+    #     background_style=ui_psychometric_background.value,
+    #     show_weighted_points=ui_state_show_weighted_points.value,
+    #     show_data_smooth=ui_state_show_data_smooth.value,
+    #     show_model_smooth=ui_state_model_line_mode.value != "none",
+    #     model_line_mode=ui_state_model_line_mode.value,
+    #     state_assignment_mode=ui_state_assignment_mode.value,
+    #     figure_dpi=80,
+    #     overlay_only=True,
+    # )
     _reg_plot_fn = getattr(plots, "plot_regressor_psychometric_by_state", None)
     if is_2afc and _reg_plot_fn is not None:
         _fig_reg_state, _ = _reg_plot_fn(
@@ -673,25 +733,25 @@ def _(
             state_assignment_mode=ui_state_assignment_mode.value,
             figure_dpi=80,
         )
-        _fig_reg_overlay, _ = _reg_plot_fn(
-            df=_plot_df_state,
-            views=_views_sel,
-            model_name=f"glmhmm K={K}",
-            feature_col=ui_psychometric_regressor.value,
-            background_style=ui_psychometric_background.value,
-            show_weighted_points=ui_state_show_weighted_points.value,
-            show_data_smooth=ui_state_show_data_smooth.value,
-            show_model_smooth=ui_state_model_line_mode.value != "none",
-            model_line_mode=ui_state_model_line_mode.value,
-            state_assignment_mode=ui_state_assignment_mode.value,
-            figure_dpi=80,
-            overlay_only=True,
-        )
+        # _fig_reg_overlay, _ = _reg_plot_fn(
+        #     df=_plot_df_state,
+        #     views=_views_sel,
+        #     model_name=f"glmhmm K={K}",
+        #     feature_col=ui_psychometric_regressor.value,
+        #     background_style=ui_psychometric_background.value,
+        #     show_weighted_points=ui_state_show_weighted_points.value,
+        #     show_data_smooth=ui_state_show_data_smooth.value,
+        #     show_model_smooth=ui_state_model_line_mode.value != "none",
+        #     model_line_mode=ui_state_model_line_mode.value,
+        #     state_assignment_mode=ui_state_assignment_mode.value,
+        #     figure_dpi=80,
+        #     overlay_only=True,
+        # )
         _reg_section = mo.vstack(
             [
                 mo.hstack(
                     [
-                        mo.md("### Per-state psychometric by regressor"),
+                        mo.md("#### Per-state psychometric by regressor"),
                         ui_psychometric_regressor,
                     ],
                     justify="space-between",
@@ -704,12 +764,7 @@ def _(
                             f"{ui_psychometric_regressor.value} by state",
                             stem=f"regressor_by_state_{ui_psychometric_regressor.value}",
                         ),
-                        mo.vstack([_fig_reg_overlay], align="center"),
-                        save_plot(
-                            _fig_reg_overlay,
-                            f"all states {ui_psychometric_regressor.value}",
-                            stem=f"regressor_all_states_{ui_psychometric_regressor.value}",
-                        ),
+
                     ],
                     justify="space-between",
                     align="center",
@@ -722,23 +777,24 @@ def _(
 
     mo.vstack(
         [
-            mo.md("### Categorical plots for accuracy"),
+
             mo.hstack(
                 [
                     mo.vstack(
                         [
                             _fig_all,
-                            save_plot(_fig_all, "overall psychometric", stem="categorical_overall"),
+                            save_plot(_fig_all, "overall psychometric",
+                                      stem="categorical_overall"),
                         ],
                         align="center",
                     ),
                     mo.vstack(
                         [
-                            ui_psychometric_background,
+                            mo.hstack([ui_psychometric_background,
+                                       ui_state_model_line_mode,], align="end"),
                             ui_state_show_weighted_points,
                             ui_state_show_data_smooth,
                             ui_state_assignment_mode,
-                            ui_state_model_line_mode,
                         ],
                         align="start",
                     ),
@@ -747,11 +803,9 @@ def _(
                 align="center",
                 widths=[4, 1],
             ),
-            mo.md("### Per-state categorical performance"),
+            mo.md("#### Per-state categorical performance"),
             mo.vstack(
                 [
-                    mo.vstack([_fig_state_overlay], align="center"),
-                    save_plot(_fig_state_overlay, "all states psychometric", stem="categorical_all_states"),
                     mo.vstack([_fig_state], align="center"),
                     save_plot(_fig_state, "per-state psychometric", stem="categorical_by_state"),
                 ],
@@ -805,7 +859,7 @@ def _(adapter, mo):
             value=_choices[0],
             label="Side",
         )
-        ui_editor_side
+    ui_editor_side
     return (ui_editor_side,)
 
 
@@ -917,6 +971,14 @@ def _(
     return editor_trial_df, editor_view
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Editable accuracy plots
+    """)
+    return
+
+
 @app.cell
 def _(
     adapter,
@@ -1012,7 +1074,7 @@ def _(
         )
         _reg_section = mo.vstack(
             [
-                mo.hstack([mo.md("### Tweaked per-state psychometric by regressor"), ui_psychometric_regressor], justify="space-between"),
+                mo.hstack([ui_psychometric_regressor], justify="space-between"),
                 mo.vstack(
                     [
                         _fig_reg_state_tweaked,
@@ -1038,14 +1100,18 @@ def _(
         )
         _side_section = mo.vstack(
             [
-                mo.md("### Tweaked categorical performance by stimulus side"),
                 _fig_side_tweaked,
-            ]
+                save_plot(
+                    _fig_side_tweaked,
+                    "tweaked psychometric by stimulus side",
+                    stem="tweaked_categorical_by_side",
+                ),
+            ],
+            align="center",
         )
 
     mo.vstack(
         [
-            mo.md("### Tweaked categorical plots"),
             mo.hstack(
                 [
                     mo.vstack(
@@ -1070,7 +1136,6 @@ def _(
                 align="center",
                 widths=[4, 1],
             ),
-            mo.md("### Tweaked per-state categorical performance"),
             mo.vstack(
                 [
                     _fig_state_tweaked,
@@ -1105,49 +1170,52 @@ def _(mo):
     return (THRESH_ui,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### State analysis
+    """)
+    return
+
+
 @app.cell
-def _(
-    THRESH_ui,
-    adapter,
-    arrays_store,
-    is_2afc,
-    mo,
-    plots,
-    trial_df,
-    ui_subjects,
-    views,
-):
-    # ── Per-state accuracy — Ashwood et al. 2022 method ────────────────────────────────────────────────
-    # All     : mean(performance) on nonzero-stim trials — the full pool
-    # State k : mean(performance) on the SUBSET where posterior[:,k] >= thresh
-    #           AND stimd_n != 0
-    # "All" is the weighted average of the state bars (plus ambiguous trials).
-    # Colors assigned by rank: Engaged=palette[0], Disengaged=palette[1], …
+def _(THRESH_ui, adapter, mo, plots, save_plot, selected, trial_df, views):
+    mo.stop(not selected, mo.md("No fitted subjects available."))
 
-    _selected_acc = [s for s in ui_subjects.value if s in arrays_store]
-    mo.stop(not _selected_acc, mo.md("No fitted subjects available."))
-    if is_2afc:
-        _fig_acc, _tbl = plots.plot_state_accuracy(
-            views={s: views[s] for s in _selected_acc},
-            trial_df=trial_df,
-            thresh=THRESH_ui.amount,
-            session_col=adapter.session_col,
-            sort_col=adapter.sort_col,
-        )
-    else:
-        _fig_acc, _tbl = plots.plot_state_accuracy(
-            views={s: views[s] for s in _selected_acc},
-            trial_df=trial_df,
-            thresh=THRESH_ui.amount,
-            session_col=adapter.session_col,
-            sort_col=adapter.sort_col,
+    _fig_acc, _tbl = plots.plot_state_accuracy(
+        views={s: views[s] for s in selected},
+        trial_df=trial_df,
+        thresh=THRESH_ui.amount,
+        session_col=adapter.session_col,
+        sort_col=adapter.sort_col,
+    )
 
-        )
+    _fig_post = plots.plot_state_posterior_count_kde(
+        views={s: views[s] for s in selected},
+        thresh=THRESH_ui.amount,
+    )
 
     mo.vstack([
-        mo.md("### Accuracy by state"),
-        _fig_acc,
-        mo.md(f"> **All** = full nonzero-stim pool · **State bars** = subsets where posterior ≥ {THRESH_ui}"),
+        mo.hstack([
+            mo.vstack([
+                mo.md("#### Accuracy by state"),
+                _fig_acc,
+                save_plot(
+                    _fig_acc,
+                    "accuracy by state",
+                    stem="state_accuracy",
+                ),
+            ], align = "center"),
+            mo.vstack([
+                mo.md("#### Posterior / trial-count KDE"),
+                _fig_post,
+                save_plot(
+                    _fig_post,
+                    "posterior trial-count kde",
+                    stem="state_posterior_count_kde",
+                ),
+            ], align = "center"),
+        ], align="center"),
         mo.md("**Trial counts & mean accuracy per label:**"),
         mo.plain_text(_tbl.to_string()),
     ])
@@ -1166,7 +1234,7 @@ def _(df_all, mo):
 
 
 @app.cell
-def _(K, mo, plots, trial_df, ui_subjects_traj, views):
+def _(mo, plots, trial_df, ui_subjects_traj, views):
     selected_traj = [s for s in ui_subjects_traj.value if s in views]
     mo.stop(not selected_traj, mo.md("Select subjects above to view session trajectories."))
     _fig_traj = plots.plot_session_trajectories(
@@ -1176,15 +1244,23 @@ def _(K, mo, plots, trial_df, ui_subjects_traj, views):
         sort_col="trial_idx",
     )
     mo.vstack([
-        mo.md(f"### c. Average state-probability trajectories within a session  (K={K})"),
-        _fig_traj,
-        mo.md("> Mean ± 1 s.e.m. across sessions for the selected subjects."),
+        # mo.md(f"### c. Average state-probability trajectories within a session  (K={K})"),
+        # _fig_traj,
+        # mo.md("> Mean ± 1 s.e.m. across sessions for the selected subjects."),
     ], align="center")
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(rf"""
+    ### Fractional occupancy & state changes per session
+    """)
+    return
+
+
 @app.cell
-def _(K, THRESH_ui, mo, plots, trial_df, ui_subjects_traj, views):
+def _(THRESH_ui, mo, plots, save_plot, trial_df, ui_subjects_traj, views):
     selected_occ = [s for s in ui_subjects_traj.value if s in views]
     mo.stop(not selected_occ, mo.md("Select subjects above."))
     _fig_occ = plots.plot_state_occupancy(
@@ -1195,27 +1271,71 @@ def _(K, THRESH_ui, mo, plots, trial_df, ui_subjects_traj, views):
         switch_posterior_threshold=THRESH_ui.amount,
     )
     mo.vstack([
-        mo.md(f"### d. Fractional occupancy & state changes per session  (K={K})"),
         _fig_occ,
-        mo.md(
-            "> **Top row**: all selected subjects pooled. Left = posterior fractional occupancy boxplot by state; "
-            "middle = per-session occupancy pooled across subjects; right = histogram of state switches per session.  \n"
-            "> **Rows below**: one row per subject. Left = posterior mean occupancy by state; middle = per-session "
-            "occupancy boxplots; right = histogram of inferred state switches per session."
+        save_plot(
+            _fig_occ,
+            "fractional occupancy and state changes per session",
+            stem="state_occupancy",
         ),
         mo.md(
-            f"> Switch counts use the same posterior threshold slider as the state-accuracy panel and only count "
             f"changes between confident MAP assignments with posterior ≥ {THRESH_ui.amount:.2f}."
         ),
     ], align="center")
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(rf"""
+    ### Posteriors around a change
+    """)
+    return
+
+
 @app.cell
-def _(mo, ui_subjects, views):
-    # ── Session deep-dive controls ─────────────────────────────────────────────
-    _selected = sorted((s for s in ui_subjects.value if s in views), key=str)
-    _subj_opts = _selected if _selected else ["(no fitted subjects)"]
+def _(THRESH_ui, mo, plots, save_plot, trial_df, ui_subjects_traj, views):
+    selected_change = [s for s in ui_subjects_traj.value if s in views]
+    mo.stop(not selected_change, mo.md("Select subjects above."))
+    _views_sel = {s: views[s] for s in selected_change}
+    _fig_change_summary = plots.plot_change_triggered_posteriors_summary(
+        views=_views_sel,
+        trial_df=trial_df,
+        session_col="session",
+        sort_col="trial_idx",
+        switch_posterior_threshold=THRESH_ui.amount,
+        window=50
+    )
+    _fig_change_by_subject = plots.plot_change_triggered_posteriors_by_subject(
+        views=_views_sel,
+        trial_df=trial_df,
+        session_col="session",
+        sort_col="trial_idx",
+        switch_posterior_threshold=THRESH_ui.amount,
+        window=50
+    )
+    mo.vstack([
+        mo.md(
+            f"> Change events use the same confident MAP switch rule as the histogram above: posterior ≥ {THRESH_ui}. "
+        ),
+        _fig_change_summary,
+        save_plot(
+            _fig_change_summary,
+            "change-triggered posteriors summary",
+            stem="change_triggered_posteriors_summary",
+        ),
+        _fig_change_by_subject,
+        save_plot(
+            _fig_change_by_subject,
+            "change-triggered posteriors by subject",
+            stem="change_triggered_posteriors_by_subject",
+        ),
+    ], align="center")
+    return
+
+
+@app.cell
+def _(mo, selected):
+    _subj_opts = selected if selected else ["(no fitted subjects)"]
 
     ui_session_subj = mo.ui.dropdown(
         options=_subj_opts,
@@ -1245,8 +1365,25 @@ def _(mo, pl, trial_df, ui_session_subj, views):
     return (ui_session_id,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Session statistics
+    """)
+    return
+
+
 @app.cell
-def _(K, mo, plots, trial_df, ui_session_id, ui_session_subj, views):
+def _(
+    THRESH_ui,
+    mo,
+    plots,
+    save_plot,
+    trial_df,
+    ui_session_id,
+    ui_session_subj,
+    views,
+):
     _subj = ui_session_subj.value
     mo.stop(
         _subj not in views,
@@ -1261,17 +1398,22 @@ def _(K, mo, plots, trial_df, ui_session_id, ui_session_subj, views):
         sess=_sess,
         session_col="session",
         sort_col="trial",
+        switch_posterior_threshold=THRESH_ui.amount,
     )
     mo.vstack([
-        mo.md(f"### Session statistics  (K={K})"),
         mo.hstack([ui_session_subj, ui_session_id]),
         _fig,
+        save_plot(
+            _fig,
+            "session statistics",
+            stem=f"session_deepdive_{_subj}_{_sess}",
+        ),
     ], align="center")
     return
 
 
 @app.cell
-def _(K, df_all, mo, np, paths, pl, plt, sns, ui_subjects):
+def _(K, df_all, mo, np, paths, pl, plt, save_plot, sns, ui_subjects):
     # ── τ sweep analysis ────────────────────────────────────────────────────────
     # Loads results produced by:
     #   uv run python scripts/fit_tau_sweep.py --model glmhmm --K <K>
@@ -1386,6 +1528,11 @@ def _(K, df_all, mo, np, paths, pl, plt, sns, ui_subjects):
         [
             mo.md(f"### τ sweep results — glmhmm K={K}"),
             _fig_sweep,
+            save_plot(
+                _fig_sweep,
+                "tau sweep results",
+                stem=f"tau_sweep_glmhmm_k{K}",
+            ),
             mo.md("**Best τ per subject (min BIC):**"),
             mo.plain_text(_best.to_pandas().to_string(index=False)),
             mo.ui.dataframe(_best_all),
@@ -2046,8 +2193,26 @@ def _(
 
 
 @app.cell
-def _(ssm_posterior_fig):
-    ssm_posterior_fig
+def _(mo, save_plot, ssm_posterior_fig):
+    mo.vstack(
+        [
+            ssm_posterior_fig,
+            save_plot(
+                ssm_posterior_fig,
+                "ssm posterior overlay",
+                stem="ssm_posterior_overlay",
+            ),
+        ],
+        align="center",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### SSM GLM-HMM plots
+    """)
     return
 
 
@@ -2055,21 +2220,43 @@ def _(ssm_posterior_fig):
 def _(
     K,
     mo,
+    save_plot,
     ssm_coef_fig,
     ssm_ll_fig,
     ssm_psych_fig_custom,
     ssm_psych_fig_ssm,
 ):
     mo.vstack([
-        mo.md(f"### SSM GLM-HMM plots  (K={K})"),
         mo.md("### Log-likelihood comparison"),
         ssm_ll_fig if ssm_ll_fig is not None else mo.md("LL comparison unavailable because subject-level metrics are missing."),
         mo.md("### Categorical psychometrics — Dynamax vs SSM"),
         (
             mo.hstack(
                 [
-                    mo.vstack([mo.md("#### Dynamax"), ssm_psych_fig_custom], align="center"),
-                    mo.vstack([mo.md("#### SSM"), ssm_psych_fig_ssm], align="center"),
+                    mo.vstack(
+                        [
+                            mo.md("#### Dynamax"),
+                            ssm_psych_fig_custom,
+                            save_plot(
+                                ssm_psych_fig_custom,
+                                "ssm comparison dynamax psychometric",
+                                stem=f"ssm_comparison_dynamax_psychometric_k{K}",
+                            ),
+                        ],
+                        align="center",
+                    ),
+                    mo.vstack(
+                        [
+                            mo.md("#### SSM"),
+                            ssm_psych_fig_ssm,
+                            save_plot(
+                                ssm_psych_fig_ssm,
+                                "ssm comparison ssm psychometric",
+                                stem=f"ssm_comparison_ssm_psychometric_k{K}",
+                            ),
+                        ],
+                        align="center",
+                    ),
                 ],
                 justify="start",
             )
@@ -2077,18 +2264,22 @@ def _(
             else mo.md("Psychometric comparison unavailable because one of the trial-level prediction tables could not be built.")
         ),
         mo.md("### Coefficient differences"),
-        ssm_coef_fig if ssm_coef_fig is not None else mo.md("No coefficient comparison available."),
+        (
+            mo.vstack(
+                [
+                    ssm_coef_fig,
+                    save_plot(
+                        ssm_coef_fig,
+                        "ssm coefficient differences",
+                        stem=f"ssm_coefficient_differences_k{K}",
+                    ),
+                ],
+                align="center",
+            )
+            if ssm_coef_fig is not None
+            else mo.md("No coefficient comparison available.")
+        ),
     ], align="center")
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
     return
 
 

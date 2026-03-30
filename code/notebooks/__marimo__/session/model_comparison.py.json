@@ -2,313 +2,253 @@
   "version": "1",
   "metadata": {
     "marimo_version": "0.21.0",
-    "script_metadata_hash": "756651e6f52b5801fcb1a5f1597fd1f9"
+    "script_metadata_hash": "2c94369e7e1ba07efd25fc04c5099cea"
   },
   "cells": [
     {
       "id": "Hbol",
-      "code_hash": "832b6c96b4a243a55e17433a49761f8c",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "code_hash": "8f941e23d3aa652563b93097d94eb199",
+      "outputs": [],
       "console": []
     },
     {
       "id": "MJUe",
-      "code_hash": "6615eed276c30b4ea245f5506599c4eb",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "code_hash": "0f21d14153a3dc91d4def720b5b8e81c",
+      "outputs": [],
       "console": []
     },
     {
       "id": "vblA",
-      "code_hash": "868285680342942fbceccafa57c3ca74",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"model-comparison-configuration\">Model Comparison \u2014 Configuration</h3></span><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Select one or more aliases for each model kind. Leave empty to skip that model.</span></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='MJUe-0' random-id='3415cc19-a65a-ed48-a7d3-e70b5144097e'><marimo-dropdown data-initial-value='[&quot;MCDR&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Task&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;MCDR&quot;,&quot;2AFC&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='vblA-0' random-id='4a31d026-2a46-ff7b-1dff-537c4acf678d'><marimo-multiselect data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;GLM aliases&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;2db77b98&quot;,&quot;2e27f6cf&quot;,&quot;34607bbd&quot;,&quot;35c08eb3&quot;,&quot;385e720a&quot;,&quot;4a07a6ff&quot;,&quot;4dc7447d&quot;,&quot;4f33169e&quot;,&quot;510b7b71&quot;,&quot;75e915e2&quot;,&quot;7a87ead6&quot;,&quot;96e275a2&quot;,&quot;One-hot&quot;,&quot;One-hot speed&quot;,&quot;bd4eda3a&quot;,&quot;be48c084&quot;,&quot;be5e089b&quot;,&quot;d106e9c9&quot;,&quot;f0303237&quot;,&quot;no_onset&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element><marimo-ui-element object-id='vblA-1' random-id='8f9fa845-edf1-5fee-2325-10d906e479e4'><marimo-multiselect data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;GLMHMM aliases&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;4aade523&quot;,&quot;7d374cb1&quot;,&quot;One-hot&quot;,&quot;af1d1688&quot;,&quot;dfe2c261&quot;,&quot;f7f09936&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element><marimo-ui-element object-id='vblA-2' random-id='e5a91d72-590b-ff7e-305c-7edb83dbe9ce'><marimo-multiselect data-initial-value='[]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;GLMHMM-T aliases&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;89dc97e0&quot;,&quot;glmhmm_2&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div></div>"
-          }
-        }
-      ],
+      "code_hash": "6f9173a3483bca778b5e7362c9e8544f",
+      "outputs": [],
       "console": []
     },
     {
       "id": "bkHC",
-      "code_hash": "41eb4047b2b0ac7f005e3df5ab3978e0",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='bkHC-0' random-id='f4aa0749-4b3b-7fb1-492a-5f90e19a86aa'><marimo-multiselect data-initial-value='[&quot;A83&quot;,&quot;A86&quot;,&quot;A87&quot;,&quot;A89&quot;,&quot;A92&quot;,&quot;A93&quot;,&quot;A95&quot;,&quot;A96&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;A83&quot;,&quot;A86&quot;,&quot;A87&quot;,&quot;A89&quot;,&quot;A92&quot;,&quot;A93&quot;,&quot;A95&quot;,&quot;A96&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">K range:</span></span><marimo-ui-element object-id='bkHC-1' random-id='042b4c20-f35d-f154-e385-77e3249537e3'><marimo-range-slider data-initial-value='[1,5]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;K range&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='10' data-step='1' data-steps='[]' data-debounce='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-full-width='true' data-disabled='false'></marimo-range-slider></marimo-ui-element></div></div>"
-          }
-        }
-      ],
+      "code_hash": "ec636699813dfcdd781879cadeea90f6",
+      "outputs": [],
       "console": []
     },
     {
       "id": "lEQa",
-      "code_hash": "b4803d0a31b645bba902b00d2acd18b8",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">\u26a0\ufe0f  No metrics loaded \u2014 select at least one fit folder above.</span></span>"
-          }
-        }
-      ],
+      "code_hash": "41eb4047b2b0ac7f005e3df5ab3978e0",
+      "outputs": [],
       "console": []
     },
     {
       "id": "PKri",
-      "code_hash": "2bb8b919ec869dc096b5ee75bb36362e",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "076da24d908e3359fb04502d4e0a62f0",
+      "outputs": [],
       "console": []
     },
     {
       "id": "Xref",
-      "code_hash": "ca03d4565a97d7752bcd7230eaada197",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='Xref-0' random-id='ea548757-6600-1fcf-556a-c822dbcb5750'><marimo-dropdown data-initial-value='[&quot;stimd_n&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Cross-entropy grouping&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;stimd_n&quot;,&quot;ttype_n&quot;,&quot;session&quot;,&quot;trial&quot;,&quot;date&quot;,&quot;x_c&quot;,&quot;r_c&quot;,&quot;performance&quot;,&quot;response&quot;,&quot;stimulus&quot;,&quot;trial_idx&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div>"
-          }
-        }
-      ],
+      "code_hash": "2bb8b919ec869dc096b5ee75bb36362e",
+      "outputs": [],
       "console": []
     },
     {
       "id": "SFPL",
-      "code_hash": "3edff4ad3f03968d7aa54277317ef7e6",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "ca03d4565a97d7752bcd7230eaada197",
+      "outputs": [],
       "console": []
     },
     {
       "id": "BYtC",
-      "code_hash": "a8e3eb4e7f2eaa79c0bdf1e204d7abca",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "3edff4ad3f03968d7aa54277317ef7e6",
+      "outputs": [],
       "console": []
     },
     {
       "id": "RGSE",
-      "code_hash": "758ccafa6a8f7510c9d776f098c1d283",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "code_hash": "a8e3eb4e7f2eaa79c0bdf1e204d7abca",
+      "outputs": [],
       "console": []
     },
     {
       "id": "Kclp",
-      "code_hash": "9ca6b860b2ab04c353387cbdf4f66e1a",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "758ccafa6a8f7510c9d776f098c1d283",
+      "outputs": [],
       "console": []
     },
     {
       "id": "emfo",
-      "code_hash": "3e8a6ab1d0e7ed98ef5fad10d14ba41e",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "9ca6b860b2ab04c353387cbdf4f66e1a",
+      "outputs": [],
       "console": []
     },
     {
       "id": "Hstk",
-      "code_hash": "6fcc8502b04b8ea968d33509a4b441c2",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "code_hash": "3e8a6ab1d0e7ed98ef5fad10d14ba41e",
+      "outputs": [],
       "console": []
     },
     {
       "id": "nWHF",
-      "code_hash": "c78cc34d1589995debe37ce1255beba4",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "6fcc8502b04b8ea968d33509a4b441c2",
+      "outputs": [],
       "console": []
     },
     {
       "id": "iLit",
-      "code_hash": "cecc00649e49bcaae03c69775186a850",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "c78cc34d1589995debe37ce1255beba4",
+      "outputs": [],
       "console": []
     },
     {
       "id": "ZHCJ",
-      "code_hash": "acc877f062b58d54b50e94219d12cb29",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "6f83292d62ea5a1ad5d992facc21b1ba",
+      "outputs": [],
       "console": []
     },
     {
       "id": "ROlb",
-      "code_hash": "37745ca12367fab8f3f451dd26da5a1c",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "cecc00649e49bcaae03c69775186a850",
+      "outputs": [],
       "console": []
     },
     {
       "id": "qnkX",
-      "code_hash": "877a676f5918bb30d124ea920b324abd",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "acc877f062b58d54b50e94219d12cb29",
+      "outputs": [],
       "console": []
     },
     {
       "id": "TqIu",
-      "code_hash": "432be0f5061256ba22261aab2ea32928",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "code_hash": "37745ca12367fab8f3f451dd26da5a1c",
+      "outputs": [],
       "console": []
     },
     {
       "id": "Vxnm",
-      "code_hash": "2f4bd72a97b4393fd6a9af3a59e65659",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "Accessing the value of a UIElement in the cell that created it is not allowed. Fix: move the value access to another cell.",
-          "traceback": []
-        }
-      ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stderr",
-          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_66042/__marimo__cell_DnEU_.py&quot;</span>, line <span class=\"m\">13</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">options</span><span class=\"o\">=</span><span class=\"n\">_model_aliases_viz</span><span class=\"p\">(</span><span class=\"n\">ui_task</span><span class=\"o\">.</span><span class=\"n\">value</span><span class=\"p\">,</span> <span class=\"n\">ui_viz_model</span><span class=\"o\">.</span><span class=\"n\">value</span><span class=\"p\">),</span>\n<span class=\"w\">                                              </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/marimo/_plugins/ui/_core/ui_element.py&quot;</span>, line <span class=\"m\">319</span>, in <span class=\"n\">value</span>\n<span class=\"w\">    </span><span class=\"k\">raise</span> <span class=\"ne\">RuntimeError</span><span class=\"p\">(</span>\n<span class=\"gr\">RuntimeError</span>: <span class=\"n\">Accessing the value of a UIElement in the cell that created it is not allowed. Fix: move the value access to another cell.</span>\n</pre></div>\n</span>",
-          "mimetype": "application/vnd.marimo+traceback"
-        }
-      ]
+      "code_hash": "f53ff07ca29659678f2f618a4f406ba3",
+      "outputs": [],
+      "console": []
     },
     {
       "id": "DnEU",
-      "code_hash": "b7b03b55913e6b5eb7b0ff89a14d9348",
-      "outputs": [
-        {
-          "type": "error",
-          "ename": "exception",
-          "evalue": "An ancestor raised an exception (RuntimeError): ",
-          "traceback": []
-        }
-      ],
+      "code_hash": "36652ee044c046b8fb874221d568ee7c",
+      "outputs": [],
       "console": []
     },
     {
       "id": "ulZA",
-      "code_hash": "c224f7a280d1599a68e522ddc84cd902",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h3 id=\"re-fit-optional\">Re-fit (optional)</h3></span><span class=\"markdown prose dark:prose-invert contents\"><blockquote>\n<span class=\"paragraph\">Runs the fit scripts for the selected task / subjects / K range and overwrites <code>_metrics.parquet</code> files in the chosen folders.<br />\nReload the page afterward to see updated metrics.</span>\n</blockquote></span><marimo-ui-element object-id='ecfG-0' random-id='b55240ce-fea7-ccf5-dc5d-095cb02baa68'><marimo-button data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;\u26a0\ufe0f  Re-fit selected (overwrites cached metrics)&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div>"
-          }
-        }
-      ],
+      "code_hash": "ffbf17aaca2a8a3ec39cd21e493af229",
+      "outputs": [],
       "console": []
     },
     {
       "id": "ecfG",
+      "code_hash": "9cb568c2e5aecc6d4fce8d391a2ee372",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "Pvdt",
+      "code_hash": "af811005c83f39111af2283afecaecef",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "ZBYS",
+      "code_hash": "506fee8eb75f7c40698d00305584f986",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "aLJB",
+      "code_hash": "978dba81aab013782f93070b8a4f8cb5",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "nHfw",
+      "code_hash": "e4804987841e541b22d57363520a62e4",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "xXTn",
+      "code_hash": "699e84c33aa22f7d70d8ba3ce6681277",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "AjVT",
+      "code_hash": "cf4756fd29f30d22078445e8419b29a0",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "pHFh",
+      "code_hash": "115f08c1f234033c43b6ebb12916c9fc",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "NCOB",
+      "code_hash": "aebbcf47d9e7b1babfe8762d15d551d4",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "aqbW",
+      "code_hash": "1c38479776f607af4e57e670f601e174",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "TRpd",
+      "code_hash": "d29807e58d9327b40d817f59fbf576d5",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "TXez",
+      "code_hash": null,
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "dNNg",
+      "code_hash": "a34951154a86a1ab79e8dce14daf5295",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "yCnT",
+      "code_hash": "1d6f92a287e3afc961ddfbfa769a2ec9",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "wlCL",
+      "code_hash": "93bdd2c1997f2ef1265c69a7845148cc",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "kqZH",
+      "code_hash": "3291984b06f959b6bb1a2c7816280190",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "wAgl",
+      "code_hash": "b7b03b55913e6b5eb7b0ff89a14d9348",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "rEll",
+      "code_hash": "c224f7a280d1599a68e522ddc84cd902",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "dGlV",
       "code_hash": "c27a1af142fc73231204f0c3c9f31b2f",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Press the button above to trigger re-fitting.</span></span>"
-          }
-        }
-      ],
+      "outputs": [],
       "console": []
     }
   ]

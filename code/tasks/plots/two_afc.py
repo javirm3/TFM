@@ -13,6 +13,7 @@ High-level functions:
   - plot_state_accuracy
   - plot_session_trajectories
   - plot_state_occupancy
+  - plot_state_dwell_times
   - plot_psychometric_all        (≡ plot_categorical_performance_all)
   - plot_psychometric_by_state   (≡ plot_categorical_performance_by_state)
   - plot_regressor_psychometric_by_state
@@ -38,10 +39,17 @@ import pandas as pd
 from pathlib import Path
 from scipy.stats import sem, ttest_1samp
 from typing import Dict, List, Optional, Sequence, Tuple
+from tasks.two_afc import _stim_param_weight_map
 from glmhmmt.plots_common import (
     plot_state_accuracy as _plot_state_accuracy_common,
+    plot_change_triggered_posteriors_by_subject as _plot_change_triggered_posteriors_by_subject_common,
+    plot_change_triggered_posteriors_summary as _plot_change_triggered_posteriors_summary_common,
+    plot_state_posterior_count_kde as _plot_state_posterior_count_kde_common,
     plot_session_trajectories as _plot_session_trajectories_common,
     plot_state_occupancy as _plot_state_occupancy_common,
+    plot_state_dwell_times_by_subject as _plot_state_dwell_times_by_subject_common,
+    plot_state_dwell_times_summary as _plot_state_dwell_times_summary_common,
+    plot_state_dwell_times as _plot_state_dwell_times_common,
     plot_session_deepdive as _plot_session_deepdive_common,
 )
 from glmhmmt.model_plots import plot_transition_weights
@@ -746,12 +754,15 @@ def eval_glm_on_ild_grid(
         and name.removeprefix("stim_").isdigit()
     }
 
+    stim_param_idx = next((i for i, n in enumerate(X_cols_list) if n == "stim_param"), None)
+    stim_param_weights = _stim_param_weight_map() if stim_param_idx is not None else {}
+
     # Accept any of these as the stimulus / ILD column
     _STIM_NAMES = {"stim_vals", "stim_d", "ild_norm", "ILD", "ild", "stimulus"}
     ild_idx = next((i for i, n in enumerate(X_cols_list) if n in _STIM_NAMES), None)
     bias_idx = next((i for i, n in enumerate(X_cols_list) if n == "bias"), None)
-    if stim_abs_indices:
-        observed_levels = sorted(stim_abs_indices)
+    if stim_abs_indices or stim_param_idx is not None:
+        observed_levels = sorted(set(stim_abs_indices) | set(stim_param_weights) | {0})
         signed_levels = sorted(
             {
                 float(level)
@@ -788,9 +799,15 @@ def eval_glm_on_ild_grid(
             if float(_w.sum()) > 0:
                 weights_t = _w
 
-    stim_feature_indices = sorted(set(([ild_idx] if ild_idx is not None else []) + list(stim_abs_indices.values())))
+    stim_feature_indices = sorted(
+        set(
+            ([ild_idx] if ild_idx is not None else [])
+            + list(stim_abs_indices.values())
+            + ([stim_param_idx] if stim_param_idx is not None else [])
+        )
+    )
 
-    if X_data is not None and (ild_idx is not None or stim_abs_indices):
+    if X_data is not None and (ild_idx is not None or stim_abs_indices or stim_param_idx is not None):
         # ── partial-dependence: average over real trial features ──────────────
         X_base = np.asarray(X_data, dtype=float).copy()
         for k in range(K):
@@ -812,6 +829,14 @@ def eval_glm_on_ild_grid(
                     else:
                         stim_value = float(np.sign(ild_value)) if abs(ild_value) == float(stim_abs) else 0.0
                     stim_logit += stim_value * w[stim_abs_idx]
+                if stim_param_idx is not None:
+                    if ild_value == 0:
+                        stim_param_value = float(stim_param_weights.get(0, 0.0))
+                    else:
+                        stim_param_value = float(np.sign(ild_value)) * float(
+                            stim_param_weights.get(int(abs(ild_value)), 0.0)
+                        )
+                    stim_logit += stim_param_value * w[stim_param_idx]
                 logit = base_logit + stim_logit
                 # W[k,0,:] parameterises P(class-0 = LEFT); class-1 (RIGHT) is
                 # the softmax reference (logit=0). So P(right) = sigmoid(-logit).
@@ -844,6 +869,16 @@ def eval_glm_on_ild_grid(
                     np.sign(ild_grid),
                     0.0,
                 )
+        if stim_param_idx is not None:
+            stim_param_vals = np.zeros(len(ild_grid), dtype=float)
+            for gi, ild_value in enumerate(ild_grid):
+                if ild_value == 0:
+                    stim_param_vals[gi] = float(stim_param_weights.get(0, 0.0))
+                else:
+                    stim_param_vals[gi] = float(np.sign(ild_value)) * float(
+                        stim_param_weights.get(int(abs(ild_value)), 0.0)
+                    )
+            X_grid[:, stim_param_idx] = stim_param_vals
         if bias_idx is not None:
             X_grid[:, bias_idx] = 1.0  # bias is always 1
 
@@ -1256,6 +1291,7 @@ def _feature_label(feature_name: str) -> str:
         "at_correct": "Correct trace",
         "reward_trace": "Reward trace",
         "stim_vals": "Stimulus",
+        "stim_param": "Stimulus (param)",
         "bias": "Bias",
         "wsls": "WSLS",
     }
@@ -2295,6 +2331,57 @@ def plot_session_trajectories(
     )
 
 
+def plot_state_posterior_count_kde(
+    views: dict,
+    thresh: float | None = None,
+    bins: int = 40,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_state_posterior_count_kde_common(
+        views,
+        thresh=thresh,
+        bins=bins,
+    )
+
+
+def plot_change_triggered_posteriors_summary(
+    views: dict,
+    trial_df,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
+    switch_posterior_threshold: float | None = None,
+    window: int = 15,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_change_triggered_posteriors_summary_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
+        window=window,
+    )
+
+
+def plot_change_triggered_posteriors_by_subject(
+    views: dict,
+    trial_df,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
+    switch_posterior_threshold: float | None = None,
+    window: int = 15,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_change_triggered_posteriors_by_subject_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
+        window=window,
+    )
+
+
 def plot_state_occupancy(
     views: dict,
     trial_df,
@@ -2311,6 +2398,63 @@ def plot_state_occupancy(
     )
 
 
+def plot_state_dwell_times_by_subject(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_state_dwell_times_by_subject_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+
+def plot_state_dwell_times_summary(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_state_dwell_times_summary_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+
+def plot_state_dwell_times(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    max_dwell: int | None = 90,
+    ci_level: float = 0.68,
+    **kwargs,
+) -> plt.Figure:
+    return _plot_state_dwell_times_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        max_dwell=max_dwell,
+        ci_level=ci_level,
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Session deep-dive
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2323,6 +2467,7 @@ def plot_session_deepdive(
     sess,
     session_col: str = "Session",
     sort_col: str = "Trial",
+    switch_posterior_threshold: float | None = None,
     **kwargs,
 ) -> plt.Figure:
     return _plot_session_deepdive_common(
@@ -2331,6 +2476,8 @@ def plot_session_deepdive(
         subj,
         sess,
         session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
         performance_candidates=("correct_bool", "performance"),
         stim_candidates=("ILD", "stimulus"),
         response_candidates=("response", "Choice"),
@@ -2415,7 +2562,7 @@ def plot_categorical_performance_all(
         _subject_glm_curves(_as, _all_subjects, X_cols, ild_max=ild_max) if _as is not None and background_style == "model" else None
     )
 
-    fig, axes = plt.subplots(1, n_panels, figsize=(3 * n_panels, 4), sharey=True)
+    fig, axes = plt.subplots(1, n_panels, figsize=(4 * n_panels, 4), sharey=True)
     axes = np.atleast_1d(axes)
     ax_idx = 0
 
@@ -2589,8 +2736,7 @@ def plot_categorical_performance_all_by_state(
 
     _as = {s: _rank_ordered_as(v) for s, v in views.items()}
 
-    ilds = sorted(df_pd[ild_col].dropna().unique())
-    panel_w = max(2, 0.3 * len(ilds))
+    panel_w = 4
 
     # ── K-panel grid ──────────────────────────────────────────────────────────
     _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
@@ -2847,7 +2993,7 @@ def plot_regressor_psychometric_by_state(
     _n_panels = K + int(_include_overlay)
     if overlay_only:
         _n_panels = 1
-    _figsize = (3, 3) if overlay_only else (3.5 * _n_panels, 4)
+    _figsize = (3, 3) if overlay_only else (4 * _n_panels, 4)
     fig, axes = plt.subplots(1, _n_panels, figsize=_figsize, sharey=True, dpi=figure_dpi)
     axes = np.atleast_1d(axes)
 
