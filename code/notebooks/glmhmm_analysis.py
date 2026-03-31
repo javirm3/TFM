@@ -32,7 +32,7 @@ def _():
     from tasks import get_adapter
     from glmhmmt.views import build_views
     from glmhmmt.postprocess import build_trial_df, build_emission_weights_df
-    from widgets import ModelManagerWidget
+    from widgets import ModelManagerWidget, model_cfg as ModelCfg
     from figure_save_utils import make_plot_saver
     from coefficient_editor_widget import CoefficientEditorWidget
     from coefficient_editor_utils import (
@@ -44,6 +44,7 @@ def _():
     sns.set_style("white")
     return (
         CoefficientEditorWidget,
+        ModelCfg,
         ModelManagerWidget,
         apply_state_tweak_to_trial_df,
         apply_state_tweak_to_view,
@@ -68,8 +69,8 @@ def _():
 
 
 @app.cell
-def _(get_adapter, paths, pl, ui_model_manager):
-    task_name = ui_model_manager.value["task"]
+def _(get_adapter, model_cfg, paths, pl):
+    task_name = model_cfg.task
     adapter = get_adapter(task_name)
     df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
     df_all = adapter.subject_filter(df_all)
@@ -91,6 +92,12 @@ def _(ModelManagerWidget, mo):
 
 
 @app.cell
+def _(ModelCfg, ui_model_manager):
+    model_cfg = ModelCfg.from_value(ui_model_manager.value)
+    return (model_cfg,)
+
+
+@app.cell
 def _(mo):
     get_last_fit_click, set_last_fit_click = mo.state(0)
     return get_last_fit_click, set_last_fit_click
@@ -105,63 +112,35 @@ def _(mo):
 
 
 @app.cell
-def _(task_name, ui_model_manager):
+def _(model_cfg, task_name):
     from scripts.fit_glmhmm import generate_model_id as _gen_id
 
-    class _V:
-        def __init__(self, value):
-            self.value = value
-
-    _val = ui_model_manager.value
     current_hash = _gen_id(
         task_name,
-        _val["K"],
-        _val["tau"],
-        _val["emission_cols"],
-        _val.get("frozen_emissions", {}),
-        _val.get("cv_mode", "none"),
-        _val.get("cv_repeats", 0),
+        model_cfg.K,
+        model_cfg.tau,
+        model_cfg.emission_cols,
+        model_cfg.frozen_emissions,
+        model_cfg.cv_mode,
+        model_cfg.cv_repeats,
     )
-    ui_existing = _V(None if _val.get("existing_model") in ("", "__default__") else _val.get("existing_model"))
-    ui_alias = _V(_val.get("alias", ""))
-    ui_K = _V(_val["K"])
-    ui_subjects = _V(_val["subjects"])
-    ui_tau = _V(_val["tau"])
-    ui_emission_cols = _V(_val["emission_cols"])
-    ui_frozen_emissions = _V(_val.get("frozen_emissions", {}))
-    ui_cv_mode = _V(_val.get("cv_mode", "none"))
-    ui_cv_repeats = _V(_val.get("cv_repeats", 5))
-    fit_clicks = _val.get("run_fit_clicks", 0)
-    return (
-        current_hash,
-        fit_clicks,
-        ui_K,
-        ui_alias,
-        ui_cv_mode,
-        ui_cv_repeats,
-        ui_emission_cols,
-        ui_existing,
-        ui_frozen_emissions,
-        ui_subjects,
-        ui_tau,
-    )
+    return (current_hash,)
 
 
 @app.cell
 def _(
     current_hash,
     make_plot_saver,
+    model_cfg,
     mo,
     paths,
     resolve_selected_model_id,
     task_name,
-    ui_alias,
-    ui_existing,
 ):
     selected_model_id = resolve_selected_model_id(
         current_hash,
-        ui_existing.value,
-        ui_alias.value,
+        model_cfg.existing,
+        model_cfg.alias,
     )
     save_plot = make_plot_saver(
         mo,
@@ -189,35 +168,26 @@ def _(current_hash, mo, save_plot, ui_model_manager):
 @app.cell
 def _(
     current_hash,
-    fit_clicks,
     fit_main,
     get_last_fit_click,
+    model_cfg,
     mm_widget,
     mo,
     paths,
     set_last_fit_click,
     task_name,
-    ui_K,
-    ui_alias,
-    ui_cv_mode,
-    ui_cv_repeats,
-    ui_emission_cols,
-    ui_existing,
-    ui_frozen_emissions,
-    ui_subjects,
-    ui_tau,
 ):
     _last_fit_click = get_last_fit_click()
     mo.stop(
-        fit_clicks <= _last_fit_click,
+        model_cfg.run_fit_clicks <= _last_fit_click,
         mo.md("Configure parameters and press **Run fit**."),
     )
-    set_last_fit_click(fit_clicks)
+    set_last_fit_click(model_cfg.run_fit_clicks)
 
-    _n_restarts = 1 if ui_cv_mode.value != "none" else 5
-    _cv_repeats = int(ui_cv_repeats.value) if ui_cv_mode.value != "none" else 0
+    _n_restarts = 1 if model_cfg.cv_mode != "none" else 5
+    _cv_repeats = int(model_cfg.cv_repeats) if model_cfg.cv_mode != "none" else 0
 
-    _selected_id = ui_existing.value or (ui_alias.value if ui_alias.value else current_hash)
+    _selected_id = model_cfg.existing or (model_cfg.alias if model_cfg.alias else current_hash)
     _OUT = paths.RESULTS / "fits" / task_name / "glmhmm" / _selected_id
 
     def _progress_title(info: dict) -> str:
@@ -234,17 +204,17 @@ def _(
 
     _total_progress = max(
         1,
-        len(ui_subjects.value) * (_cv_repeats if ui_cv_mode.value != "none" else _n_restarts),
+        len(model_cfg.subjects) * (_cv_repeats if model_cfg.cv_mode != "none" else _n_restarts),
     )
     mm_widget.is_running = True
     try:
         with mo.status.progress_bar(
             total=_total_progress,
-            title=f"Fitting GLM-HMM K={ui_K.value}",
+            title=f"Fitting GLM-HMM K={model_cfg.K}",
             subtitle=(
-                f"{len(ui_subjects.value)} subjects × {_cv_repeats} CV repeat(s)"
-                if ui_cv_mode.value != "none"
-                else f"{len(ui_subjects.value)} subjects × {_n_restarts} restart(s)"
+                f"{len(model_cfg.subjects)} subjects × {_cv_repeats} CV repeat(s)"
+                if model_cfg.cv_mode != "none"
+                else f"{len(model_cfg.subjects)} subjects × {_n_restarts} restart(s)"
             ),
             completion_title="Fit complete",
             completion_subtitle=f"Saved under {_selected_id}",
@@ -273,20 +243,20 @@ def _(
                     return
                 if info.get("event") == "restart_complete":
                     _bar.update(
-                        increment=0 if ui_cv_mode.value != "none" else 1,
+                        increment=0 if model_cfg.cv_mode != "none" else 1,
                         title=_progress_title(info),
                         subtitle=_progress_subtitle(info),
                     )
 
             fit_main(
-                subjects=ui_subjects.value,
-                K_list=[ui_K.value],
+                subjects=model_cfg.subjects,
+                K_list=[model_cfg.K],
                 out_dir=_OUT,
-                tau=ui_tau.value,
-                emission_cols=ui_emission_cols.value,
-                frozen_emissions=ui_frozen_emissions.value or None,
+                tau=model_cfg.tau,
+                emission_cols=model_cfg.emission_cols,
+                frozen_emissions=model_cfg.frozen_emissions or None,
                 task=task_name,
-                cv_mode=ui_cv_mode.value,
+                cv_mode=model_cfg.cv_mode,
                 cv_repeats=_cv_repeats,
                 n_restarts=_n_restarts,
                 verbose=False,
@@ -295,7 +265,7 @@ def _(
         mm_widget.saved_model_name = _selected_id
         mm_widget.alias_error = ""
         mm_widget.alias_status = ""
-        if not ui_alias.value:
+        if not model_cfg.alias:
             mm_widget.alias = _selected_id
         mm_widget._update_options()
         if _selected_id in mm_widget.existing_models:
@@ -307,9 +277,9 @@ def _(
 
 
 @app.cell
-def _(OUT, mo, pd, pl, plt, save_plot, sns, ui_cv_mode):
+def _(OUT, mo, model_cfg, pd, pl, plt, save_plot, sns):
     import json
-    mo.stop(ui_cv_mode.value == "none", mo.md(""))
+    mo.stop(model_cfg.cv_mode == "none", mo.md(""))
 
     repeat_files = sorted(OUT.glob("*_cv_repeats.parquet"))
     mo.stop(not repeat_files, mo.md("No CV repeat diagnostics found yet."))
@@ -404,14 +374,12 @@ def _(
     adapter,
     df_all,
     load_fit_arrays,
+    model_cfg,
     paths,
     selected_model_id,
     task_name,
-    ui_K,
-    ui_emission_cols,
-    ui_subjects,
 ):
-    K = ui_K.value
+    K = model_cfg.K
 
     OUT = paths.RESULTS / "fits" / task_name / "glmhmm" / selected_model_id
     arrays_store, names = load_fit_arrays(
@@ -419,12 +387,12 @@ def _(
         arrays_suffix="glmhmm_arrays.npz",
         adapter=adapter,
         df_all=df_all,
-        subjects=list(ui_subjects.value),
-        emission_cols=list(ui_emission_cols.value),
+        subjects=list(model_cfg.subjects),
+        emission_cols=list(model_cfg.emission_cols),
         k=K,
     )
 
-    selected = [s for s in ui_subjects.value if s in arrays_store]
+    selected = [s for s in model_cfg.subjects if s in arrays_store]
     _ = names
     return K, OUT, arrays_store, selected
 
@@ -1413,7 +1381,7 @@ def _(
 
 
 @app.cell
-def _(K, df_all, mo, np, paths, pl, plt, save_plot, sns, ui_subjects):
+def _(K, df_all, mo, model_cfg, np, paths, pl, plt, save_plot, sns):
     # ── τ sweep analysis ────────────────────────────────────────────────────────
     # Loads results produced by:
     #   uv run python scripts/fit_tau_sweep.py --model glmhmm --K <K>
@@ -1438,7 +1406,7 @@ def _(K, df_all, mo, np, paths, pl, plt, save_plot, sns, ui_subjects):
     _df_sweep = pl.read_parquet(_sweep_path)
     _subjects = [
         s
-        for s in ui_subjects.value
+        for s in model_cfg.subjects
         if s in _df_sweep["subject"].unique().to_list()
     ]
     mo.stop(not _subjects, mo.md("No sweep data for selected subjects."))
@@ -1570,6 +1538,7 @@ def _(
     build_views,
     df_all,
     mo,
+    model_cfg,
     np,
     paths,
     pl,
@@ -1578,7 +1547,6 @@ def _(
     ssm_run_btn,
     task_name,
     trial_df,
-    ui_subjects,
     views,
 ):
     # ── SSM fit + comparison tables ────────────────────────────────────────────
@@ -1597,7 +1565,7 @@ def _(
         )
     from scripts.fit_common import valid_trial_mask
 
-    ssm_subjects = [subject for subject in ui_subjects.value if subject in views]
+    ssm_subjects = [subject for subject in model_cfg.subjects if subject in views]
     mo.stop(not ssm_subjects, mo.md("No fitted arrays found — run the custom fit first."))
 
     ssm_arrays = {}

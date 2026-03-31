@@ -32,12 +32,13 @@ def _():
     from glmhmmt.model import SoftmaxGLMHMM
     from glmhmmt.views import build_views
     from tasks import get_adapter
-    from widgets import ModelManagerWidget
+    from widgets import ModelManagerWidget, model_cfg as ModelCfg
     from coefficient_editor_widget import CoefficientEditorWidget
 
     sns.set_style("white")
     return (
         CoefficientEditorWidget,
+        ModelCfg,
         ModelManagerWidget,
         SoftmaxGLMHMM,
         build_views,
@@ -93,8 +94,14 @@ def _(ModelManagerWidget, mo):
 
 
 @app.cell
-def _(get_adapter, paths, pl, ui_model_manager):
-    task_name = ui_model_manager.value["task"]
+def _(ModelCfg, ui_model_manager):
+    model_cfg = ModelCfg.from_value(ui_model_manager.value)
+    return (model_cfg,)
+
+
+@app.cell
+def _(get_adapter, model_cfg, paths, pl):
+    task_name = model_cfg.task
     adapter = get_adapter(task_name)
     df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
     df_all = adapter.subject_filter(df_all)
@@ -102,19 +109,8 @@ def _(get_adapter, paths, pl, ui_model_manager):
 
 
 @app.cell(hide_code=True)
-def _(mo, ui_model_manager):
-    class _V:
-        def __init__(self, value):
-            self.value = value
-
-    _val = ui_model_manager.value
-    _subjects = sorted(_val.get("subjects", []), key=str)
-    _selected_subject = _subjects[0] if _subjects else None
-
-    ui_subject = _V(_selected_subject)
-    ui_K = _V(_val["K"])
-    ui_tau = _V(_val["tau"])
-    ui_emission_cols = _V(_val.get("emission_cols", []))
+def _(mo, model_cfg, ui_model_manager):
+    selected_subject = model_cfg.subjects[0] if model_cfg.subjects else None
     ui_seed = mo.ui.number(start=0, stop=9999, value=42, step=1, label="Random seed")
     ui_num_iters = mo.ui.slider(start=10, stop=300, value=50, step=10, label="EM iterations")
     ui_restarts = mo.ui.slider(start=1, stop=10, value=5, step=1, label="Restarts")
@@ -128,9 +124,9 @@ def _(mo, ui_model_manager):
             mo.md("### 1. Data and model configuration"),
             ui_model_manager,
             mo.md(
-                f"Using subject **{_selected_subject}** for the synthetic recovery dataset "
+                f"Using subject **{selected_subject}** for the synthetic recovery dataset "
                 "(the first selected subject in the model widget)."
-                if _selected_subject is not None
+                if selected_subject is not None
                 else "Select at least one subject in the model widget."
             ),
             mo.hstack([ui_seed, ui_num_iters, ui_restarts]),
@@ -143,23 +139,20 @@ def _(mo, ui_model_manager):
         align="start",
     )
     return (
-        ui_K,
-        ui_emission_cols,
         ui_num_iters,
         ui_restarts,
         ui_run_recovery,
         ui_seed,
-        ui_subject,
-        ui_tau,
+        selected_subject,
     )
 
 
 @app.cell(hide_code=True)
-def _(mo, paths, task_name, ui_K, ui_model_manager):
-    _fit_root = paths.RESULTS / "fits" / task_name / "glmhmm" / ui_model_manager.value["alias"]
-    _fit_files = sorted(_fit_root.rglob(f"*_K{ui_K.value}_glmhmm_arrays.npz"))
+def _(mo, model_cfg, paths, task_name):
+    _fit_root = paths.RESULTS / "fits" / task_name / "glmhmm" / model_cfg.alias
+    _fit_files = sorted(_fit_root.rglob(f"*_K{model_cfg.K}_glmhmm_arrays.npz"))
     _fit_options = {
-        f"{_p.stem.split(f'_K{ui_K.value}')[0]}  [{_p.parent.name}]": str(_p)
+        f"{_p.stem.split(f'_K{model_cfg.K}')[0]}  [{_p.parent.name}]": str(_p)
         for _p in _fit_files
     }
     ui_fit_subject = mo.ui.dropdown(
@@ -173,13 +166,13 @@ def _(mo, paths, task_name, ui_K, ui_model_manager):
 
 
 @app.cell
-def _(adapter, df_all, mo, np, pl, ui_emission_cols, ui_subject, ui_tau):
-    mo.stop(ui_subject.value is None, mo.md("Select at least one subject in the model widget."))
-    df_sub = df_all.filter(pl.col("subject") == ui_subject.value).sort(adapter.sort_col)
+def _(adapter, df_all, mo, model_cfg, np, pl, selected_subject):
+    mo.stop(selected_subject is None, mo.md("Select at least one subject in the model widget."))
+    df_sub = df_all.filter(pl.col("subject") == selected_subject).sort(adapter.sort_col)
     y_real, X, U, names = adapter.load_subject(
         df_sub,
-        tau=ui_tau.value,
-        emission_cols=ui_emission_cols.value or None,
+        tau=model_cfg.tau,
+        emission_cols=model_cfg.emission_cols or None,
         transition_cols=adapter.default_transition_cols(),
     )
     session_ids = df_sub[adapter.session_col].to_numpy()
@@ -236,17 +229,17 @@ def _(
     CoefficientEditorWidget,
     contrast_labels,
     feat_names,
+    model_cfg,
     mo,
     np,
     num_classes,
     reference_label,
-    ui_K,
     ui_fit_subject,
     ui_load_fit,
 ):
     from wigglystuff import TangleSlider
 
-    K_val = ui_K.value
+    K_val = model_cfg.K
     _contrast_count = num_classes - 1
     _preset_w = {}
     _preset_a = {}

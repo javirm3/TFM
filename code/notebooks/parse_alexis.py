@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.21.0"
+__generated_with = "0.21.1"
 app = marimo.App(width="full")
 
 
@@ -24,10 +24,25 @@ def _():
     return filter_behavior, np, paths, pd, pl
 
 
+@app.function
+def normalize_subject_id(value):
+    if value is None:
+        return None
+    value = str(value).strip()
+    if not value:
+        return None
+    try:
+        return str(int(float(value)))
+    except ValueError:
+        return value
+
+
 @app.cell
 def _(filter_behavior, paths, pl, subject_names_to_keep):
     base_path = paths.DATA_PATH / "Alexis"
     experiment_folders = [f"2AFC_{i}" for i in range(1, 7)] + ["2AFC"]
+
+
 
     dfs = []
     for folder in experiment_folders:
@@ -35,9 +50,25 @@ def _(filter_behavior, paths, pl, subject_names_to_keep):
         if folder_path.exists():
             for csv_file in folder_path.glob("*.csv"):
                 if "corrupted" not in csv_file.name:
+                    expected_subject = normalize_subject_id(csv_file.stem)
                     df = (
                         pl.read_csv(csv_file, infer_schema=False)
                     )
+                    if "Subject" in df.columns and expected_subject is not None:
+                        normalized_subject = pl.coalesce(
+                            pl.col("Subject")
+                            .cast(pl.Float64, strict=False)
+                            .cast(pl.Int64, strict=False)
+                            .cast(pl.Utf8),
+                            pl.col("Subject").cast(pl.Utf8, strict=False).str.strip_chars(),
+                        )
+                        rows_before = df.height
+                        df = df.filter(normalized_subject == expected_subject)
+                        dropped_rows = rows_before - df.height
+                        if dropped_rows:
+                            print(
+                                f"Dropped {dropped_rows} mismatched rows from {folder}/{csv_file.name}"
+                            )
                     df = df.drop("Experiment")
                     df = df.with_columns(pl.lit(folder).alias("Experiment"))
                     dfs.append(df)

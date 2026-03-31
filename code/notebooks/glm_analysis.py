@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.21.0"
+__generated_with = "0.21.1"
 app = marimo.App(width="medium")
 
 
@@ -32,8 +32,9 @@ def _():
         select_subject_behavior_df,
     )
     from scripts.fit_glm import main as fit_main, generate_model_id
+    from glmhmmt.postprocess import build_trial_df
     from tasks import get_adapter
-    from widgets import ModelManagerWidget
+    from widgets import ModelManagerWidget, model_cfg as ModelCfg
     from figure_save_utils import make_plot_saver
     from coefficient_editor_widget import CoefficientEditorWidget
     from coefficient_editor_utils import (
@@ -45,11 +46,13 @@ def _():
     sns.set_style("white")
     return (
         CoefficientEditorWidget,
+        ModelCfg,
         ModelManagerWidget,
         apply_state_tweak_to_trial_df,
         apply_state_tweak_to_view,
         build_editor_payload,
         build_trial_and_weights_df,
+        build_trial_df,
         fit_main,
         generate_model_id,
         get_adapter,
@@ -76,8 +79,8 @@ def _(mo):
 
 
 @app.cell
-def _(get_adapter, paths, pl, ui_model_manager):
-    task_name = ui_model_manager.value.get("task", "MCDR")
+def _(get_adapter, model_cfg, paths, pl):
+    task_name = model_cfg.task
     adapter = get_adapter(task_name)
     df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
     df_all = adapter.subject_filter(df_all)
@@ -99,36 +102,20 @@ def _(ModelManagerWidget, mo):
 
 
 @app.cell
-def _(adapter, ui_model_manager):
-    class _V:
-        def __init__(self, value):
-            self.value = value
-
-    _val = ui_model_manager.value
-    is_2afc = adapter.num_classes == 2
-
-    ui_existing = _V(None if _val.get("existing_model") in ("", "__default__") else _val.get("existing_model"))
-    ui_alias = _V(_val.get("alias", ""))
-    ui_subjects = _V(_val.get("subjects", []))
-    ui_tau = _V(_val.get("tau", 5))
-    ui_lapse = _V(_val.get("lapse", False))
-    ui_lapse_max = _V(_val.get("lapse_max", 0.2))
-    ui_emission_cols = _V(_val.get("emission_cols", []))
-    return (
-        is_2afc,
-        ui_alias,
-        ui_emission_cols,
-        ui_existing,
-        ui_lapse,
-        ui_lapse_max,
-        ui_subjects,
-        ui_tau,
-    )
+def _(ModelCfg, ui_model_manager):
+    model_cfg = ModelCfg.from_value(ui_model_manager.value)
+    is_2afc = (model_cfg.task != "MCDR")
+    return is_2afc, model_cfg
 
 
 @app.cell
-def _(generate_model_id, task_name, ui_emission_cols, ui_lapse, ui_tau):
-    current_hash = generate_model_id(task_name, ui_tau.value, ui_emission_cols.value, lapse=ui_lapse.value)
+def _(generate_model_id, model_cfg, task_name):
+    current_hash = generate_model_id(
+        task_name,
+        model_cfg.tau,
+        model_cfg.emission_cols,
+        lapse=model_cfg.lapse,
+    )
     return (current_hash,)
 
 
@@ -137,16 +124,15 @@ def _(
     current_hash,
     make_plot_saver,
     mo,
+    model_cfg,
     paths,
     resolve_selected_model_id,
     task_name,
-    ui_alias,
-    ui_existing,
 ):
     selected_model_id = resolve_selected_model_id(
         current_hash,
-        ui_existing.value,
-        ui_alias.value,
+        model_cfg.existing,
+        model_cfg.alias,
     )
     save_plot = make_plot_saver(
         mo,
@@ -177,31 +163,20 @@ def _(current_hash, mo, save_plot, ui_model_manager):
 
 
 @app.cell
-def _(
-    fit_main,
-    mo,
-    task_name,
-    ui_alias,
-    ui_emission_cols,
-    ui_lapse,
-    ui_lapse_max,
-    ui_model_manager,
-    ui_subjects,
-    ui_tau,
-):
-    _clicks = ui_model_manager.value.get("run_fit_clicks", 0)
+def _(fit_main, mo, model_cfg, task_name):
+    _clicks = model_cfg.run_fit_clicks
     mo.stop(_clicks == 0, mo.md("Configure parameters and press **Run GLM Fit**."))
 
-    with mo.status.spinner(title=f"Fitting GLM for {len(ui_subjects.value)} subjects..."):
+    with mo.status.spinner(title=f"Fitting GLM for {len(model_cfg.subjects)} subjects..."):
         fit_main(
-            subjects=ui_subjects.value,
+            subjects=model_cfg.subjects,
             out_dir=None,
-            tau=ui_tau.value,
-            emission_cols=ui_emission_cols.value,
+            tau=model_cfg.tau,
+            emission_cols=model_cfg.emission_cols,
             task=task_name,
-            model_alias=ui_alias.value if ui_alias.value else None,
-            lapse=ui_lapse.value,
-            lapse_max=ui_lapse_max.value,
+            model_alias=model_cfg.alias if model_cfg.alias else None,
+            lapse=model_cfg.lapse,
+            lapse_max=model_cfg.lapse_max,
         )
 
     mo.md("✅ Fit complete. Plots updating...")
@@ -214,11 +189,10 @@ def _(
     df_all,
     load_fit_arrays,
     mo,
+    model_cfg,
     paths,
     selected_model_id,
     task_name,
-    ui_emission_cols,
-    ui_subjects,
 ):
     def _normalize_glm_arrays(arrays: dict) -> dict:
         # ── Backward-compatibility: old fit_glm.py saved W_R at index 0.
@@ -242,23 +216,23 @@ def _(
         arrays_suffix="glm_arrays.npz",
         adapter=adapter,
         df_all=df_all,
-        subjects=list(ui_subjects.value),
-        emission_cols=list(ui_emission_cols.value),
+        subjects=list(model_cfg.subjects),
+        emission_cols=list(model_cfg.emission_cols),
         postprocess_array=_normalize_glm_arrays,
     )
 
     mo.md(f"Loaded {len(arrays_store)} subjects from `{selected_model_id}`")
-    return arrays_store, names
+    return (arrays_store,)
 
 
 @app.cell
-def _(adapter, arrays_store, mo, ui_subjects):
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+def _(adapter, arrays_store, mo, model_cfg):
+    selected = [s for s in model_cfg.subjects if s in arrays_store]
+    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
     from glmhmmt.views import build_views
     K = 1
-    views = build_views(arrays_store, adapter, K, _selected)
-    return K, build_views, views
+    views = build_views(arrays_store, adapter, K, selected)
+    return K, build_views, selected, views
 
 
 @app.cell
@@ -383,73 +357,47 @@ def _(adapter, build_trial_and_weights_df, df_all, mo, views):
     return trial_df, weights_df
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Plots
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Emission Weights
+    """)
+    return
+
+
 @app.cell
 def _(
     K,
     arrays_store,
-    is_2afc,
     mo,
-    names,
-    paths,
     pl,
     plot_sequence_feature_weights,
     plots,
-    ui_subjects,
+    save_plot,
+    selected,
     views,
     weights_df,
 ):
-    # Plot Weights (Folded / Agonist)
-    # GLM is essentially K=1.
-    # State Labels Trivial
+    mo.stop(not arrays_store, mo.md("No results loaded."))
+    views_sel = {s: views[s] for s in selected}
+    _weights_df_sel = weights_df.filter(pl.col("subject").is_in(selected))
+    _state_labels = {s: dict(views[s].state_name_by_idx) for s in selected}
 
-    if not arrays_store:
-        mo.stop(True, mo.md("No results loaded."))
-    _selected = [s for s in ui_subjects.value if s in arrays_store]
-    _save_path = paths.RESULTS / "plots/GLMHMM/emissions_coefs.png"
-    _views_sel = {s: views[s] for s in _selected}
-    _weights_df_sel = weights_df.filter(pl.col("subject").is_in(_selected))
-    _state_labels = {s: dict(views[s].state_name_by_idx) for s in _selected}
-
-    if hasattr(plots, "plot_emission_weights_by_subject"):
-        if is_2afc:
-            _fig_by_subject = plots.plot_emission_weights_by_subject(
-                views=_views_sel,
-                K=K,
-                save_path=_save_path,
-            )
-        else:
-            _fig_by_subject = plots.plot_emission_weights_by_subject(
-                arrays_store=arrays_store,
-                state_labels=_state_labels,
-                names=names,
-                K=K,
-                subjects=_selected,
-                save_path=_save_path,
-            )
-    else:
-        _fig_by_subject, _ = plots.plot_emission_weights(
-            views=_views_sel,
-            K=K,
-            save_path=_save_path,
-        )
-
-    if hasattr(plots, "plot_emission_weights_summary"):
-        _summary_figs = [plots.plot_emission_weights_summary(views=_views_sel, K=K)]
-    elif is_2afc:
-        _summary_figs = [plots.plot_emission_weights(views=_views_sel, K=K)[1]]
-    else:
-        _summary_figs = list(
-            plots.plot_emission_weights(
-                arrays_store=arrays_store,
-                state_labels=_state_labels,
-                names=names,
-                K=K,
-                subjects=_selected,
-            )
-        )
-
+    _fig_by_subject = plots.plot_emission_weights_by_subject(
+        views=views_sel,
+        K=K,
+    )
+    _summary_figs = [plots.plot_emission_weights_summary(views=views_sel, K=K)]
     _fig_seq = plot_sequence_feature_weights(_weights_df_sel)
-    _items = [mo.md("### Emission weights"), mo.md("#### By subject"), _fig_by_subject]
+    _items = [mo.md("#### By subject"), _fig_by_subject]
     if _fig_seq is not None:
         _items.extend([mo.md("#### Sequential coefficients"), _fig_seq])
     else:
@@ -459,66 +407,53 @@ def _(
                 mo.md("No `s_i` / `sf_i` regressors found in the current GLM fit."),
             ]
         )
-    _items.extend([mo.md("#### Summary"), *_summary_figs])
-    mo.vstack(_items)
+    _items.extend([mo.md("#### Summary"), *_summary_figs, save_plot(_summary_figs, "emission weights", stem="emission_weights")])
+    mo.vstack(_items, align = "center")
+    return (views_sel,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Accuracy plots
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Summary
+    """)
     return
 
 
 @app.cell
-def _(is_2afc, mo, pl, plots, save_plot, trial_df, ui_subjects, views):
-    _selected = [s for s in ui_subjects.value if s in views]
-    mo.stop(not _selected, mo.md("No fitted arrays found — run the fit first."))
+def _(is_2afc, mo, pl, plots, save_plot, selected, trial_df, views_sel):
+    mo.stop(not selected, mo.md("No fitted arrays found — run the fit first."))
 
-    _views_sel = {s: views[s] for s in _selected}
-    _trial_df_sel = trial_df.filter(pl.col("subject").is_in(_selected))
+    _trial_df_sel = trial_df.filter(pl.col("subject").is_in(selected))
 
     mo.stop(_trial_df_sel.height == 0, mo.md("No subjects with matching data lengths."))
 
     _plot_df_all = plots.prepare_predictions_df(_trial_df_sel)
-    _perf_kwargs = {"views": _views_sel} if is_2afc else {}
+    _perf_kwargs = {"views": views_sel} if is_2afc else {}
     _fig_all, _ = plots.plot_categorical_performance_all(
         _plot_df_all,
         "glm",
         # background_style=ui_psychometric_background.value,
         **_perf_kwargs,
     )
-    _side_plot_fn = getattr(plots, "plot_categorical_strat_by_side", None)
-    if _side_plot_fn is None:
-        _side_section = mo.md("This task does not expose a side-stratified categorical plot.")
-    else:
-        _side_fig, _ = _side_plot_fn(
-            _plot_df_all,
-            subject=_selected[0] if len(_selected) == 1 else None,
-            model_name="glm",
-        )
-        _side_section = mo.vstack(
-            [
-                mo.md("### Categorical performance by stimulus side"),
-                _side_fig,
-            ],
-            align="center",
-        )
-    mo.vstack(
-        [
-            mo.md("### Categorical plots for accuracy"),
-            mo.hstack(
-                [
-                    mo.vstack([_fig_all], align="center"),
-                    mo.vstack(
-                        [
-                            save_plot(_fig_all, "overall psychometric", stem="categorical_overall"),
-                        ],
-                        align="start",
-                    ),
-                ],
-                justify="space-between",
-                align="center",
-                widths=[4, 1],
-            ),
-            _side_section,
-        ],
-        align="center",
-    )
+
+    mo.vstack([_fig_all, save_plot(_fig_all, "overall psychometric", stem="categorical_overall"),], align="center")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## By subject (editable)
+    """)
     return
 
 
@@ -531,12 +466,11 @@ def _(editor_views, mo):
         value=subjects[0],
         label="Subject",
     )
-    ui_editor_subject
     return (ui_editor_subject,)
 
 
 @app.cell
-def _(editor_views, mo, ui_editor_subject):
+def _(adapter, editor_views, mo, ui_editor_subject):
     _view = editor_views[ui_editor_subject.value]
     _state_options = [
         f"{_k} — {_view.state_name_by_idx.get(_k, f'State {_k}')}"
@@ -547,23 +481,14 @@ def _(editor_views, mo, ui_editor_subject):
         value=_state_options[0],
         label="State",
     )
-    ui_editor_state
-    return (ui_editor_state,)
-
-
-@app.cell
-def _(adapter, mo):
-    if adapter.num_classes != 2:
-        ui_editor_side = None
-    else:
-        _choices = [str(label) for label in adapter.choice_labels]
-        ui_editor_side = mo.ui.dropdown(
-            options=_choices,
-            value=_choices[0],
-            label="Side",
-        )
-        ui_editor_side
-    return (ui_editor_side,)
+    _choices = [str(label) for label in adapter.choice_labels]
+    ui_editor_side = mo.ui.dropdown(
+        options=_choices,
+        value=_choices[0],
+        label="Side",
+    )
+    mo.hstack([ui_editor_subject, ui_editor_state, ui_editor_side], justify="center")
+    return ui_editor_side, ui_editor_state
 
 
 @app.cell
@@ -578,24 +503,25 @@ def _(
     ui_editor_state,
     ui_editor_subject,
 ):
-    _subj = ui_editor_subject.value
-    _view = editor_views[_subj]
+    subject = ui_editor_subject.value
+    view = editor_views[subject]
     coef_state_idx = int(ui_editor_state.value.split(" — ", 1)[0])
-    coef_state_label = _view.state_name_by_idx.get(
+    coef_state_label = view.state_name_by_idx.get(
         coef_state_idx, f"State {coef_state_idx}"
     )
-    _stored_weights = np.asarray(_view.emission_weights[coef_state_idx], dtype=float)
+    _stored_weights = np.asarray(view.emission_weights[coef_state_idx], dtype=float)
     _choice_labels = [str(label) for label in adapter.choice_labels]
-    _stored_class_indices = [0] if _view.num_classes == 2 else [0, 2]
-    _reference_class_idx = 1 if _view.num_classes > 2 else (_view.num_classes - 1)
-    if _view.num_classes == 2 and ui_editor_side is not None:
+    _stored_class_indices = [0] if view.num_classes == 2 else [0, 2]
+    _reference_class_idx = 1 if view.num_classes > 2 else (view.num_classes - 1)
+    if view.num_classes == 2 and ui_editor_side is not None:
         _display_class_idx = _choice_labels.index(ui_editor_side.value)
         _display_reference_class_idx = next(
-            idx for idx in range(_view.num_classes) if idx != _display_class_idx
+            idx for idx in range(view.num_classes) if idx != _display_class_idx
         )
     else:
         _display_reference_class_idx = None
-    _payload = build_editor_payload(
+    
+    coef_editor_payload = build_editor_payload(
         _stored_weights,
         choice_labels=_choice_labels,
         stored_class_indices=_stored_class_indices,
@@ -606,11 +532,11 @@ def _(
     coef_editor = mo.ui.anywidget(
         CoefficientEditorWidget(
             title="Coefficient editor",
-            subtitle=_payload["subtitle"],
-            features=list(_view.feat_names),
-            channel_labels=_payload["channel_labels"],
-            weights=_payload["weights"].tolist(),
-            original_weights=_payload["weights"].tolist(),
+            subtitle=coef_editor_payload["subtitle"],
+            features=list(view.feat_names),
+            channel_labels=coef_editor_payload["channel_labels"],
+            weights=coef_editor_payload["weights"].tolist(),
+            original_weights=coef_editor_payload["weights"].tolist(),
             slider_min=-6.0,
             slider_max=6.0,
             slider_step=0.05,
@@ -620,59 +546,39 @@ def _(
     if ui_editor_side is not None:
         _controls.append(ui_editor_side)
 
-    coef_editor_panel = mo.vstack(
-        [
-            mo.md("### Interactive coefficient editor"),
-            mo.md(
-                "The edited state is recomputed live and the categorical plots "
-                "below use the updated probabilities."
-            ),
-            mo.hstack(_controls),
-            coef_editor,
-        ],
-        align="center",
-    )
-    coef_editor_panel
-    coef_editor_explicit_class_indices = _payload["explicit_class_indices"]
-    coef_editor_reference_class_idx = _payload["reference_class_idx"]
-    coef_editor_stored_class_indices = _payload["stored_class_indices"]
-    coef_editor_stored_reference_class_idx = _payload["stored_reference_class_idx"]
+
     coef_editor
     return (
         coef_editor,
-        coef_editor_explicit_class_indices,
-        coef_editor_reference_class_idx,
-        coef_editor_stored_class_indices,
-        coef_editor_stored_reference_class_idx,
+        coef_editor_payload,
         coef_state_idx,
         coef_state_label,
+        subject,
+        view,
     )
 
 
 @app.cell
 def _(
     adapter,
+    build_trial_df,
     df_all,
-    editor_views,
     mo,
     select_subject_behavior_df,
-    ui_editor_subject,
+    subject,
+    view,
 ):
-    _subj = ui_editor_subject.value
-    _view = editor_views[_subj]
-    from glmhmmt.postprocess import build_trial_df
-
     _df_sub = select_subject_behavior_df(
         df_all,
-        subject=_subj,
+        subject=subject,
         sort_col=adapter.sort_col,
         session_col=adapter.session_col,
         min_session_length=1,
     )
-    mo.stop(_df_sub.height != _view.T, mo.md(f"Subject {_subj} does not match the loaded fit arrays."))
-    editor_trial_df = build_trial_df(_view, adapter, _df_sub, adapter.behavioral_cols)
-    editor_view = _view
-    return editor_trial_df, editor_view
+    mo.stop(_df_sub.height != view.T, mo.md(f"Subject {subject} does not match the loaded fit arrays."))
+    editor_trial_df = build_trial_df(view, adapter, _df_sub, adapter.behavioral_cols)
+
+    return (editor_trial_df,)
 
 
 @app.cell
@@ -681,47 +587,42 @@ def _(
     apply_state_tweak_to_trial_df,
     apply_state_tweak_to_view,
     coef_editor,
-    coef_editor_explicit_class_indices,
-    coef_editor_reference_class_idx,
-    coef_editor_stored_class_indices,
-    coef_editor_stored_reference_class_idx,
+    coef_editor_payload,
     coef_state_idx,
     coef_state_label,
     editor_trial_df,
-    editor_view,
     mo,
     np,
     plots,
     save_plot,
-    ui_editor_subject,
+    subject,
+    view,
 ):
-    _subj = ui_editor_subject.value
-    _view = editor_view
     _trial_df_sub = editor_trial_df
     _edited_weights = np.asarray(coef_editor.value["weights"], dtype=float)
 
     _trial_df_tweaked = apply_state_tweak_to_trial_df(
         _trial_df_sub,
         adapter=adapter,
-        view=_view,
+        view=view,
         state_idx=coef_state_idx,
         edited_weights=_edited_weights,
         original_weights=np.asarray(coef_editor.value["original_weights"], dtype=float),
-        explicit_class_indices=list(coef_editor_explicit_class_indices),
-        reference_class_idx=int(coef_editor_reference_class_idx),
+        explicit_class_indices=list(coef_editor_payload["explicit_class_indices"]),
+        reference_class_idx=int(coef_editor_payload["reference_class_idx"]),
     )
     _view_tweaked = apply_state_tweak_to_view(
-        _view,
+        view,
         state_idx=coef_state_idx,
         edited_weights=_edited_weights,
-        explicit_class_indices=list(coef_editor_explicit_class_indices),
-        reference_class_idx=int(coef_editor_reference_class_idx),
-        stored_class_indices=list(coef_editor_stored_class_indices),
-        stored_reference_class_idx=int(coef_editor_stored_reference_class_idx),
+        explicit_class_indices=list(coef_editor_payload["explicit_class_indices"]),
+        reference_class_idx=int(coef_editor_payload["reference_class_idx"]),
+        stored_class_indices=list(coef_editor_payload["stored_class_indices"]),
+        stored_reference_class_idx=int(coef_editor_payload["stored_reference_class_idx"]),
     )
     _plot_df_tweaked = plots.prepare_predictions_df(_trial_df_tweaked)
 
-    _title = f"{_subj} — tweaked {coef_state_label}"
+    _title = f"{subject} — tweaked {coef_state_label}"
     _fig_all_tweaked, _ = plots.plot_categorical_performance_all(
         _plot_df_tweaked,
         _title,
@@ -729,44 +630,41 @@ def _(
     )
     _side_plot_fn = getattr(plots, "plot_categorical_strat_by_side", None)
     if _side_plot_fn is None:
-        _side_section = mo.md("This task does not expose a side-stratified categorical plot.")
+        _fig_side_tweaked = mo.md("This task does not expose a side-stratified categorical plot.")
     else:
         _fig_side_tweaked, _ = plots.plot_categorical_strat_by_side(
             _plot_df_tweaked,
-            subject=_subj,
-            model_name=f"{_subj}_tweaked_{coef_state_idx}",
-        )
-        _side_section = mo.vstack(
-            [
-                mo.md("### Tweaked categorical performance by stimulus side"),
-                _fig_side_tweaked,
-            ]
+            subject=subject,
+            model_name=f"{subject}_tweaked_{coef_state_idx}",
         )
 
-    mo.vstack(
+
+    mo.hstack(
         [
-            mo.md("### Tweaked categorical plots"),
             mo.vstack(
                 [
-                    mo.vstack([_fig_all_tweaked], align="center"),
-                    mo.vstack(
-                        [
-                            # ui_psychometric_background,
-                            save_plot(
-                                _fig_all_tweaked,
-                                "tweaked overall psychometric",
-                                stem="tweaked_categorical_overall",
-                            ),
-                        ],
-                        align="start",
+                    _fig_all_tweaked,
+                    save_plot(
+                        _fig_all_tweaked,
+                        "tweaked overall psychometric",
+                        stem="tweaked_categorical_overall",
                     ),
                 ],
-                justify="space-between",
                 align="center",
             ),
-            _side_section,
+            mo.vstack(
+                [
+                    _fig_side_tweaked,
+                    save_plot(
+                        _fig_side_tweaked,
+                        "tweaked overall psychometric",
+                        stem="tweaked_categorical_side",
+                    ),
+                ],
+                align="center",
+            ),
         ],
-        align="center",
+        widths=[2.5, 1],
     )
     return
 

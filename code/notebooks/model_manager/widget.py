@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -151,6 +152,46 @@ def _get_K_from_config(cfg: dict) -> Any:
     return "?"
 
 
+@dataclass
+class model_cfg:
+    task: str = "MCDR"
+    model_type: str = "glmhmm"
+    existing: str | None = None
+    alias: str = ""
+    subjects: list[str] = field(default_factory=list)
+    K: int = 2
+    tau: int = 50
+    cv_mode: str = "none"
+    cv_repeats: int = 5
+    lapse: bool = False
+    lapse_max: float = 0.2
+    emission_cols: list[str] = field(default_factory=list)
+    transition_cols: list[str] = field(default_factory=list)
+    frozen_emissions: dict[str, Any] = field(default_factory=dict)
+    run_fit_clicks: int = 0
+
+    @classmethod
+    def from_value(cls, value: dict[str, Any]) -> "model_cfg":
+        existing = value.get("existing_model")
+        return cls(
+            task=str(value.get("task", "MCDR")),
+            model_type=str(value.get("model_type", "glmhmm")),
+            existing=None if existing in ("", "__default__") else existing,
+            alias=str(value.get("alias", "")),
+            subjects=list(value.get("subjects", [])),
+            K=int(value.get("K", 2)),
+            tau=int(value.get("tau", 50)),
+            cv_mode=_normalize_cv_mode(value.get("cv_mode", "none")),
+            cv_repeats=int(value.get("cv_repeats", 5)),
+            lapse=bool(value.get("lapse", False)),
+            lapse_max=float(value.get("lapse_max", 0.2)),
+            emission_cols=list(value.get("emission_cols", [])),
+            transition_cols=list(value.get("transition_cols", [])),
+            frozen_emissions=serialize_frozen_emissions(value.get("frozen_emissions", {})),
+            run_fit_clicks=int(value.get("run_fit_clicks", 0)),
+        )
+
+
 # ── Widget ────────────────────────────────────────────────────────────────────
 
 class ModelManagerWidget(anywidget.AnyWidget):
@@ -208,6 +249,28 @@ class ModelManagerWidget(anywidget.AnyWidget):
         super().__init__(**kwargs)
         self.task_options = get_task_options()
         self._update_options()
+
+    @property
+    def model_cfg(self) -> model_cfg:
+        return model_cfg.from_value(
+            {
+                "task": self.task,
+                "model_type": self.model_type,
+                "existing_model": self.existing_model,
+                "alias": self.alias,
+                "subjects": list(self.subjects),
+                "K": int(self.K),
+                "tau": int(self.tau),
+                "cv_mode": self.cv_mode,
+                "cv_repeats": int(self.cv_repeats),
+                "lapse": bool(self.lapse),
+                "lapse_max": float(self.lapse_max),
+                "emission_cols": list(self.emission_cols),
+                "transition_cols": list(self.transition_cols),
+                "frozen_emissions": serialize_frozen_emissions(self.frozen_emissions),
+                "run_fit_clicks": int(self.run_fit_clicks),
+            }
+        )
 
     # ── observers ─────────────────────────────────────────────────────────────
 

@@ -13,6 +13,14 @@ function clampValue(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function chunkItems(items, chunkSize) {
+  const chunks = [];
+  for (let startIdx = 0; startIdx < items.length; startIdx += chunkSize) {
+    chunks.push(items.slice(startIdx, startIdx + chunkSize));
+  }
+  return chunks;
+}
+
 function editorKey(target) {
   return `${target.dataset.channelIdx}:${target.dataset.featureIdx}`;
 }
@@ -55,6 +63,7 @@ function render({ model, el }) {
   };
 
   const updateUI = () => {
+    const maxCardsPerRow = 8;
     const title = model.get("title") || "Coefficient Editor";
     const subtitle = model.get("subtitle") || "";
     const features = model.get("features") || [];
@@ -86,7 +95,7 @@ function render({ model, el }) {
       )
       .join("");
 
-    const channels = features
+    const channelCards = features
       .map((feature, featureIdx) => {
         const sliders = weights
           .map((row, channelIdx) => {
@@ -137,7 +146,14 @@ function render({ model, el }) {
             </div>
           </div>
         `;
-      })
+      });
+
+    const rows = chunkItems(channelCards, maxCardsPerRow)
+      .map(
+        (rowCards) => `
+          <div class="ce-board-row">${rowCards.join("")}</div>
+        `,
+      )
       .join("");
 
     el.innerHTML = `
@@ -152,7 +168,7 @@ function render({ model, el }) {
             <button class="ce-reset" type="button">Reset</button>
           </div>
         </div>
-        <div class="ce-board">${channels}</div>
+        <div class="ce-board">${rows}</div>
       </div>
     `;
 

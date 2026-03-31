@@ -8,7 +8,7 @@ import os
 # Ensure paths and tasks can be importable by sibling modules too
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from model_manager import ModelManagerWidget  # noqa: F401  (re-exported)
+from model_manager import ModelManagerWidget, model_cfg  # noqa: F401  (re-exported)
 
 def random_string(length=8):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))

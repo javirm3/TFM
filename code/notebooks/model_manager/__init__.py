@@ -1,3 +1,3 @@
-from .widget import ModelManagerWidget
+from .widget import ModelManagerWidget, model_cfg
 
-__all__ = ["ModelManagerWidget"]
+__all__ = ["ModelManagerWidget", "model_cfg"]
