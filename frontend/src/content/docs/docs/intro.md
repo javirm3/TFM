@@ -28,23 +28,24 @@ The **GLM emission** connects observable covariates (stimulus contrast, previous
 | Per-subject session-aware EM | ❌ | ✅ |
 | Task-aware data loading | ❌ | `TaskAdapter.build_feature_df()` + `load_subject()` |
 | Postprocessing utilities | ❌ | `build_trial_df`, `build_emission_weights_df` |
-| Shared diagnostics + task-owned plots | ❌ | `glmhmmt.model_plots` + `tasks.plots.*` |
+| Shared diagnostics + task-owned plots | ❌ | `glmhmmt.model_plots` + bundled `tasks.plots.*` |
 
 ## Package structure
 
 ```text
 code/
-├── glmhmmt/src/glmhmmt/
-│   ├── model.py
-│   ├── features.py
-│   ├── postprocess.py
-│   ├── views.py
-│   └── model_plots.py
-├── tasks/
-│   ├── mcdr.py
-│   ├── two_afc.py
-│   └── plots/
-└── notebooks/
+└── glmhmmt/
+    ├── config.toml
+    ├── notebooks/
+    ├── tasks/
+    │   └── plots/
+    └── src/glmhmmt/
+        ├── cli/
+        ├── model.py
+        ├── features.py
+        ├── postprocess.py
+        ├── views.py
+        └── model_plots.py
 ```
 
 The core package stays task-agnostic. All task semantics live in the adapter and

@@ -14,7 +14,7 @@ Model fitting is disabled in the web version as it requires heavy backends (JAX/
 Compare fit metrics (Log-likelihood, BIC, Accuracy) across different model types (GLM, GLM-HMM, GLM-HMM-T) and state counts.
 
 <iframe
-  src="https://molab.marimo.io/github/javirm3/TFM/blob/main/code/notebooks/model_comparison.py/wasm?embed=true"
+  src="https://molab.marimo.io/github/javirm3/TFM/blob/main/code/glmhmmt/notebooks/model_comparison.py/wasm?embed=true"
   width="100%"
   height="800px"
   frameborder="0"
@@ -26,7 +26,7 @@ Compare fit metrics (Log-likelihood, BIC, Accuracy) across different model types
 Deep dive into a single GLM-HMM fit, exploring emission weights, transition matrices, and posterior state probabilities.
 
 <iframe
-  src="https://molab.marimo.io/github/javirm3/TFM/blob/main/code/notebooks/glmhmm_analysis.py/wasm?embed=true"
+  src="https://molab.marimo.io/github/javirm3/TFM/blob/main/code/glmhmmt/notebooks/glmhmm_analysis.py/wasm?embed=true"
   width="100%"
   height="800px"
   frameborder="0"

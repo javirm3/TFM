@@ -565,9 +565,9 @@ class SoftmaxGLMHMM(HMM):
             params, props, y, inputs, session_ids, num_iters=50
         )
 
-        # --- with state-0 frozen as bias-only (spec from config.toml) ---
-        with open("config.toml", "rb") as f:
-            cfg = tomllib.load(f)
+        # --- with state-0 frozen as bias-only (spec from package config) ---
+        from glmhmmt.runtime import load_app_config
+        cfg = load_app_config()
         frozen = {int(k): v for k, v in cfg["glmhmm"]["frozen_emissions"].items()}
 
         model = SoftmaxGLMHMM(

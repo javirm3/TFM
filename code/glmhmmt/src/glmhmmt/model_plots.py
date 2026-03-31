@@ -1,5 +1,3 @@
-import paths
-
 import math
 from pathlib import Path
 import numpy as np
@@ -9,9 +7,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import t
 from scipy.special import softmax as _softmax
-import tomllib
 from matplotlib import cm, colors
 from typing import Tuple
+from glmhmmt.runtime import load_app_config
 from glmhmmt.views import get_state_palette as _get_config_state_palette
 from glmhmmt.plots_common import (
     plot_state_accuracy as _plot_state_accuracy_common,
@@ -27,8 +25,7 @@ from glmhmmt.plots_common import (
 )
 sns.set_style("white")
 
-with paths.CONFIG.open("rb") as f:
-        cfg = tomllib.load(f)
+cfg = load_app_config()
 
 def truncate_colormap(cmap_name, minval=0.2, maxval=0.9, n=256):
     """Trunca un colormap a un subrango."""

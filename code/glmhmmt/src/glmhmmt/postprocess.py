@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import numpy as np
 import polars as pl
-from tasks import TaskAdapter
+from glmhmmt.tasks import TaskAdapter
 
 from glmhmmt.views import SubjectFitView, _LABEL_RANK
 

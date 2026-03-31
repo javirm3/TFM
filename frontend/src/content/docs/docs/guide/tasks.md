@@ -10,7 +10,7 @@ editing the shared model code. In practice, that means:
 
 1. add a `TaskAdapter` subclass
 2. add a task-owned plotting module
-3. register the adapter
+3. drop the module into the repo task package
 4. keep task semantics out of `glmhmmt`
 
 The core package should continue to consume the same `(y, X, U, names)`
@@ -46,10 +46,9 @@ not make sense for every task, it probably belongs here rather than in
 ## Minimal example
 
 ```python
-from tasks import TaskAdapter, _register
+from glmhmmt.tasks import TaskAdapter
 
 
-@_register(["my_task"])
 class MyTaskAdapter(TaskAdapter):
     task_key = "my_task"
     task_label = "My Task"
@@ -138,16 +137,17 @@ its own axes, groupings, or behavioural interpretation.
 
 ## Registration
 
-Make sure the adapter file is imported at the bottom of `tasks/__init__.py` so it
-self-registers via the decorator.
+No explicit registration file is needed for repo-local tasks. `glmhmmt.tasks`
+auto-imports every non-private `*.py` module inside `code/glmhmmt/tasks/`, and
+each module registers itself via `@_register([...])`.
 
 ## Workflow after adding the task
 
 1. preprocess raw data into a parquet dataset
 2. implement the task-owned feature dataframe and adapter
 3. implement the task plot module
-4. register the adapter in `tasks/__init__.py`
-5. run the generic fit scripts with `--task my_task`
+4. save the adapter module in `code/glmhmmt/tasks/`
+5. run the generic CLI commands with `--task my_task`
 6. open the generic analysis notebooks and select the new task
 
 ## Companion skill

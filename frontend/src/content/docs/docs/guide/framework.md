@@ -5,10 +5,10 @@ description: Repository structure, data flow, and the division between shared mo
 
 ## Overview
 
-The repository is split into two layers:
+The public code now lives under one installable package project:
 
-- `glmhmmt`: the task-agnostic model package
-- `tasks`: adapters and plots for each experimental task
+- `glmhmmt`: the task-agnostic model package and bundled CLI
+- `tasks`: the mutable repo-local task plugin package that ships with the example adapters
 
 The core package should never need to know whether the data comes from MCDR,
 2AFC, or a future task. It only consumes tensors and returns fitted parameters,
@@ -24,23 +24,19 @@ special-casing tasks inside the model code.
 
 ```text
 code/
-├── glmhmmt/
-│   └── src/glmhmmt/
-│       ├── model.py
-│       ├── features.py
-│       ├── model_plots.py
-│       ├── postprocess.py
-│       └── views.py
-├── tasks/
-│   ├── __init__.py
-│   ├── mcdr.py
-│   ├── two_afc.py
-│   └── plots/
-│       ├── mcdr.py
-│       └── two_afc.py
-├── scripts/
-├── notebooks/
-└── paths.py
+└── glmhmmt/
+    ├── config.toml
+    ├── notebooks/
+    ├── tasks/
+    │   └── plots/
+    └── src/glmhmmt/
+        ├── cli/
+        ├── model.py
+        ├── features.py
+        ├── model_plots.py
+        ├── postprocess.py
+        ├── runtime.py
+        └── views.py
 ```
 
 ## Data flow
@@ -69,6 +65,7 @@ Put code here only if it is meaningful for any task:
 - posterior and weight postprocessing
 - fit result views
 - shared diagnostics such as emission weights, posterior probabilities, state occupancy, and session trajectories
+- runtime/config helpers and CLI entrypoints
 
 ### `tasks`
 
@@ -103,17 +100,20 @@ of importing a single global plotting module.
 ## Generic analysis pattern
 
 ```python
-from tasks import get_adapter
+import polars as pl
+from glmhmmt.runtime import get_runtime_paths
+from glmhmmt.tasks import get_adapter
 
+paths = get_runtime_paths()
 adapter = get_adapter("mcdr")
 plots = adapter.get_plots()
 
-df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+df = pl.read_parquet(paths.data_dir / adapter.data_file)
 df = adapter.subject_filter(df)
 y, X, U, names = adapter.load_subject(df_sub, tau=50.0)
 ```
 
-This keeps notebooks and scripts generic while letting each task expose its own
+This keeps notebooks and CLI commands generic while letting each task expose its own
 plotting API.
 
 ## Extending the package
@@ -125,7 +125,7 @@ editing `glmhmmt`:
 2. implement a `TaskAdapter` in `tasks/<task>.py`, including adapter-level
    state-assignment scoring (`_SCORING_OPTIONS` and `scoring_key`)
 3. implement a task plot module in `tasks/plots/<task>.py`
-4. register the adapter and use the existing scripts and notebooks with `--task`
+4. drop the file into the repo task folder and use the existing CLI commands and notebooks with `--task`
 
 If a new task requires editing `glmhmmt.model.py`, the task boundary is
 probably wrong.
@@ -138,15 +138,15 @@ does not depend on it.
 
 ## Running fits
 
-Use the generic scripts:
+Use the packaged CLI commands from `code/glmhmmt`:
 
 ```bash
-uv run python scripts/fit_glm.py --task mcdr
-uv run python scripts/fit_glmhmm.py --task mcdr --K 3
-uv run python scripts/fit_glmhmmt.py --task two_afc --K 2
+uv run glmhmmt-fit-glm --task mcdr
+uv run glmhmmt-fit-glmhmm --task mcdr --K 3
+uv run glmhmmt-fit-glmhmmt --task two_afc --K 2
 ```
 
-Use marimo notebooks for exploration:
+Use the bundled marimo notebooks for exploration:
 
 ```bash
 uv run marimo edit notebooks/model_comparison.py

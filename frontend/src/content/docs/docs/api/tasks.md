@@ -1,16 +1,16 @@
 ---
 title: Tasks API
-description: Generic adapter and registry API exposed by the `tasks` module.
+description: Generic adapter and registry API exposed by the `glmhmmt.tasks` module.
 ---
 
-The `tasks` module is the generic extension surface between the shared
-`glmhmmt` package and task-specific code. In normal use, notebooks and scripts
-work with a `TaskAdapter` instance returned by `get_adapter()`.
+The `glmhmmt.tasks` module is the generic extension surface between the shared
+`glmhmmt` package and task-specific code. In normal use, notebooks and CLI
+commands work with a `TaskAdapter` instance returned by `get_adapter()`.
 
 ## Import
 
 ```python
-from tasks import TaskAdapter, get_adapter, get_task_options
+from glmhmmt.tasks import TaskAdapter, get_adapter, get_task_options
 ```
 
 ## `get_adapter`
@@ -26,7 +26,7 @@ The lookup is case-insensitive and normalises hyphens to underscores.
 **Example**
 
 ```python
-from tasks import get_adapter
+from glmhmmt.tasks import get_adapter
 
 adapter = get_adapter("mcdr")
 plots = adapter.get_plots()
@@ -121,11 +121,12 @@ the scoring rule and its default `scoring_key`.
 
 ```python
 import polars as pl
-import paths
-from tasks import get_adapter
+from glmhmmt.runtime import get_runtime_paths
+from glmhmmt.tasks import get_adapter
 
+paths = get_runtime_paths()
 adapter = get_adapter("mcdr")
-df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
+df = pl.read_parquet(paths.data_dir / adapter.data_file)
 df = adapter.subject_filter(df)
 
 subject = df["subject"].unique().sort()[0]
@@ -135,7 +136,7 @@ y, X, U, names = adapter.load_subject(df_sub, tau=50.0)
 plots = adapter.get_plots()
 ```
 
-The important point is that scripts and notebooks only depend on the generic
+The important point is that CLI commands and notebooks only depend on the generic
 adapter surface. Task-specific semantics stay behind that boundary.
 
 ## Implementing a new task

@@ -5,13 +5,19 @@ description: Install glmhmmt and fit your first GLM-HMM in minutes.
 
 ## Installation
 
-This repository is organised as a small workspace. The recommended setup is:
+Clone the repository and install the package-local environment with `uv`:
 
 ```bash
 git clone https://github.com/javirm3/TFM
-cd TFM/code
+cd TFM/code/glmhmmt
 uv sync
-uv pip install -e glmhmmt/
+```
+
+If you also want the marimo notebooks and notebook-only dependencies:
+
+```bash
+cd TFM/code/glmhmmt
+uv sync --extra notebooks
 ```
 
 **Requirements:** Python ≥ 3.11, JAX ≥ 0.9, Dynamax ≥ 1.0.1.
@@ -37,7 +43,7 @@ uv run marimo edit notebooks/glmhmmt_analysis.py
 The codebase is task-aware rather than assuming a single dataset layout:
 
 ```python
-from tasks import get_adapter
+from glmhmmt.tasks import get_adapter
 
 adapter = get_adapter("mcdr")  # or "two_afc"
 plots = adapter.get_plots()
@@ -62,7 +68,9 @@ the design matrices:
 
 ```python
 import polars as pl
-import paths
+from glmhmmt.runtime import get_runtime_paths
+
+paths = get_runtime_paths()
 
 df = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
 df = adapter.subject_filter(df)
@@ -100,12 +108,12 @@ fitted_params, lps = model.fit_em(
 )
 ```
 
-For repository scripts, use the generic entry points instead:
+For the packaged CLI, use the console entry points instead:
 
 ```bash
-uv run python scripts/fit_glm.py --task mcdr
-uv run python scripts/fit_glmhmm.py --task mcdr --K 3
-uv run python scripts/fit_glmhmmt.py --task two_afc --K 2
+uv run glmhmmt-fit-glm --task MCDR
+uv run glmhmmt-fit-glmhmm --task MCDR --K 3
+uv run glmhmmt-fit-glmhmmt --task 2AFC --K 2
 ```
 
 ## Postprocess and visualise

@@ -5,6 +5,8 @@ from glmhmmt.postprocess import (
     build_emission_weights_df,
     build_posterior_df,
 )
+from glmhmmt.runtime import configure_paths, get_runtime_paths, load_app_config
+from glmhmmt.tasks import TaskAdapter, get_adapter, get_task_options
 
 __all__ = [
     "SoftmaxGLMHMM",
@@ -15,4 +17,10 @@ __all__ = [
     "build_trial_df",
     "build_emission_weights_df",
     "build_posterior_df",
+    "TaskAdapter",
+    "get_adapter",
+    "get_task_options",
+    "configure_paths",
+    "get_runtime_paths",
+    "load_app_config",
 ]

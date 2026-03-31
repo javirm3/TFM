@@ -3,10 +3,10 @@ title: Task Plots
 description: Ready-made task-specific plotting modules returned by `TaskAdapter.get_plots()`.
 ---
 
-Task-specific plot APIs live under `tasks.plots.*`. In normal use you do not import them manually; you ask the active adapter for its plotting module:
+For the bundled repo tasks, task-specific plot APIs live under `tasks.plots.*`. In normal use you do not import them manually; you ask the active adapter for its plotting module:
 
 ```python
-from tasks import get_adapter
+from glmhmmt.tasks import get_adapter
 
 adapter = get_adapter("two_afc")  # or "nuo_auditory", "mcdr"
 plots = adapter.get_plots()

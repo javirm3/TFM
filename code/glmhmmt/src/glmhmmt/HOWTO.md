@@ -1,382 +1,90 @@
-# HOWTO — GLM-HMM Behavioural Modelling Framework
+# `glmhmmt` HOWTO
 
-A guide for using this repository and porting a new experimental task.
+This package lives inside the thesis repo at `/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt`, but it is structured as its own installable `uv` project.
 
----
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [Repository Structure](#repository-structure)
-3. [Installation](#installation)
-4. [Data Flow](#data-flow)
-5. [Adding a New Task](#adding-a-new-task)
-6. [Running Fits](#running-fits)
-7. [Exploring Results](#exploring-results)
-8. [Design Decisions](#design-decisions)
-
----
-
-## Overview
-
-This repository implements GLM-HMM and GLM-HMM-t models for analysing trial-by-trial
-behavioural data. The core model (`glmhmmt` package) is task-agnostic — it takes a
-design matrix and choices and returns fitted parameters. All task-specific knowledge
-(data paths, column names, filtering criteria) is isolated in two files per task.
-
-**Key principle:** the `glmhmmt` package never knows about experimental tasks.
-Tasks never know about the model internals. Data flows in one direction:
-
-```
-raw data  →  preprocess_{task}.py  →  data/{task}.parquet
-                                              ↓
-                           TaskAdapter.load_subject()
-                                              ↓
-                              fit_model.py  →  results/fits/{task}/
-                                              ↓
-                           notebooks/analysis.py  →  figures
-```
-
----
-
-## Repository Structure
-
-```
-code/
-├── glmhmmt/                        # installable Python package
-│   └── src/glmhmmt/
-│       ├── model.py                # SoftmaxGLMHMM — core model, EM fitting
-│       ├── features.py             # shared feature builders (action traces, etc.)
-│       ├── model_plots.py          # package-wide model diagnostics
-│       ├── views.py                # fit result views / state labels
-│       └── postprocess.py          # trial-level and weight-level data frames
-│
-├── tasks/                          # one file per experimental task
-│   ├── base.py                     # TaskAdapter abstract base class
-│   ├── mcdr.py                     # MCDRTask adapter
-│   ├── two_afc.py                  # TwoAFCTask adapter
-│   └── plots/                      # task-owned plot modules
-│       ├── mcdr.py                 # MCDR psychometric/performance plots
-│       └── two_afc.py              # 2AFC psychometric/performance plots
-│
-├── scripts/
-│   └── fit_model.py                # single generic fit script, all tasks/models
-│
-├── notebooks/
-│   ├── preprocess_mcdr.py          # raw → data/mcdr.parquet  (run once)
-│   ├── preprocess_two_afc.py       # raw → data/two_afc.parquet  (run once)
-│   ├── glmhmmt_analysis.py         # interactive results explorer
-│   └── model_comparison.py         # BIC / model selection across K
-│
-├── paths.py                        # all filesystem paths in one place
-├── pyproject.toml
-└── HOWTO.md                        # this file
-
-data/
-├── raw/                            # original files — never modified
-│   ├── mcdr/
-│   └── two_afc/
-├── mcdr.parquet                    # clean, all subjects (generated)
-└── two_afc.parquet                 # clean, all subjects (generated)
-
-results/
-└── fits/
-    ├── mcdr/
-    │   ├── glmhmmt_K2/
-    │   │   ├── A83_K2_glmhmmt_metrics.parquet
-    │   │   └── A83_K2_glmhmmt_arrays.npz
-    │   └── glmhmmt_K3/
-    └── two_afc/
-```
-
----
-
-## Installation
-
-This project uses [uv](https://github.com/astral-sh/uv) for environment management.
+## Install
 
 ```bash
-cd code/
-uv sync                        # creates .venv and installs all dependencies
-uv pip install -e glmhmmt/     # install the glmhmmt package in editable mode
+cd /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt
+uv sync
 ```
 
-To run any script or notebook:
+For the marimo notebooks:
 
 ```bash
-uv run python scripts/fit_model.py --task mcdr --model glmhmmt --K 2
+cd /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt
+uv sync --extra notebooks
+```
+
+## Runtime Configuration
+
+The editable repo install reads runtime settings from:
+
+1. CLI flags such as `--data-dir`, `--results-dir`, `--config-path`
+2. Environment variables
+3. `[paths]` in `/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/config.toml`
+4. Repo-aware fallbacks
+
+`config.toml` is also allowed to override plotting and model settings from the packaged defaults in `src/glmhmmt/resources/default_config.toml`.
+
+## Run Fits
+
+Console scripts are exposed through the package:
+
+```bash
+uv run glmhmmt-fit-glm --help
+uv run glmhmmt-fit-glmhmm --help
+uv run glmhmmt-fit-glmhmmt --help
+uv run glmhmmt-fit-tau-sweep --help
+```
+
+Examples:
+
+```bash
+uv run glmhmmt-fit-glm --task MCDR --subjects A83 A84 --tau 50
+uv run glmhmmt-fit-glmhmm --task 2AFC --K 2 3 --tau 50
+uv run glmhmmt-fit-glmhmmt --task MCDR --K 2 --tau 50
+uv run glmhmmt-fit-tau-sweep --model glmhmmt --K 2 --tau_min 10 --tau_max 60 --tau_step 5
+```
+
+## Open Notebooks
+
+```bash
+cd /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt
+uv run marimo edit notebooks/glm_analysis.py
+uv run marimo edit notebooks/glmhmm_analysis.py
 uv run marimo edit notebooks/glmhmmt_analysis.py
 ```
 
----
+The notebooks import `glmhmmt.runtime`, `glmhmmt.tasks`, and the packaged CLI modules directly. They no longer depend on repo-root `paths.py` or `scripts/` shims.
 
-## Data Flow
+## Add Or Remove Repo Tasks
 
-### Step 1 — Preprocess (run once per task)
+The repo ships a mutable `tasks/` package at `/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/tasks`.
+Any `*.py` file you place there is auto-imported by `glmhmmt.tasks`, so you can
+drop in a new adapter module or delete one of the shipped examples without
+editing `pyproject.toml`.
 
-Open the preprocessing notebook and run it top to bottom:
+Each task adapter is responsible for:
 
-```bash
-uv run marimo edit notebooks/preprocess_mcdr.py
-```
+- loading and filtering the task dataset
+- defining emission and transition regressors
+- exposing task-specific plotting helpers
 
-This notebook:
-- Globs all raw files (one per subject, possibly nested in experiment folders)
-- Unifies column names across experiments / recording rigs
-- Applies task-specific filtering (RT bounds, valid dates, minimum trials per session)
-- Selects only the columns needed for modelling
-- Writes `data/{task}.parquet` with zstd compression
-
-The resulting parquet **is the documented dataset**. When a reviewer asks how trials
-were filtered, you point to this notebook — the criteria are explicit and in one place.
-
-**Partitioned data (>5M trials):** if the parquet becomes large, the preprocessing
-notebook writes one file per subject into `data/{task}/`. The task adapter reads
-either format without code changes — just swap one commented line in the adapter:
+Task-local plot modules live under `tasks/plots/` and are typically loaded from
+the adapter with:
 
 ```python
-DATA = paths.DATA_PATH / "mcdr.parquet"          # single file
-# DATA = paths.DATA_PATH / "mcdr" / "*.parquet"  # partitioned — uncomment if large
+import tasks.plots.my_task as plots
 ```
 
-### Step 2 — Fit
+## Add an External Lab Task
 
-```bash
-uv run python scripts/fit_model.py --task mcdr --model glmhmmt --K 2 3 4
+External packages can provide additional tasks without editing this repo by exposing the same entry-point group:
+
+```toml
+[project.entry-points."glmhmmt.tasks"]
+my_lab_task = "my_lab_glmhmmt.task:MyLabTaskAdapter"
 ```
 
-Results are saved to `results/fits/{task}/{model}_K{K}/` as:
-- `{subject}_K{K}_{model}_metrics.parquet` — scalar metrics (BIC, accuracy, LL/trial)
-- `{subject}_K{K}_{model}_arrays.npz` — fitted parameters, smoothed probabilities, predictions
-
-### Step 3 — Explore
-
-```bash
-uv run marimo edit notebooks/glmhmmt_analysis.py
-```
-
-The analysis notebook reads from `results/fits/` and re-renders reactively when you
-change task / model / K sliders. It never refits — if a fit is missing it shows a
-warning and waits.
-
----
-
-## Adding a New Task
-
-Adding a task requires **two files**: a preprocessing notebook and a task adapter.
-
-### 1. Preprocessing notebook
-
-Create `notebooks/preprocess_{task}.py`. A minimal template:
-
-```python
-import marimo as mo
-import polars as pl
-import paths
-
-# ── load all raw files ────────────────────────────────────────────────────────
-raw_files = list((paths.DATA_PATH / "raw" / "my_task").glob("**/*.csv"))
-
-dfs = []
-for f in raw_files:
-    df = (pl.read_csv(f)
-            .with_columns(pl.lit(f.stem).alias("subject")))
-    dfs.append(df)
-
-df_raw = pl.concat(dfs, how="diagonal")  # diagonal tolerates missing cols
-
-# ── rename non-standard columns ───────────────────────────────────────────────
-df_raw = df_raw.rename({"resp": "response", "reaction_time": "RT"})
-
-# ── filter ────────────────────────────────────────────────────────────────────
-KEEP_COLS = ["subject", "session", "date", "trial_idx", "response", "RT",
-             "stimulus", "correct"]
-
-df_clean = (df_raw
-    .select(KEEP_COLS)
-    .filter(pl.col("RT").is_between(0.15, 5.0))   # adjust per task / species
-    .filter(pl.col("response").is_not_null()))
-
-# ── save ──────────────────────────────────────────────────────────────────────
-df_clean.write_parquet(paths.DATA_PATH / "my_task.parquet", compression="zstd")
-mo.md(f"Saved {len(df_clean)} trials, {df_clean['subject'].n_unique()} subjects")
-```
-
-### 2. Task adapter
-
-Create `tasks/my_task.py`:
-
-```python
-import polars as pl
-import numpy as np
-import paths
-from tasks import TaskAdapter
-
-DATA = paths.DATA_PATH / "my_task.parquet"
-# DATA = paths.DATA_PATH / "my_task" / "*.parquet"  # uncomment if partitioned
-
-
-class MyTask(TaskAdapter):
-    """
-    One-line description of the task and species.
-    Data: data/my_task.parquet
-    """
-    num_classes  = 2                           # number of choice categories
-    _SCORING_OPTIONS: dict = {
-        "stim_vals (-w)": [("stim_vals", "neg")],
-        "stim_vals (|w|)": [("stim_vals", "abs")],
-        "at_choice (|w|)": [("at_choice", "abs")],
-        "wsls (|w|)": [("wsls", "abs")],
-        "bias (|w|)": [("bias", "abs")],
-    }
-    scoring_key: str = "stim_vals (-w)"
-
-    def get_plots(self):
-        import tasks.plots.two_afc as plots    # or tasks.plots.mcdr
-        return plots
-
-    def list_subjects(self, cfg):
-        return (pl.scan_parquet(DATA)
-                  .select("subject").unique()
-                  .collect()["subject"].sort().to_list())
-
-    def build_feature_df(self, df_sub, tau=50.0):
-        return df_sub.with_columns(...)
-
-    def build_design_matrices(
-        self,
-        feature_df,
-        emission_cols=None,
-        transition_cols=None,
-    ):
-        y = ...
-        X = ...
-        U = ...
-        names = {"X_cols": [...], "U_cols": [...]}
-        return y, X, U, names
-
-    def load_subject(self, subject, cfg):
-        df = (pl.scan_parquet(DATA)
-                .filter(pl.col("subject") == subject)
-                .sort("trial_idx")
-                .collect())
-
-        # any task-specific filtering NOT already in the parquet goes here
-        df = df.filter(pl.col("block_type") == "test")
-
-        feature_df = self.build_feature_df(
-            df,
-            tau=cfg.get("tau", 50.0),
-        )
-        y, X, U, names = self.build_design_matrices(
-            feature_df,
-            emission_cols=cfg.get("emission_cols"),
-            transition_cols=cfg.get("transition_cols"),
-        )
-        return dict(
-            y=np.asarray(y), X=np.asarray(X), U=np.asarray(U),
-            session_ids=feature_df["session"].to_numpy(), names=names,
-        )
-```
-
-Adapt the feature names or sign modes to the task, but keep
-`_SCORING_OPTIONS` and `scoring_key` on the adapter so state assignment stays
-task-owned.
-
-### 3. Register the adapter
-
-In `scripts/fit_model.py`, add one import at the top with the others:
-
-```python
-import tasks.mcdr        # noqa: F401
-import tasks.two_afc     # noqa: F401
-import tasks.my_task     # noqa: F401  ← add this line
-```
-
-Done. `fit_model.py` and all analysis notebooks now accept `--task my_task`.
-
----
-
-## Running Fits
-
-### Basic usage
-
-```bash
-uv run python scripts/fit_model.py --task mcdr --model glmhmmt --K 3
-```
-
-### Multiple K values
-
-```bash
-uv run python scripts/fit_model.py --task mcdr --model glmhmmt --K 1 2 3 4 5
-```
-
-### Specific subjects
-
-```bash
-uv run python scripts/fit_model.py --task mcdr --model glmhmmt --K 3 \
-    --subjects A83 A84
-```
-
-### GLM-HMM without transition inputs
-
-```bash
-uv run python scripts/fit_model.py --task mcdr --model glmhmm --K 3
-```
-
-### Override default feature columns
-
-```bash
-uv run python scripts/fit_model.py --task mcdr --model glmhmmt --K 3 \
-    --emission_cols bias SL SR \
-    --transition_cols speed
-```
-
-### Cluster / batch jobs
-
-```bash
-for K in 1 2 3 4 5; do
-    uv run python scripts/fit_model.py --task mcdr --model glmhmmt --K $K
-done
-```
-
-All results land in `results/fits/{task}/{model}_K{K}/` automatically.
-
----
-
-## Exploring Results
-
-```bash
-uv run marimo edit notebooks/glmhmmt_analysis.py   # per-subject inspection
-uv run marimo edit notebooks/model_comparison.py    # BIC curves across K
-```
-
-Both notebooks are fully reactive — changing any dropdown immediately re-renders all
-figures. They show a warning if the requested fits have not been computed yet, rather
-than refitting interactively.
-
----
-
-## Design Decisions
-
-**Why pre-processed parquets instead of loading raw files each time?**
-Parsing is slow, error-prone, and task-specific. Doing it once means the modelling
-code never touches raw files. The parquet is also what you share as the dataset with
-a paper.
-
-**Why `scan_parquet` instead of `read_parquet`?**
-`scan_parquet` is lazy — Polars pushes the subject filter down to the file read and
-never loads the full dataset into memory. It accepts a glob so single-file and
-partitioned datasets use identical code.
-
-**Why a `TaskAdapter` class and not plain functions?**
-Three methods (`list_subjects`, `load_subject`, `get_plots`) define a contract that
-is easy to describe in a methods section and straightforward for a new collaborator
-to implement. Task-specific loading logic (e.g. filtering by block type, handling
-multiple cohorts) lives in the adapter without touching shared code.
-
-**Why Marimo instead of Jupyter?**
-Marimo notebooks are plain Python files (git diffs are readable), cells re-execute
-reactively when their dependencies change (no stale outputs), and they run as scripts
-from the command line. A `mo.stop` with a run button prevents accidental refitting
-when working interactively.
+Once that package is installed in the same environment, `glmhmmt.tasks.get_adapter(...)` will discover it automatically.

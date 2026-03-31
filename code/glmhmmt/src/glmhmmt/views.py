@@ -24,16 +24,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional
-import tomllib
 
 import numpy as np
 
-import paths
+from glmhmmt.runtime import load_app_config
 
 # ── palette & rank constants ──────────────────────────────────────────────────
 
-with paths.CONFIG.open("rb") as _f:
-    _cfg = tomllib.load(_f)
+_cfg = load_app_config()
 
 _STATE_HEX: list[str] = _cfg.get("palettes", {}).get(
     "states_hex",
