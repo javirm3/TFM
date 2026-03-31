@@ -38,7 +38,7 @@ def _():
         build_editor_payload,
     )
 
-    sns.set_style("white")
+
     return (
         CoefficientEditorWidget,
         ModelCfg,

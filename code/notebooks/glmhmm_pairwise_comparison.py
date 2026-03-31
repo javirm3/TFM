@@ -35,7 +35,7 @@ def _():
     from glmhmmt.views import build_views, get_state_palette
     from glmhmmt.tasks import get_adapter, get_task_options
 
-    sns.set_style("white")
+    sns.set_style("ticks")
     return (
         Line2D,
         build_trial_df,
@@ -601,6 +601,48 @@ def _(Line2D, np, plt, sns, ttest_rel):
             return "*"
         return ""
 
+    def _style_boxplot(box, *, median_color: str) -> None:
+        for patch in box["boxes"]:
+            patch.set(facecolor="white", edgecolor="#666666", linewidth=1.1)
+        for elem in ("whiskers", "caps"):
+            for artist in box[elem]:
+                artist.set(color="#666666", linewidth=1.0)
+        for median in box["medians"]:
+            median.set(color=median_color, linewidth=2.2)
+
+    def _annotate_paired_significance(
+        ax,
+        *,
+        x_left: float,
+        x_right: float,
+        y_left,
+        y_right,
+        y_span: float,
+        line_pad: float,
+        text_x: float | None = None,
+        fontsize: int = 10,
+    ) -> None:
+        y_left = np.asarray(y_left, dtype=float)
+        y_right = np.asarray(y_right, dtype=float)
+        if len(y_left) < 2 or len(y_right) < 2:
+            return
+
+        _, pval = ttest_rel(y_left, y_right, nan_policy="omit")
+        stars = _p_to_stars(float(pval))
+        if not stars:
+            return
+
+        line_y = max(np.nanmax(y_left), np.nanmax(y_right)) + line_pad
+        ax.plot([x_left, x_right], [line_y, line_y], color="black", linewidth=1.0, zorder=5)
+        ax.text(
+            0.5 * (x_left + x_right) if text_x is None else text_x,
+            line_y + 0.02 * y_span,
+            stars,
+            ha="center",
+            va="bottom",
+            fontsize=fontsize,
+        )
+
     def plot_paired_category_boxplot(
         *,
         df_pd,
@@ -667,13 +709,7 @@ def _(Line2D, np, plt, sns, ttest_rel):
                     showfliers=False,
                     zorder=1,
                 )
-                for patch in box["boxes"]:
-                    patch.set(facecolor="white", edgecolor="#666666", linewidth=1.1)
-                for elem in ("whiskers", "caps"):
-                    for artist in box[elem]:
-                        artist.set(color="#666666", linewidth=1.0)
-                for median in box["medians"]:
-                    median.set(color=palette[model_alias], linewidth=2.2)
+                _style_boxplot(box, median_color=palette[model_alias])
 
                 paired_col = f"{value_col}_a" if model_alias == alias_a else f"{value_col}_b"
                 if not paired.empty:
@@ -707,19 +743,16 @@ def _(Line2D, np, plt, sns, ttest_rel):
                 for xa, xb, ya, yb in zip(x_a, x_b, y_a, y_b, strict=False):
                     ax.plot([xa, xb], [ya, yb], color="#B0B0B0", linewidth=0.9, alpha=0.7, zorder=2)
 
-                if len(paired) >= 2:
-                    _, pval = ttest_rel(y_a, y_b, nan_policy="omit")
-                    stars = _p_to_stars(float(pval))
-                    if stars:
-                        line_y = max(np.nanmax(y_a), np.nanmax(y_b)) + line_pad
-                        ax.plot(
-                            [state_idx + offsets[0], state_idx + offsets[1]],
-                            [line_y, line_y],
-                            color="black",
-                            linewidth=1.0,
-                            zorder=5,
-                        )
-                        ax.text(state_idx, line_y + 0.02 * y_span, stars, ha="center", va="bottom", fontsize=10)
+                _annotate_paired_significance(
+                    ax,
+                    x_left=state_idx + offsets[0],
+                    x_right=state_idx + offsets[1],
+                    y_left=y_a,
+                    y_right=y_b,
+                    y_span=y_span,
+                    line_pad=line_pad,
+                    text_x=state_idx,
+                )
 
         ax.set_xticks(range(len(state_order)))
         ax.set_xticklabels(state_order, rotation=20, ha="right")
@@ -784,13 +817,7 @@ def _(Line2D, np, plt, sns, ttest_rel):
                 showfliers=False,
                 zorder=1,
             )
-            for patch in box["boxes"]:
-                patch.set(facecolor="white", edgecolor="#666666", linewidth=1.1)
-            for elem in ("whiskers", "caps"):
-                for artist in box[elem]:
-                    artist.set(color="#666666", linewidth=1.0)
-            for median in box["medians"]:
-                median.set(color=palette[model_alias], linewidth=2.2)
+            _style_boxplot(box, median_color=palette[model_alias])
             ax.scatter(
                 np.full(len(values), pos) + jitter,
                 values,
@@ -803,13 +830,15 @@ def _(Line2D, np, plt, sns, ttest_rel):
         for xj, ya, yb in zip(jitter, y_a, y_b, strict=False):
             ax.plot([0 + xj, 1 + xj], [ya, yb], color="#B0B0B0", linewidth=0.9, alpha=0.7, zorder=2)
 
-        if len(df_pd) >= 2:
-            _, pval = ttest_rel(y_a, y_b, nan_policy="omit")
-            stars = _p_to_stars(float(pval))
-            if stars:
-                line_y = max(np.nanmax(y_a), np.nanmax(y_b)) + line_pad
-                ax.plot([0, 1], [line_y, line_y], color="black", linewidth=1.0, zorder=5)
-                ax.text(0.5, line_y + 0.02 * y_span, stars, ha="center", va="bottom", fontsize=10)
+        _annotate_paired_significance(
+            ax,
+            x_left=0,
+            x_right=1,
+            y_left=y_a,
+            y_right=y_b,
+            y_span=y_span,
+            line_pad=line_pad,
+        )
 
         ax.set_xticks([0, 1])
         ax.set_xticklabels([alias_a, alias_b], rotation=15, ha="right")

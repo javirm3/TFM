@@ -35,7 +35,7 @@ Because `glmhmmt` is built on JAX, it pairs exceptionallly well with **[Marimo](
 
 To start an analysis notebook:
 ```bash
-uv run marimo edit notebooks/glmhmmt_analysis.py
+uv run marimo edit ../notebooks/glmhmmt_analysis.py
 ```
 
 ## Task-aware workflow
@@ -55,6 +55,10 @@ The adapter owns:
 - tensor construction
 - state labels
 - task-specific plots
+
+Repo-local task adapters live in `TFM/code/tasks`, and `glmhmmt.tasks` also
+supports task folders discovered from `GLMHMMT_TASK_PATHS` or a project's own
+`./tasks` directory.
 
 If you are starting support for a new behavioural task, the repository also
 ships an optional Codex skill, `$glmhmmt-task-adapter`, to speed up the first

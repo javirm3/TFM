@@ -138,7 +138,7 @@ its own axes, groupings, or behavioural interpretation.
 ## Registration
 
 No explicit registration file is needed for repo-local tasks. `glmhmmt.tasks`
-auto-imports every non-private `*.py` module inside `code/glmhmmt/tasks/`, and
+auto-imports every non-private `*.py` module inside `code/tasks/`, and
 each module registers itself via `@_register([...])`.
 
 ## Workflow after adding the task
@@ -146,7 +146,7 @@ each module registers itself via `@_register([...])`.
 1. preprocess raw data into a parquet dataset
 2. implement the task-owned feature dataframe and adapter
 3. implement the task plot module
-4. save the adapter module in `code/glmhmmt/tasks/`
+4. save the adapter module in `code/tasks/`
 5. run the generic CLI commands with `--task my_task`
 6. open the generic analysis notebooks and select the new task
 

@@ -1,0 +1,421 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.21.1",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "0c50dd7c9e1447f1d89b7cff2d80f239",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"imports\">Imports</h1></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "cbc989076bf44947f681b8956a8206c7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "04189c54a5a448216b53aa8bfd8e4fdd",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">We import the ui widgets and the model adapters</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "404cc7b026fb54e9a00a0fc9f30306b5",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "Unknown task 'MCDR'. Known tasks: ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_61619/__marimo__cell_bkHC_.py&quot;</span>, line <span class=\"m\">2</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">adapter</span> <span class=\"o\">=</span> <span class=\"n\">get_adapter</span><span class=\"p\">(</span><span class=\"n\">task_name</span><span class=\"p\">)</span>\n<span class=\"w\">              </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/tasks/__init__.py&quot;</span>, line <span class=\"m\">377</span>, in <span class=\"n\">get_adapter</span>\n<span class=\"w\">    </span><span class=\"k\">raise</span> <span class=\"ne\">ValueError</span><span class=\"p\">(</span><span class=\"sa\">f</span><span class=\"s2\">&quot;Unknown task </span><span class=\"si\">{</span><span class=\"n\">task</span><span class=\"si\">!r}</span><span class=\"s2\">. Known tasks: </span><span class=\"si\">{</span><span class=\"n\">known</span><span class=\"si\">}</span><span class=\"s2\">&quot;</span><span class=\"p\">)</span>\n<span class=\"gr\">ValueError</span>: <span class=\"n\">Unknown task &#39;MCDR&#39;. Known tasks: </span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "ffd1e21b83f9c2b288771606019a2420",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "Error applying default state for task MCDR: Unknown task 'MCDR'. Known tasks: \nError loading adapter for task MCDR: Unknown task 'MCDR'. Known tasks: \nError loading adapter for task MCDR: Unknown task 'MCDR'. Known tasks: \nError loading adapter for task MCDR: Unknown task 'MCDR'. Known tasks: \n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "PKri",
+      "code_hash": "b2d97c47ff3ad67bd0e1e4ae98b742de",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "fd5dc27063ca72c7350e4aa2ed2c26a0",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "24bfed9d5de18d512ed3e863df59c1e0",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "f4a6b127b59644c188d9ed442ebe7699",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"model-configuration\">Model Configuration</h1></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "4b401b07a2b884e032daea0b9f563830",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "a6c0abc443afaac5161c4c133d6a1fd1",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "Fitting GLM | Task=MCDR-Accuracy Tau=50 Hash=fd8bd415 Alias=None N=8\nFitting GLM | Task=MCDR-Accuracy Tau=50 N=8\n  Fitting A83...\n  Fitting A86...\n  Fitting A87...\n  Fitting A89...\n  Fitting A92...\n  Fitting A93...\n  Fitting A95...\n  Fitting A96...\nDone.\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "emfo",
+      "code_hash": "65e372d78beaac85d8f70744a59ca1fe",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "31e75268db0f7ce36ded32b58bb3deca",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "02537a07239f1ea2866f758ab7af2c69",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "e604770e8c83710bd2e0ffc8b93083c1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "0f9e4a24098b3264f948fb170e5f4a2a",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "d9f8c75916de99b1595fcb107c7c6d80",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"plots\">Plots</h1></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "5a282637489860f4ce71787f65c53d31",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"emission-weights\">Emission Weights</h2></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "da73aa216e7f3c602923c8887409820a",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_61619/__marimo__cell_TqIu_.py&quot;</span>, line <span class=\"m\">6</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_fig_by_subject</span> <span class=\"o\">=</span> <span class=\"n\">plots</span><span class=\"o\">.</span><span class=\"n\">plot_emission_weights_by_subject</span><span class=\"p\">(</span>\n<span class=\"w\">                      </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/tasks/plots/mcdr_accuracy.py&quot;</span>, line <span class=\"m\">127</span>, in <span class=\"n\">plot_emission_weights_by_subject</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">_plot_emission_weights_by_subject_generic</span><span class=\"p\">(</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/model_plots.py&quot;</span>, line <span class=\"m\">864</span>, in <span class=\"n\">plot_emission_weights_by_subject</span>\n<span class=\"w\">    </span><span class=\"n\">_df_w</span><span class=\"p\">,</span> <span class=\"n\">_</span><span class=\"p\">,</span> <span class=\"n\">_feat_names</span><span class=\"p\">,</span> <span class=\"n\">_</span><span class=\"p\">,</span> <span class=\"n\">_state_pal</span><span class=\"p\">,</span> <span class=\"n\">_state_hue_order</span><span class=\"p\">,</span> <span class=\"n\">_cls_labels</span> <span class=\"o\">=</span> <span class=\"n\">_collect_emission_weight_frames</span><span class=\"p\">(</span>\n<span class=\"w\">                                                                          </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/model_plots.py&quot;</span>, line <span class=\"m\">827</span>, in <span class=\"n\">_collect_emission_weight_frames</span>\n<span class=\"w\">    </span><span class=\"n\">_logits</span> <span class=\"o\">=</span> <span class=\"p\">[</span><span class=\"nb\">float</span><span class=\"p\">(</span><span class=\"n\">_W</span><span class=\"p\">[</span><span class=\"n\">_k</span><span class=\"p\">,</span> <span class=\"mi\">0</span><span class=\"p\">,</span> <span class=\"n\">_fi</span><span class=\"p\">]),</span> <span class=\"mf\">0.0</span><span class=\"p\">,</span> <span class=\"nb\">float</span><span class=\"p\">(</span><span class=\"n\">_W</span><span class=\"p\">[</span><span class=\"n\">_k</span><span class=\"p\">,</span> <span class=\"mi\">1</span><span class=\"p\">,</span> <span class=\"n\">_fi</span><span class=\"p\">])]</span>\n<span class=\"w\">                                                 </span><span class=\"pm\">~~^^^^^^^^^^^^</span>\n<span class=\"gr\">IndexError</span>: <span class=\"n\">index 1 is out of bounds for axis 1 with size 1</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "652bc8aff3f3312399574aac27d90b55",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"accuracy-plots\">Accuracy plots</h2></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "DnEU",
+      "code_hash": "093263993d9b354bdb6313906d1878eb",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"summary\">Summary</h3></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ulZA",
+      "code_hash": "4aafcb27ed79dc78aeca0d27b5610888",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ecfG",
+      "code_hash": "e52fe3fe755c8e2dcffb794dc619d5b0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"by-subject-editable\">By subject (editable)</h2></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Pvdt",
+      "code_hash": "aef74cf39fbe5d007c3944aa561665e8",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZBYS",
+      "code_hash": "3f040a3342bec53d6eedb30d0070edc3",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "aLJB",
+      "code_hash": "1704830ab5dcc53eb8bb5f43544b7316",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nHfw",
+      "code_hash": "e3a7022d5045693c94a4a231d7b6bd26",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "xXTn",
+      "code_hash": "093e51b1d2dd48cd527ccd34d9c846ee",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ValueError): ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_61619/__marimo__cell_xXTn_.py&quot;</span>, line <span class=\"m\">4</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_trial_df_tweaked</span> <span class=\"o\">=</span> <span class=\"n\">apply_state_tweak_to_trial_df</span><span class=\"p\">(</span>\n<span class=\"w\">                        </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/notebooks/coefficient_editor_utils.py&quot;</span>, line <span class=\"m\">246</span>, in <span class=\"n\">apply_state_tweak_to_trial_df</span>\n<span class=\"w\">    </span><span class=\"n\">current</span> <span class=\"o\">=</span> <span class=\"n\">trial_df_sub</span><span class=\"p\">[</span><span class=\"n\">class_col</span><span class=\"p\">]</span><span class=\"o\">.</span><span class=\"n\">to_numpy</span><span class=\"p\">()</span><span class=\"o\">.</span><span class=\"n\">astype</span><span class=\"p\">(</span><span class=\"nb\">float</span><span class=\"p\">)</span>\n<span class=\"w\">              </span><span class=\"pm\">~~~~~~~~~~~~^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">1431</span>, in <span class=\"n\">__getitem__</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">get_df_item_by_key</span><span class=\"p\">(</span><span class=\"bp\">self</span><span class=\"p\">,</span> <span class=\"n\">key</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/_utils/getitem.py&quot;</span>, line <span class=\"m\">163</span>, in <span class=\"n\">get_df_item_by_key</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">df</span><span class=\"o\">.</span><span class=\"n\">get_column</span><span class=\"p\">(</span><span class=\"n\">key</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">9193</span>, in <span class=\"n\">get_column</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">wrap_s</span><span class=\"p\">(</span><span class=\"bp\">self</span><span class=\"o\">.</span><span class=\"n\">_df</span><span class=\"o\">.</span><span class=\"n\">get_column</span><span class=\"p\">(</span><span class=\"n\">name</span><span class=\"p\">))</span>\n<span class=\"w\">                  </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">polars.exceptions.ColumnNotFoundError</span>: <span class=\"n\">&quot;p_error&quot; not found</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
+    },
+    {
+      "id": "AjVT",
+      "code_hash": null,
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}

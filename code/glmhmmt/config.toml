@@ -6,3 +6,6 @@
 data_dir = "../../data"
 results_dir = "../results"
 alexis_dir = "../../data/Alexis"
+
+[plugins]
+task_paths = ["../tasks"]

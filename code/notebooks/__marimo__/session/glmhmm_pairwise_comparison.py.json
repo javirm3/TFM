@@ -1,0 +1,329 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.21.1",
+    "script_metadata_hash": "e1ca2fd964bb9b6830ad273af25b73ef"
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "0272e0f0c2c42b95fbc9ebf729adc36a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "6c9ab3181a865b68754a4388c690d18c",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "This cell raised an exception: StopIteration",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_60763/__marimo__cell_MJUe_.py&quot;</span>, line <span class=\"m\">3</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_default_task</span> <span class=\"o\">=</span> <span class=\"s2\">&quot;2AFC&quot;</span> <span class=\"k\">if</span> <span class=\"s2\">&quot;2AFC&quot;</span> <span class=\"ow\">in</span> <span class=\"n\">_task_map</span><span class=\"o\">.</span><span class=\"n\">values</span><span class=\"p\">()</span> <span class=\"k\">else</span> <span class=\"nb\">next</span><span class=\"p\">(</span><span class=\"nb\">iter</span><span class=\"p\">(</span><span class=\"n\">_task_map</span><span class=\"o\">.</span><span class=\"n\">values</span><span class=\"p\">()))</span>\n<span class=\"w\">                                                                </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">StopIteration</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
+    },
+    {
+      "id": "vblA",
+      "code_hash": "ee5b8e4e0ff95d5b957a86cf27870f5f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "391be782006c81bf82547201f79772d2",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "5b1062fdd478e1dad6bdbc5043d542bb",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "ab04a5884caf0b7480b4e593e6035285",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "ee44d92b28c39a0983cfa62f52e5782e",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "9c0a11ebd5a1b182edfc8f0921e831c4",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "37eccf1a2abf257f4e1b4e3f95e8b964",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "70ccc2580c4df0bc4caf69345f4a57b7",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "2bbd8f9da5a64b6a0d54d501c11a8e06",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "11e3dae7eb49bf888586822a383b0744",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "d29807e58d9327b40d817f59fbf576d5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "8337b41de73a64db207dafcee92bd432",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "8fcec12ab4d2ba93338cc58686e8801e",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "9f80e89a8027c6d6213be27d4b54e568",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "18535f9fed39e970c3007a7ef8058744",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "433710260d3b7d06d559e18f97084bf5",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "54b71a2eec39c5f1ea5b542d5041a98e",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "b19ce6b9dc8805f1c06b9a77545fc2eb",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "DnEU",
+      "code_hash": "fe65baac7bf19dd3ec283423d4dd9a28",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_60763/__marimo__cell_ROlb_.py:212: RuntimeWarning: All-NaN slice encountered\n  y_min = float(np.nanmin(y_all))\n/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_60763/__marimo__cell_ROlb_.py:213: RuntimeWarning: All-NaN slice encountered\n  y_max = float(np.nanmax(y_all))\n/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_60763/__marimo__cell_ROlb_.py:38: SmallSampleWarning: After omitting NaNs, one or more sample arguments is too small; all returned values will be NaN. See documentation for sample size requirements.\n  _, pval = ttest_rel(y_left, y_right, nan_policy=\"omit\")\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "ulZA",
+      "code_hash": "466baec99ec5b48f8372a483a5d61ee1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ecfG",
+      "code_hash": "6cc5b1791e911beca98ee4c1658656e3",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "traceback": []
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_60763/__marimo__cell_ulZA_.py:103: UserWarning: set_ticklabels() should only be used with a fixed number of ticks, i.e. after set_ticks() or using a FixedLocator.\n  ax.set_xticklabels(feature_order, rotation=35, ha=\"right\")\n/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_60763/__marimo__cell_ulZA_.py:103: UserWarning: set_ticklabels() should only be used with a fixed number of ticks, i.e. after set_ticks() or using a FixedLocator.\n  ax.set_xticklabels(feature_order, rotation=35, ha=\"right\")\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    }
+  ]
+}

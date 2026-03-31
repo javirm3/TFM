@@ -8,7 +8,7 @@ description: Repository structure, data flow, and the division between shared mo
 The public code now lives under one installable package project:
 
 - `glmhmmt`: the task-agnostic model package and bundled CLI
-- `tasks`: the mutable repo-local task plugin package that ships with the example adapters
+- `tasks`: the mutable repo-local task package that ships with the example adapters
 
 The core package should never need to know whether the data comes from MCDR,
 2AFC, or a future task. It only consumes tensors and returns fitted parameters,
@@ -24,19 +24,19 @@ special-casing tasks inside the model code.
 
 ```text
 code/
-└── glmhmmt/
-    ├── config.toml
-    ├── notebooks/
-    ├── tasks/
-    │   └── plots/
-    └── src/glmhmmt/
-        ├── cli/
-        ├── model.py
-        ├── features.py
-        ├── model_plots.py
-        ├── postprocess.py
-        ├── runtime.py
-        └── views.py
+├── glmhmmt/
+│   ├── config.toml
+│   └── src/glmhmmt/
+│       ├── cli/
+│       ├── model.py
+│       ├── features.py
+│       ├── model_plots.py
+│       ├── postprocess.py
+│       ├── runtime.py
+│       └── views.py
+├── notebooks/
+└── tasks/
+    └── plots/
 ```
 
 ## Data flow
@@ -125,7 +125,7 @@ editing `glmhmmt`:
 2. implement a `TaskAdapter` in `tasks/<task>.py`, including adapter-level
    state-assignment scoring (`_SCORING_OPTIONS` and `scoring_key`)
 3. implement a task plot module in `tasks/plots/<task>.py`
-4. drop the file into the repo task folder and use the existing CLI commands and notebooks with `--task`
+4. drop the file into `code/tasks/` or your own configured task directory and use the existing CLI commands and notebooks with `--task`
 
 If a new task requires editing `glmhmmt.model.py`, the task boundary is
 probably wrong.
@@ -149,9 +149,9 @@ uv run glmhmmt-fit-glmhmmt --task two_afc --K 2
 Use the bundled marimo notebooks for exploration:
 
 ```bash
-uv run marimo edit notebooks/model_comparison.py
-uv run marimo edit notebooks/glmhmm_analysis.py
-uv run marimo edit notebooks/glmhmmt_analysis.py
+uv run marimo edit ../notebooks/model_comparison.py
+uv run marimo edit ../notebooks/glmhmm_analysis.py
+uv run marimo edit ../notebooks/glmhmmt_analysis.py
 ```
 
 ## Design rule

@@ -26,6 +26,7 @@ The editable repo install reads runtime settings from:
 4. Repo-aware fallbacks
 
 `config.toml` is also allowed to override plotting and model settings from the packaged defaults in `src/glmhmmt/resources/default_config.toml`.
+Task discovery uses `GLMHMMT_TASK_PATHS`, then `[plugins].task_paths` in `config.toml`, then `./tasks` in the current working directory.
 
 ## Run Fits
 
@@ -51,16 +52,16 @@ uv run glmhmmt-fit-tau-sweep --model glmhmmt --K 2 --tau_min 10 --tau_max 60 --t
 
 ```bash
 cd /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt
-uv run marimo edit notebooks/glm_analysis.py
-uv run marimo edit notebooks/glmhmm_analysis.py
-uv run marimo edit notebooks/glmhmmt_analysis.py
+uv run marimo edit ../notebooks/glm_analysis.py
+uv run marimo edit ../notebooks/glmhmm_analysis.py
+uv run marimo edit ../notebooks/glmhmmt_analysis.py
 ```
 
 The notebooks import `glmhmmt.runtime`, `glmhmmt.tasks`, and the packaged CLI modules directly. They no longer depend on repo-root `paths.py` or `scripts/` shims.
 
 ## Add Or Remove Repo Tasks
 
-The repo ships a mutable `tasks/` package at `/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/tasks`.
+The thesis repo keeps its mutable task package at `/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/tasks`.
 Any `*.py` file you place there is auto-imported by `glmhmmt.tasks`, so you can
 drop in a new adapter module or delete one of the shipped examples without
 editing `pyproject.toml`.

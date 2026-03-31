@@ -56,7 +56,7 @@ from glmhmmt.model_plots import plot_transition_weights
 from glmhmmt.views import _LABEL_RANK, get_state_palette
 
 # ── state colour palette ──────────────────────────────────────────────────────
-
+sns.set_style("ticks")
 
 def _state_colors(K: int) -> List[str]:
     return get_state_palette(K)[:K]
@@ -274,7 +274,8 @@ def plot_weights_boxplot(
     fig, axes = plt.subplots(1, 2, figsize=figsize or (8, 4), sharex=True)
     ax_line, ax_box = axes
 
-    sns.lineplot( data=df, x="Feature", y="Weight", hue="State", palette=colors[:K], ax=ax_line, markers=True, marker="o", markersize=8, markeredgewidth=0, alpha=0.85, errorbar="se", legend=False,)
+    sns.lineplot( data=df, x="Feature", y="Weight", hue="State", palette=colors[:K], ax=ax_line, markers=True, marker="o", markersize=8, markeredgewidth=0, alpha=0.85, errorbar="se", legend=False,
+                 err_kws={"edgecolor": "none", "linewidth": 0},)
     ax_line.axhline(0, color="k", lw=0.8, ls="--")
     ax_line.set_ylabel("Weight")
     ax_line.set_xlabel("")

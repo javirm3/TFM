@@ -23,9 +23,10 @@ from glmhmmt.plots_common import (
     plot_state_dwell_times as _plot_state_dwell_times_common,
     plot_session_deepdive as _plot_session_deepdive_common,
 )
-sns.set_style("white")
+sns.set_style("ticks")
 
 cfg = load_app_config()
+CI_BAND_ERR_KWS = {"edgecolor": "none", "linewidth": 0}
 
 def truncate_colormap(cmap_name, minval=0.2, maxval=0.9, n=256):
     """Trunca un colormap a un subrango."""
@@ -444,7 +445,17 @@ def plot_delay_or_stim_1d_on_ax( ax, df, subject, n_bins, which):
     )
     plot_df["kind"] = plot_df["kind"].map({"data_acc": "Data", "model_acc": "Model"})
 
-    sns.lineplot(data=plot_df[plot_df["kind"] == "Model"],x="center", y="acc",color="gray", linestyle="-",errorbar=("ci", 95), err_style="band",ax=ax)
+    sns.lineplot(
+        data=plot_df[plot_df["kind"] == "Model"],
+        x="center",
+        y="acc",
+        color="gray",
+        linestyle="-",
+        errorbar=("ci", 95),
+        err_style="band",
+        err_kws=CI_BAND_ERR_KWS,
+        ax=ax,
+    )
 
     sns.lineplot(data=plot_df[plot_df["kind"] == "Data"], x="center", y="acc", hue="center", palette=palette_data, marker="o", linewidth=0,errorbar=("ci", 95), err_style="bars",legend=False,ax=ax,zorder=10,)
 
@@ -619,7 +630,18 @@ def plot_delay_binned_1d(df, model_name, subject=None, n_bins=7):
 
     fig, ax = plt.subplots(figsize=(6, 6))
 
-    sns.lineplot(data=plot_delay[plot_delay["kind"] == "Model"], x="center", y="acc",color="gray", hue='ttype_c', linestyle="-",errorbar=("ci", 95),err_style="band",ax=ax)
+    sns.lineplot(
+        data=plot_delay[plot_delay["kind"] == "Model"],
+        x="center",
+        y="acc",
+        color="gray",
+        hue="ttype_c",
+        linestyle="-",
+        errorbar=("ci", 95),
+        err_style="band",
+        err_kws=CI_BAND_ERR_KWS,
+        ax=ax,
+    )
     sns.lineplot(x="center", y="acc", hue="ttype_c",data=plot_delay[plot_delay["kind"] == "Data"], errorbar=("ci", 95), err_style="bars",marker="o", linewidth=0, ax=ax, zorder=10, legend=False)
 
     ax.axhspan(0, 1/3, color="gray", alpha=0.15, zorder=0)
@@ -641,7 +663,18 @@ def plot_delay_binned_1d(df, model_name, subject=None, n_bins=7):
     plt.show
 
     fig, ax = plt.subplots(figsize=(5, 5))
-    sns.lineplot(data=plot_stim[plot_stim["kind"] == "Model"], x="center", y="acc",color="gray", hue = "stimd_c", linestyle="-",errorbar=("ci", 95),err_style="band",ax=ax)
+    sns.lineplot(
+        data=plot_stim[plot_stim["kind"] == "Model"],
+        x="center",
+        y="acc",
+        color="gray",
+        hue="stimd_c",
+        linestyle="-",
+        errorbar=("ci", 95),
+        err_style="band",
+        err_kws=CI_BAND_ERR_KWS,
+        ax=ax,
+    )
     sns.lineplot(x="center", y="acc", hue="stimd_c",data=plot_stim[plot_stim["kind"] == "Data"],errorbar=("ci", 95), err_style="bars",marker="o", linewidth=0, ax=ax, zorder=10, legend=False)
     ax.axhspan(0, 1/3, color="gray", alpha=0.15, zorder=0)
     ax.set_ylim(0.2, 1.05)
@@ -927,6 +960,7 @@ def plot_emission_weights(
         markers=True, marker="o", markersize=8, markeredgewidth=0,
         alpha=0.85, errorbar="se",
         palette=_state_pal, hue_order=_state_hue_order,
+        err_kws={"edgecolor": "none", "linewidth": 0},
     )
     ax_ag_line.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
     ax_ag_line.set_ylabel("ΔP (from 1/3 baseline)")

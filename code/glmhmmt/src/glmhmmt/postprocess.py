@@ -222,27 +222,31 @@ def build_trial_df(
         if C >= 3:
             new_cols.append(pl.Series(f"p_state_model_2_{k}", p_state_conditional[:, k, 2].astype(np.float64)))
 
+    prob_cols = list(adapter.probability_columns)
+    if len(prob_cols) != C:
+        prob_cols = [f"p_{idx}" for idx in range(C)]
+
     if C == 2:
         new_cols += [
-            pl.Series("pL", p_marginal[:, 0].astype(np.float64)),
-            pl.Series("pR", p_marginal[:, 1].astype(np.float64)),
+            pl.Series(prob_cols[0], p_marginal[:, 0].astype(np.float64)),
+            pl.Series(prob_cols[1], p_marginal[:, 1].astype(np.float64)),
         ]
         for k in range(view.K):
             new_cols += [
-                pl.Series(f"pL_state_{k}", p_state_conditional[:, k, 0].astype(np.float64)),
-                pl.Series(f"pR_state_{k}", p_state_conditional[:, k, 1].astype(np.float64)),
+                pl.Series(f"{prob_cols[0]}_state_{k}", p_state_conditional[:, k, 0].astype(np.float64)),
+                pl.Series(f"{prob_cols[1]}_state_{k}", p_state_conditional[:, k, 1].astype(np.float64)),
             ]
     else:
         new_cols += [
-            pl.Series("pL", p_marginal[:, 0].astype(np.float64)),
-            pl.Series("pC", p_marginal[:, 1].astype(np.float64)),
-            pl.Series("pR", p_marginal[:, 2].astype(np.float64)),
+            pl.Series(prob_cols[0], p_marginal[:, 0].astype(np.float64)),
+            pl.Series(prob_cols[1], p_marginal[:, 1].astype(np.float64)),
+            pl.Series(prob_cols[2], p_marginal[:, 2].astype(np.float64)),
         ]
         for k in range(view.K):
             new_cols += [
-                pl.Series(f"pL_state_{k}", p_state_conditional[:, k, 0].astype(np.float64)),
-                pl.Series(f"pC_state_{k}", p_state_conditional[:, k, 1].astype(np.float64)),
-                pl.Series(f"pR_state_{k}", p_state_conditional[:, k, 2].astype(np.float64)),
+                pl.Series(f"{prob_cols[0]}_state_{k}", p_state_conditional[:, k, 0].astype(np.float64)),
+                pl.Series(f"{prob_cols[1]}_state_{k}", p_state_conditional[:, k, 1].astype(np.float64)),
+                pl.Series(f"{prob_cols[2]}_state_{k}", p_state_conditional[:, k, 2].astype(np.float64)),
             ]
 
     # overwrite/add; drop pre-existing computed cols (pL/pC/pR, subject)

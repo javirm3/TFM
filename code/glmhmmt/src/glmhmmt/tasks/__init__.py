@@ -18,6 +18,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import importlib
 from importlib.metadata import entry_points
+import os
 from pathlib import Path
 import pkgutil
 import sys
@@ -25,6 +26,11 @@ from typing import List, Tuple, Dict, Any
 import warnings
 
 import types
+
+from glmhmmt.runtime import get_config_path, load_app_config
+
+
+ENV_TASK_PATHS = "GLMHMMT_TASK_PATHS"
 
 
 class TaskAdapter(ABC):
@@ -153,6 +159,10 @@ class TaskAdapter(ABC):
     @property
     def probability_columns(self) -> list[str]:
         """Trial-level probability column names aligned with choice_labels."""
+        if self.num_classes == 2:
+            return ["pL", "pR"]
+        if self.num_classes == 3:
+            return ["pL", "pC", "pR"]
         return [f"p_{idx}" for idx in range(self.num_classes)]
 
     # ── column mapping  ──────────────────────────────────────────────────────
@@ -200,7 +210,7 @@ class TaskAdapter(ABC):
 
 _REGISTRY: dict[str, type[TaskAdapter]] = {}
 _ENTRY_POINTS_LOADED = False
-_LOCAL_TASK_PACKAGES_LOADED: set[str] = set()
+_LOCAL_TASK_PATHS_LOADED: set[Path] = set()
 
 def _register(keys: list[str]):
     """Class decorator that registers an adapter under one or more keys."""
@@ -221,39 +231,82 @@ def _register(keys: list[str]):
     return decorator
 
 
-def _project_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+def _resolve_task_dir(raw: object, *, base_dir: Path) -> Path | None:
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        return None
+    candidate = Path(value).expanduser()
+    if not candidate.is_absolute():
+        candidate = (base_dir / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+    return candidate
 
 
-def _candidate_local_task_packages() -> list[tuple[str, Path]]:
-    candidates: list[tuple[str, Path]] = []
-    package_root = _project_root()
-    default_tasks_dir = package_root / "tasks"
-    if (default_tasks_dir / "__init__.py").exists():
-        candidates.append(("tasks", default_tasks_dir))
-    installed_spec = importlib.util.find_spec("tasks")
-    if installed_spec is not None:
-        installed_tasks_dir = Path(installed_spec.origin).resolve().parent if installed_spec.origin else Path(".")
-        if not candidates or installed_tasks_dir.resolve() != candidates[0][1].resolve():
-            candidates.append(("tasks", installed_tasks_dir))
+def _configured_task_dirs() -> list[Path]:
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+
+    config_path = get_config_path()
+    config_base = config_path.parent if config_path is not None else Path.cwd()
+
+    env_value = os.environ.get(ENV_TASK_PATHS)
+    if env_value:
+        for raw in env_value.split(os.pathsep):
+            task_dir = _resolve_task_dir(raw, base_dir=Path.cwd())
+            if task_dir is not None and task_dir not in seen:
+                seen.add(task_dir)
+                candidates.append(task_dir)
+
+    try:
+        app_cfg = load_app_config()
+    except Exception as exc:
+        warnings.warn(
+            f"Failed to load task-path configuration: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        app_cfg = {}
+
+    plugins_cfg = app_cfg.get("plugins", {})
+    raw_task_paths = plugins_cfg.get("task_paths", []) if isinstance(plugins_cfg, dict) else []
+    if isinstance(raw_task_paths, (str, Path)):
+        raw_task_paths = [raw_task_paths]
+    if isinstance(raw_task_paths, list):
+        for raw in raw_task_paths:
+            task_dir = _resolve_task_dir(raw, base_dir=config_base)
+            if task_dir is not None and task_dir not in seen:
+                seen.add(task_dir)
+                candidates.append(task_dir)
+
+    cwd_task_dir = (Path.cwd() / "tasks").resolve()
+    if cwd_task_dir not in seen:
+        seen.add(cwd_task_dir)
+        candidates.append(cwd_task_dir)
+
     return candidates
 
 
 def _load_local_task_packages() -> None:
-    for package_name, package_dir in _candidate_local_task_packages():
-        if package_name in _LOCAL_TASK_PACKAGES_LOADED:
+    for package_dir in _configured_task_dirs():
+        if package_dir in _LOCAL_TASK_PATHS_LOADED:
             continue
 
-        if package_dir.name == package_name:
-            package_parent = str(package_dir.parent)
-            if package_parent not in sys.path:
-                sys.path.insert(0, package_parent)
+        init_file = package_dir / "__init__.py"
+        if not init_file.exists():
+            continue
+
+        package_parent = str(package_dir.parent)
+        if package_parent not in sys.path:
+            sys.path.insert(0, package_parent)
 
         try:
-            pkg = importlib.import_module(package_name)
+            pkg = importlib.import_module("tasks")
         except Exception as exc:
             warnings.warn(
-                f"Failed to import local task package {package_name!r} from {package_dir}: {exc}",
+                f"Failed to import task package from {package_dir}: {exc}",
                 RuntimeWarning,
                 stacklevel=2,
             )
@@ -262,17 +315,27 @@ def _load_local_task_packages() -> None:
         if not getattr(pkg, "GLMHMMT_TASK_PACKAGE", False):
             continue
 
-        _LOCAL_TASK_PACKAGES_LOADED.add(package_name)
+        pkg_file = getattr(pkg, "__file__", None)
+        if pkg_file is not None and Path(pkg_file).resolve() != init_file.resolve():
+            warnings.warn(
+                f"Skipping task directory {package_dir}: Python already loaded "
+                f"'tasks' from {Path(pkg_file).resolve().parent}.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
+
+        _LOCAL_TASK_PATHS_LOADED.add(package_dir)
 
         for _, module_name, ispkg in pkgutil.iter_modules(pkg.__path__):
             if ispkg or module_name.startswith("_") or module_name == "plots":
                 continue
-            full_name = f"{package_name}.{module_name}"
+            full_name = f"tasks.{module_name}"
             try:
                 importlib.import_module(full_name)
             except Exception as exc:
                 warnings.warn(
-                    f"Failed to import local task module {full_name!r}: {exc}",
+                    f"Failed to import task module {full_name!r}: {exc}",
                     RuntimeWarning,
                     stacklevel=2,
                 )
