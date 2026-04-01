@@ -86,7 +86,7 @@ dependencies = [
     "logical-unification==0.4.7",
     "logistro==2.0.1",
     "loro==1.10.3",
-    "marimo>=0.20",
+    "marimo==0.21.1",
     "marimo-toml-editor==0.1.0",
     "markdown==3.10.1",
     "markdown-it-py==4.0.0",

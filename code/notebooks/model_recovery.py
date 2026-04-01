@@ -1,4 +1,3 @@
-import notebook_bootstrap  # noqa: F401
 import marimo
 
 __generated_with = "0.21.0"
@@ -20,11 +19,10 @@ def _():
 
     from dynamax.utils.utils import find_permutation
     from glmhmmt.model import SoftmaxGLMHMM
+    from glmhmmt.notebook_support import CoefficientEditorWidget, ModelManagerWidget, model_cfg as ModelCfg
     from glmhmmt.runtime import get_runtime_paths
     from glmhmmt.tasks import get_adapter
     from glmhmmt.views import build_views
-    from widgets import ModelManagerWidget, model_cfg as ModelCfg
-    from coefficient_editor_widget import CoefficientEditorWidget
 
     sns.set_style("white")
     paths = get_runtime_paths()

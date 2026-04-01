@@ -14,8 +14,10 @@ _ALL_EMISSION_COLS: list[str] = [
     "bias",
     "onset",
     "delay",
-    "stimulus_input",
-    "stimulus_x_delay",
+    "stimulus_duration_abs",
+    "stimulus_duration_cat",
+    "stimulus_duration_abs_x_delay",
+    "stimulus_duration_cat_x_delay",
     "stim1",
     "stim2",
     "stim3",
@@ -42,16 +44,16 @@ class MCDRAccuracyAdapter(TaskAdapter):
     session_col: str = "session"
 
     # Binary convention: stored weights are for the non-reference class.
-    # Here class 0 = Error, class 1 = Correct (reference).
-    # Negative raw weights increase P(correct).
+    # Here class 0 = Correct, class 1 = Error (reference).
+    # Positive raw weights increase P(correct).
     _SCORING_OPTIONS: dict = {
-        "stimulus_input (-w)": [("stimulus_input", "neg")],
-        "stimulus_input (|w|)": [("stimulus_input", "abs")],
+        "stimulus_duration_cat (+w)": [("stimulus_duration_cat", "pos")],
+        "stimulus_duration_cat (|w|)": [("stimulus_duration_cat", "abs")],
         "stimulus_x_delay (|w|)": [("stimulus_x_delay", "abs")],
         "delay (|w|)": [("delay", "abs")],
         "bias (|w|)": [("bias", "abs")],
     }
-    scoring_key: str = "stimulus_input (-w)"
+    scoring_key: str = "stimulus_duration_cat (+w)"
 
     def subject_filter(self, df: pl.DataFrame) -> pl.DataFrame:
         return df.filter(pl.col("subject") != "A84")
@@ -63,16 +65,15 @@ class MCDRAccuracyAdapter(TaskAdapter):
         )
         df_sub = df_sub.with_columns(
             [
-                pl.col("response").cast(pl.Int32).alias("choice_response"),
-                pl.col("stimulus").cast(pl.Int32).alias("choice_stimulus"),
-                pl.col("performance").cast(pl.Int32).alias("accuracy_response"),
-                pl.lit(1).cast(pl.Int32).alias("accuracy_stimulus"),
+                pl.col("response").cast(pl.Int32),
+                pl.col("stimd_n_z").cast(pl.Int32).alias("stimulus_duration_abs"),
                 pl.col("performance").cast(pl.Boolean).alias("correct_bool"),
                 pl.lit(1.0).cast(pl.Float32).alias("bias"),
                 pl.col("onset").cast(pl.Float32).alias("onset"),
                 pl.col("delay_d").cast(pl.Float32).alias("delay"),
-                pl.col("ttype_n").cast(pl.Float32).alias("stimulus_input"),
-                (pl.col("ttype_n") * pl.col("delay_d")).cast(pl.Float32).alias("stimulus_x_delay"),
+                pl.col("ttype_n").cast(pl.Float32).alias("stimulus_duration_cat"),
+                (pl.col("ttype_n") * pl.col("delay_d")).cast(pl.Float32).alias("stimulus_duration_cat_x_delay"),
+                (pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("stimulus_duration_abs_x_delay"),
                 (
                     ((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0)) | (pl.col("offset") == 0)
                 ).cast(pl.Float32).alias("stim1"),
@@ -98,12 +99,6 @@ class MCDRAccuracyAdapter(TaskAdapter):
         return (
             df_sub.with_columns(
                 [((pl.col(c) - pl.col(c).mean()) / pl.col(c).std()).cast(pl.Float32).alias(c) for c in ["speed1", "speed2", "speed3"]]
-            )
-            .with_columns(
-                [
-                    pl.col("accuracy_response").alias("response"),
-                    pl.col("accuracy_stimulus").alias("stimulus"),
-                ]
             )
         )
 
@@ -132,7 +127,9 @@ class MCDRAccuracyAdapter(TaskAdapter):
         if bad_u:
             raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {_ALL_TRANSITION_COLS}")
 
-        y = jnp.asarray(feature_df["accuracy_response"].to_numpy().astype(np.int32))
+        # Encode trials so the explicit softmax row corresponds to "Correct":
+        # y = 0 for correct, y = 1 for error/reference.
+        y = jnp.asarray((1 - feature_df["performance"].to_numpy().astype(np.int32)))
         X = jnp.asarray(feature_df.select(ecols).to_numpy().astype(np.float32)) if ecols else jnp.empty((len(y), 0), dtype=jnp.float32)
         U = jnp.asarray(feature_df.select(ucols).to_numpy().astype(np.float32)) if ucols else jnp.empty((len(y), 0), dtype=jnp.float32)
         names = {"X_cols": list(ecols), "U_cols": list(ucols)}
@@ -162,18 +159,14 @@ class MCDRAccuracyAdapter(TaskAdapter):
 
     @property
     def choice_labels(self) -> list[str]:
-        return ["Error", "Correct"]
+        return ["Correct", "Error"]
 
     @property
     def probability_columns(self) -> list[str]:
-        return ["p_error", "p_correct"]
+        return ["p_correct", "p_error"]
 
     def get_correct_class(self, df: pl.DataFrame) -> np.ndarray:
-        if "stimulus" in df.columns:
-            vals = df["stimulus"].to_numpy().astype(int)
-            if np.all(vals == 1):
-                return vals
-        return np.ones(df.height, dtype=int)
+        return np.zeros(df.height, dtype=int)
 
     @property
     def behavioral_cols(self) -> dict:
@@ -198,8 +191,8 @@ class MCDRAccuracyAdapter(TaskAdapter):
         subjects: list,
     ) -> tuple:
         pairs = self._SCORING_OPTIONS.get(
-            getattr(self, "scoring_key", "stimulus_input (-w)"),
-            self._SCORING_OPTIONS["stimulus_input (-w)"],
+            getattr(self, "scoring_key", "stimulus_duration_cat (+w)"),
+            self._SCORING_OPTIONS["stimulus_duration_cat (+w)"],
         )
 
         def _score_states(weights: np.ndarray, feat_names: list[str]) -> np.ndarray:
@@ -223,7 +216,7 @@ class MCDRAccuracyAdapter(TaskAdapter):
                 n_terms += 1
             if n_terms > 0:
                 return scores / n_terms
-            return -weights[:, 0, :].mean(axis=1)
+            return weights[:, 0, :].mean(axis=1)
 
         base_feat = list(names.get("X_cols", []))
         state_labels: dict = {}

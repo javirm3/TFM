@@ -239,22 +239,35 @@ def plot_emission_weights_summary(
         subjects=subjects,
     )
     fig, ax = plt.subplots(figsize=(max(7, len(feat_names) * 0.75), 4))
-    sns.lineplot(
-        data=ag_df,
+    sns.boxplot(
+        data=weights_df,
         x="feature",
-        y="delta_prob_correct",
+        y="weight",
         hue="state",
         hue_order=state_order,
         palette={state: _state_color(state, idx) for idx, state in enumerate(state_order)},
-        marker="o",
-        errorbar="se",
+        showfliers=False,
+        ax=ax,
+    )
+    sns.stripplot(
+        data=weights_df,
+        x="feature",
+        y="weight",
+        hue="state",
+        hue_order=state_order,
+        palette={state: _state_color(state, idx) for idx, state in enumerate(state_order)},
+        dodge=True,
+        alpha=0.45,
+        legend=False,
         ax=ax,
     )
     ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
-    ax.set_ylabel("Delta P(correct) from 0.5")
+    ax.set_ylabel("Correct logit weight")
     ax.set_xlabel("")
     ax.set_title("Emission weights summary")
-    ax.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles[: len(state_order)], labels[: len(state_order)], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
     fig.tight_layout()
     sns.despine(fig=fig)
     return fig
@@ -289,22 +302,35 @@ def plot_emission_weights(
     )
 
     fig_summary, ax_summary = plt.subplots(figsize=(max(7, len(feat_names) * 0.75), 4))
-    sns.lineplot(
-        data=ag_df,
+    sns.boxplot(
+        data=weights_df,
         x="feature",
-        y="delta_prob_correct",
+        y="weight",
         hue="state",
         hue_order=state_order,
         palette={state: _state_color(state, idx) for idx, state in enumerate(state_order)},
-        marker="o",
-        errorbar="se",
+        showfliers=False,
+        ax=ax_summary,
+    )
+    sns.stripplot(
+        data=weights_df,
+        x="feature",
+        y="weight",
+        hue="state",
+        hue_order=state_order,
+        palette={state: _state_color(state, idx) for idx, state in enumerate(state_order)},
+        dodge=True,
+        alpha=0.45,
+        legend=False,
         ax=ax_summary,
     )
     ax_summary.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
-    ax_summary.set_ylabel("Delta P(correct) from 0.5")
+    ax_summary.set_ylabel("Correct logit weight")
     ax_summary.set_xlabel("")
     ax_summary.set_title("Emission weights summary")
-    ax_summary.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    handles, labels = ax_summary.get_legend_handles_labels()
+    if handles:
+        ax_summary.legend(handles[: len(state_order)], labels[: len(state_order)], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
     fig_summary.tight_layout()
     sns.despine(fig=fig_summary)
 
@@ -332,7 +358,7 @@ def plot_emission_weights(
         ax=ax_detail,
     )
     ax_detail.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
-    ax_detail.set_ylabel("Error logit weight")
+    ax_detail.set_ylabel("Correct logit weight")
     ax_detail.set_xlabel("")
     ax_detail.set_title("Emission weights by feature")
     handles, labels = ax_detail.get_legend_handles_labels()
