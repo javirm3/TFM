@@ -1,17 +1,3 @@
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#   "marimo",
-#   "numpy",
-#   "polars",
-#   "matplotlib",
-#   "seaborn",
-#   "pandas",
-#   "scipy",
-# ]
-# ///
-
-import notebook_bootstrap  # noqa: F401
 import marimo
 
 __generated_with = "0.21.1"

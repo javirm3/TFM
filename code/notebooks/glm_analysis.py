@@ -1,8 +1,6 @@
-# noqa: F401
-
 import marimo
 
-__generated_with = "0.21.1"
+__generated_with = "0.22.0"
 app = marimo.App(width="medium")
 
 
@@ -22,27 +20,27 @@ def _():
     import matplotlib.pyplot as plt
     import seaborn as sns
     import pandas as pd
-    from analysis_common import (
+    from glmhmmt.notebook_support import (
+        CoefficientEditorWidget,
+        ModelManagerWidget,
+        apply_state_tweak_to_trial_df,
+        apply_state_tweak_to_view,
+        build_editor_payload,
+        make_plot_saver,
+        model_cfg as ModelCfg,
+    )
+    from glmhmmt.notebook_support.analysis_common import (
         build_trial_and_weights_df,
         load_fit_arrays,
         resolve_selected_model_id,
         select_subject_behavior_df,
     )
-    import notebook_bootstrap
     from glmhmmt.cli.fit_glm import main as fit_main, generate_model_id
     from glmhmmt.postprocess import build_trial_df
     from glmhmmt.runtime import get_runtime_paths
     from glmhmmt.tasks import get_adapter
-    from widgets import ModelManagerWidget, model_cfg as ModelCfg
-    from figure_save_utils import make_plot_saver
-    from coefficient_editor_widget import CoefficientEditorWidget
-    from coefficient_editor_utils import (
-        apply_state_tweak_to_trial_df,
-        apply_state_tweak_to_view,
-        build_editor_payload,
-    )
 
-    sns.set_style("white")
+    sns.set_style("ticks")
     paths = get_runtime_paths()
     return (
         CoefficientEditorWidget,

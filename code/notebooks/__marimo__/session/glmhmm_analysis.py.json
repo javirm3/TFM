@@ -656,7 +656,7 @@
       "outputs": [
         {
           "type": "error",
-          "ename": "ancestor-stopped",
+          "ename": "exception",
           "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
           "traceback": []
         }
@@ -669,7 +669,7 @@
       "outputs": [
         {
           "type": "error",
-          "ename": "ancestor-stopped",
+          "ename": "exception",
           "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
           "traceback": []
         }
@@ -682,7 +682,7 @@
       "outputs": [
         {
           "type": "error",
-          "ename": "ancestor-stopped",
+          "ename": "exception",
           "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
           "traceback": []
         }
@@ -708,7 +708,7 @@
       "outputs": [
         {
           "type": "error",
-          "ename": "ancestor-stopped",
+          "ename": "exception",
           "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
           "traceback": []
         }

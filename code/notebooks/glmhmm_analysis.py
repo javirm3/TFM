@@ -1,4 +1,3 @@
-import notebook_bootstrap  # noqa: F401
 import marimo
 
 __generated_with = "0.21.1"
@@ -8,7 +7,16 @@ app = marimo.App(width="full")
 @app.cell
 def _():
     import marimo as mo
-    from analysis_common import (
+    from glmhmmt.notebook_support import (
+        CoefficientEditorWidget,
+        ModelManagerWidget,
+        apply_state_tweak_to_trial_df,
+        apply_state_tweak_to_view,
+        build_editor_payload,
+        make_plot_saver,
+        model_cfg as ModelCfg,
+    )
+    from glmhmmt.notebook_support.analysis_common import (
         build_trial_and_weights_df,
         load_fit_arrays,
         resolve_selected_model_id,
@@ -30,14 +38,6 @@ def _():
     from glmhmmt.tasks import get_adapter
     from glmhmmt.views import build_views
     from glmhmmt.postprocess import build_trial_df, build_emission_weights_df
-    from widgets import ModelManagerWidget, model_cfg as ModelCfg
-    from figure_save_utils import make_plot_saver
-    from coefficient_editor_widget import CoefficientEditorWidget
-    from coefficient_editor_utils import (
-        apply_state_tweak_to_trial_df,
-        apply_state_tweak_to_view,
-        build_editor_payload,
-    )
 
 
     return (
