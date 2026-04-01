@@ -128,7 +128,7 @@ dependencies = [
     "psygnal==0.15.1",
     "ptyprocess==0.7.0",
     "pure-eval==0.2.3",
-    "pyarrow==23.0.1",
+    "pyarrow==20.0.0",
     "pybads==1.0.6",
     "pycparser==3.0",
     "pydantic-ai>=0.2.4",

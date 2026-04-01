@@ -22,7 +22,7 @@ dependencies = [
     "pandas>=3.0.0",
     "plotly>=6.5.2",
     "polars>=1.38.1",
-    "pyarrow>=23.0.1",
+    "pyarrow==20.0.0",
     "scipy>=1.17.1",
     "seaborn>=0.13.2",
     "ssm>=0.0.1",
