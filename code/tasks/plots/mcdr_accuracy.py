@@ -14,8 +14,6 @@ import seaborn as sns
 
 from glmhmmt.model_plots import (
     _state_color,
-    plot_emission_weights as _plot_emission_weights_generic,
-    plot_emission_weights_by_subject as _plot_emission_weights_by_subject_generic,
     plot_posterior_probs,
     plot_change_triggered_posteriors_by_subject,
     plot_change_triggered_posteriors_summary,
@@ -103,6 +101,55 @@ def _infer_emission_K(
     raise ValueError("Could not infer `K` for emission plots; pass it explicitly.")
 
 
+def _binary_emission_frames(
+    *,
+    arrays_store: dict,
+    state_labels: dict,
+    names: dict,
+    subjects: Sequence[str],
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str], list[str]]:
+    records: list[dict] = []
+    ag_records: list[dict] = []
+    feat_names = list(names.get("X_cols", []))
+
+    for subject in subjects:
+        if subject not in arrays_store:
+            continue
+        weights = arrays_store[subject].get("emission_weights")
+        if weights is None:
+            continue
+        weights = np.asarray(weights, dtype=float)
+        fnames = list(arrays_store[subject].get("X_cols", feat_names))[: weights.shape[2]]
+        feat_names = fnames
+        for state_idx in range(weights.shape[0]):
+            state_name = state_labels.get(subject, {}).get(state_idx, f"State {state_idx}")
+            for feat_idx, feat_name in enumerate(fnames):
+                weight = float(weights[state_idx, 0, feat_idx])
+                prob_correct = float(1.0 / (1.0 + np.exp(weight)))
+                records.append(
+                    {
+                        "subject": subject,
+                        "state": state_name,
+                        "feature": feat_name,
+                        "weight": weight,
+                    }
+                )
+                ag_records.append(
+                    {
+                        "subject": subject,
+                        "state": state_name,
+                        "feature": feat_name,
+                        "delta_prob_correct": prob_correct - 0.5,
+                    }
+                )
+
+    if not records:
+        raise ValueError("No emission weights found for the selected subjects.")
+
+    state_order = list(pd.unique(pd.DataFrame(records)["state"]))
+    return pd.DataFrame(records), pd.DataFrame(ag_records), feat_names, state_order
+
+
 def plot_emission_weights_by_subject(
     views: Optional[dict] = None,
     K: Optional[int] = None,
@@ -123,15 +170,45 @@ def plot_emission_weights_by_subject(
     if not subjects:
         return _empty_plot()
 
-    K = int(K) if K is not None else _infer_emission_K(views=views, arrays_store=arrays_store, subjects=subjects)
-    return _plot_emission_weights_by_subject_generic(
+    weights_df, _, feat_names, state_order = _binary_emission_frames(
         arrays_store=arrays_store,
         state_labels=state_labels,
         names=names,
-        K=K,
         subjects=subjects,
-        save_path=save_path,
     )
+    selected = [subject for subject in subjects if subject in arrays_store and "emission_weights" in arrays_store[subject]]
+    n_cols = min(3, max(1, len(selected)))
+    n_rows = int(np.ceil(len(selected) / n_cols))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(max(6, len(feat_names) * 0.8) * n_cols, max(3.4, 3.2 * n_rows)), squeeze=False, sharey=True)
+    x = np.arange(len(feat_names))
+    bar_w = 0.8 / max(1, len(state_order))
+
+    for subj_idx, subject in enumerate(selected):
+        ax = axes[subj_idx // n_cols, subj_idx % n_cols]
+        sub = weights_df[weights_df["subject"] == subject]
+        for state_pos, state_name in enumerate(state_order):
+            state_sub = sub[sub["state"] == state_name].set_index("feature").reindex(feat_names).reset_index()
+            offset = (state_pos - (len(state_order) - 1) / 2) * bar_w
+            ax.bar(x + offset, state_sub["weight"].to_numpy(dtype=float), bar_w, label=state_name, color=_state_color(state_name, state_pos), alpha=0.85)
+        ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+        ax.set_xticks(x)
+        ax.set_xticklabels(feat_names, rotation=35, ha="right")
+        ax.set_title(f"Subject {subject} — Error vs Correct")
+        if subj_idx % n_cols == 0:
+            ax.set_ylabel("Error logit weight")
+
+    for panel_idx in range(len(selected), n_rows * n_cols):
+        axes[panel_idx // n_cols, panel_idx % n_cols].set_visible(False)
+
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    if handles:
+        axes[0, 0].legend(handles, labels, frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    fig.suptitle(f"Emission weights by subject  (K={int(K) if K is not None else _infer_emission_K(views=views, arrays_store=arrays_store, subjects=subjects)})", y=1.01)
+    fig.tight_layout()
+    sns.despine(fig=fig)
+    if save_path is not None:
+        fig.savefig(save_path, dpi=300)
+    return fig
 
 
 def plot_emission_weights_summary(
@@ -155,16 +232,32 @@ def plot_emission_weights_summary(
     if not subjects:
         return _empty_plot()
 
-    K = int(K) if K is not None else _infer_emission_K(views=views, arrays_store=arrays_store, subjects=subjects)
-    fig_summary, fig_detail = _plot_emission_weights_generic(
+    weights_df, ag_df, feat_names, state_order = _binary_emission_frames(
         arrays_store=arrays_store,
         state_labels=state_labels,
         names=names,
-        K=K,
         subjects=subjects,
     )
-    plt.close(fig_detail)
-    return fig_summary
+    fig, ax = plt.subplots(figsize=(max(7, len(feat_names) * 0.75), 4))
+    sns.lineplot(
+        data=ag_df,
+        x="feature",
+        y="delta_prob_correct",
+        hue="state",
+        hue_order=state_order,
+        palette={state: _state_color(state, idx) for idx, state in enumerate(state_order)},
+        marker="o",
+        errorbar="se",
+        ax=ax,
+    )
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+    ax.set_ylabel("Delta P(correct) from 0.5")
+    ax.set_xlabel("")
+    ax.set_title("Emission weights summary")
+    ax.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    fig.tight_layout()
+    sns.despine(fig=fig)
+    return fig
 
 
 def plot_emission_weights(
@@ -188,14 +281,66 @@ def plot_emission_weights(
     if not subjects:
         return _empty_plot(), _empty_plot()
 
-    K = int(K) if K is not None else _infer_emission_K(views=views, arrays_store=arrays_store, subjects=subjects)
-    return _plot_emission_weights_generic(
+    weights_df, ag_df, feat_names, state_order = _binary_emission_frames(
         arrays_store=arrays_store,
         state_labels=state_labels,
         names=names,
-        K=K,
         subjects=subjects,
     )
+
+    fig_summary, ax_summary = plt.subplots(figsize=(max(7, len(feat_names) * 0.75), 4))
+    sns.lineplot(
+        data=ag_df,
+        x="feature",
+        y="delta_prob_correct",
+        hue="state",
+        hue_order=state_order,
+        palette={state: _state_color(state, idx) for idx, state in enumerate(state_order)},
+        marker="o",
+        errorbar="se",
+        ax=ax_summary,
+    )
+    ax_summary.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+    ax_summary.set_ylabel("Delta P(correct) from 0.5")
+    ax_summary.set_xlabel("")
+    ax_summary.set_title("Emission weights summary")
+    ax_summary.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    fig_summary.tight_layout()
+    sns.despine(fig=fig_summary)
+
+    fig_detail, ax_detail = plt.subplots(figsize=(max(7, len(feat_names) * 0.75), 4))
+    sns.boxplot(
+        data=weights_df,
+        x="feature",
+        y="weight",
+        hue="state",
+        hue_order=state_order,
+        palette={state: _state_color(state, idx) for idx, state in enumerate(state_order)},
+        showfliers=False,
+        ax=ax_detail,
+    )
+    sns.stripplot(
+        data=weights_df,
+        x="feature",
+        y="weight",
+        hue="state",
+        hue_order=state_order,
+        palette={state: _state_color(state, idx) for idx, state in enumerate(state_order)},
+        dodge=True,
+        alpha=0.45,
+        legend=False,
+        ax=ax_detail,
+    )
+    ax_detail.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+    ax_detail.set_ylabel("Error logit weight")
+    ax_detail.set_xlabel("")
+    ax_detail.set_title("Emission weights by feature")
+    handles, labels = ax_detail.get_legend_handles_labels()
+    if handles:
+        ax_detail.legend(handles[: len(state_order)], labels[: len(state_order)], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    fig_detail.tight_layout()
+    sns.despine(fig=fig_detail)
+    return fig_summary, fig_detail
 
 
 def truncate_colormap(cmap_name, minval=0.2, maxval=0.9, n=256):
@@ -224,10 +369,12 @@ def prepare_predictions_df(df_pred: pl.DataFrame) -> pl.DataFrame:
     if "p_model_correct" not in df.columns:
         if "p_model_correct_marginal" in df.columns:
             df = df.with_columns(pl.col("p_model_correct_marginal").alias("p_model_correct"))
+        elif "p_correct" in df.columns:
+            df = df.with_columns(pl.col("p_correct").alias("p_model_correct"))
         elif "pR" in df.columns:
             df = df.with_columns(pl.col("pR").alias("p_model_correct"))
         else:
-            raise ValueError("Expected `p_model_correct_marginal` or binary class probability `pR`.")
+            raise ValueError("Expected `p_model_correct_marginal` or binary class probability `p_correct`.")
 
     if "stimd_c" not in df.columns:
         if "stimd_n" in df.columns:

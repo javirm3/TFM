@@ -1,5 +1,7 @@
 /references
 /data
+.venv/
+**/.venv/
 *.synctex.gz
 *.DS_Store
 **/__marimo__/cache/

@@ -8,11 +8,35 @@ import jax.numpy as jnp
 import numpy as np
 import polars as pl
 
+from glmhmmt.tasks.fitted_regressors import (
+    FittedWeightRegressorSpec,
+    mean_feature_weights_from_fit,
+    weighted_sum_regressor,
+)
 from glmhmmt.tasks import TaskAdapter, _register
+
+_NUM_STIM_BINS = 9
+_NUM_CHOICE_LAGS = 10
+_STIM_BIN_PREFIX = "stim_bin_"
+_CHOICE_LAG_PREFIX = "choice_lag_"
+_STIM_PARAM_COL = "stim_param"
+
+
+def _stim_bin_names() -> list[str]:
+    return [f"{_STIM_BIN_PREFIX}{idx:02d}" for idx in range(_NUM_STIM_BINS)]
+
+
+def _choice_lag_names() -> list[str]:
+    return [f"{_CHOICE_LAG_PREFIX}{idx:02d}" for idx in range(1, _NUM_CHOICE_LAGS + 1)]
+
+
+_STIM_BIN_COLS = _stim_bin_names()
+_CHOICE_LAG_COLS = _choice_lag_names()
 
 _NUO_AUDITORY_EMISSION_COLS: list[str] = [
     "bias",
     "stim_vals",
+    "stim_param",
     "at_choice",
     "at_error",
     "at_correct",
@@ -33,6 +57,24 @@ _NUO_AUDITORY_TRANSITION_COLS: list[str] = [
     "cumulative_reward",
 ]
 
+_STIM_PARAM_SPEC = FittedWeightRegressorSpec(
+    target_name="stim_param",
+    fit_task="nuo_auditory",
+    fit_model_kind="glm",
+    fit_model_id="one hot lapses",
+    arrays_suffix="glm_arrays.npz",
+    source_features=tuple(_STIM_BIN_COLS),
+)
+
+_AT_CHOICE_SPEC = FittedWeightRegressorSpec(
+    target_name="at_choice",
+    fit_task="nuo_auditory",
+    fit_model_kind="glm",
+    fit_model_id="lagged choices",
+    arrays_suffix="glm_arrays.npz",
+    source_features=tuple(_CHOICE_LAG_COLS),
+)
+
 
 def _validated_half_life(tau: float) -> float:
     """Return a positive half-life for Polars EWMA features."""
@@ -40,6 +82,36 @@ def _validated_half_life(tau: float) -> float:
     if not np.isfinite(half_life) or half_life <= 0:
         raise ValueError(f"Nuo auditory requires tau > 0, got {tau!r}")
     return half_life
+
+
+def _stim_bin_centers() -> np.ndarray:
+    return np.linspace(-1.0, 1.0, _NUM_STIM_BINS, dtype=np.float32)
+
+
+def _stim_bin_edges() -> np.ndarray:
+    centers = _stim_bin_centers().astype(np.float64)
+    mids = (centers[:-1] + centers[1:]) / 2.0
+    return np.concatenate(([-np.inf], mids, [np.inf]))
+
+
+def _stim_bin_indices(values: np.ndarray) -> np.ndarray:
+    edges = _stim_bin_edges()
+    idx = np.digitize(values.astype(np.float64), edges[1:-1], right=False)
+    return np.clip(idx, 0, _NUM_STIM_BINS - 1).astype(np.int32)
+
+
+def _safe_weighted_sum_regressor(part, spec: FittedWeightRegressorSpec) -> np.ndarray | None:
+    try:
+        return weighted_sum_regressor(part, spec, dtype=np.float32)
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _stim_param_weight_map() -> dict[str, float]:
+    try:
+        return mean_feature_weights_from_fit(_STIM_PARAM_SPEC)
+    except (FileNotFoundError, ValueError):
+        return {}
 
 
 @_register(["nuo_auditory", "auditory_2afc", "nuo_auditive"])
@@ -57,6 +129,8 @@ class NuoAuditoryAdapter(TaskAdapter):
     _SCORING_OPTIONS: dict = {
         "stim_vals (-w)": [("stim_vals", "neg")],
         "stim_vals (|w|)": [("stim_vals", "abs")],
+        "stim_param (-w)": [("stim_param", "neg")],
+        "stim_param (|w|)": [("stim_param", "abs")],
         "at_choice (|w|)": [("at_choice", "abs")],
         "wsls (|w|)": [("wsls", "abs")],
         "bias (|w|)": [("bias", "abs")],
@@ -128,6 +202,18 @@ class NuoAuditoryAdapter(TaskAdapter):
                 choice_signed_expr.alias("_choice_signed"),
             ]
         )
+
+        stim_vals_np = df_sub["stim_vals"].to_numpy().astype(np.float32)
+        stim_bin_idx = _stim_bin_indices(stim_vals_np)
+        stim_bin_exprs = [
+            pl.Series(
+                name,
+                (stim_bin_idx == idx).astype(np.float32),
+            )
+            for idx, name in enumerate(_STIM_BIN_COLS)
+        ]
+        df_sub = df_sub.with_columns(stim_bin_exprs)
+
         df_sub = df_sub.with_columns(
             [
                 pl.col("_choice_signed").shift(1).fill_null(0.0).over("session").cast(pl.Float32).alias("_prev_choice_signed"),
@@ -139,6 +225,19 @@ class NuoAuditoryAdapter(TaskAdapter):
                 pl.col("performance").shift(1).fill_null(0.0).cum_sum().over("session").cast(pl.Float32).alias("_cumulative_reward_raw"),
             ]
         )
+        lag_exprs = [
+            pl.col("_choice_signed")
+            .shift(lag)
+            .fill_null(0.0)
+            .over("session")
+            .cast(pl.Float32)
+            .alias(name)
+            for lag, name in enumerate(_CHOICE_LAG_COLS, start=1)
+        ]
+        df_sub = df_sub.with_columns(lag_exprs)
+
+        stim_param = _safe_weighted_sum_regressor(df_sub, _STIM_PARAM_SPEC)
+        at_choice_param = _safe_weighted_sum_regressor(df_sub, _AT_CHOICE_SPEC)
         df_sub = df_sub.with_columns(
             [
                 pl.when(pl.col("_cumulative_reward_raw").max().over("session") > 0)
@@ -146,10 +245,19 @@ class NuoAuditoryAdapter(TaskAdapter):
                 .otherwise(pl.lit(0.0))
                 .cast(pl.Float32)
                 .alias("cumulative_reward"),
-                pl.col("_prev_choice_signed").ewm_mean(half_life=half_life, adjust=False).over("session").cast(pl.Float32).alias("at_choice"),
+                (
+                    pl.Series("at_choice", at_choice_param)
+                    if at_choice_param is not None
+                    else pl.col("_prev_choice_signed").ewm_mean(half_life=half_life, adjust=False).over("session").cast(pl.Float32).alias("at_choice")
+                ),
                 pl.col("_prev_correct_signed").ewm_mean(half_life=half_life, adjust=False).over("session").cast(pl.Float32).alias("at_correct"),
                 pl.col("_prev_error_signed").ewm_mean(half_life=half_life, adjust=False).over("session").cast(pl.Float32).alias("at_error"),
                 pl.col("prev_reward").ewm_mean(half_life=half_life, adjust=False).over("session").cast(pl.Float32).alias("reward_trace"),
+                (
+                    pl.Series(_STIM_PARAM_COL, stim_param)
+                    if stim_param is not None
+                    else pl.col("stim_vals").cast(pl.Float32).alias(_STIM_PARAM_COL)
+                ),
             ]
         )
         return df_sub
@@ -178,11 +286,12 @@ class NuoAuditoryAdapter(TaskAdapter):
         """Return ``(y, X, U, names)`` for one subject."""
         ecols = emission_cols if emission_cols is not None else self.default_emission_cols()
         ucols = transition_cols if transition_cols is not None else self.default_transition_cols()
-        bad_e = [c for c in ecols if c not in _NUO_AUDITORY_EMISSION_COLS]
+        allowed_ecols = set(self.available_emission_cols()) | set(self.available_extra_emission_cols(feature_df))
+        bad_e = [c for c in ecols if c not in allowed_ecols]
         bad_u = [c for c in ucols if c not in _NUO_AUDITORY_TRANSITION_COLS]
         if bad_e:
             raise ValueError(
-                f"Unknown emission_cols: {bad_e}. Available: {_NUO_AUDITORY_EMISSION_COLS}"
+                f"Unknown emission_cols: {bad_e}. Available: {sorted(allowed_ecols)}"
             )
         if bad_u:
             raise ValueError(
@@ -207,6 +316,9 @@ class NuoAuditoryAdapter(TaskAdapter):
     def available_transition_cols(self) -> List[str]:
         return list(_NUO_AUDITORY_TRANSITION_COLS)
 
+    def available_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
+        return [c for c in list(_STIM_BIN_COLS) + list(_CHOICE_LAG_COLS) if c in df.columns]
+
     def resolve_design_names(
         self,
         emission_cols: List[str] | None = None,
@@ -215,11 +327,13 @@ class NuoAuditoryAdapter(TaskAdapter):
     ) -> Dict[str, List[str]]:
         ecols = list(emission_cols) if emission_cols is not None else self.default_emission_cols()
         ucols = list(transition_cols) if transition_cols is not None else self.default_transition_cols()
-        bad_e = [c for c in ecols if c not in _NUO_AUDITORY_EMISSION_COLS]
+        extra_cols = self.available_extra_emission_cols(df) if df is not None else []
+        allowed_ecols = set(self.available_emission_cols()) | set(extra_cols)
+        bad_e = [c for c in ecols if c not in allowed_ecols]
         bad_u = [c for c in ucols if c not in _NUO_AUDITORY_TRANSITION_COLS]
         if bad_e:
             raise ValueError(
-                f"Unknown emission_cols: {bad_e}. Available: {_NUO_AUDITORY_EMISSION_COLS}"
+                f"Unknown emission_cols: {bad_e}. Available: {sorted(allowed_ecols)}"
             )
         if bad_u:
             raise ValueError(

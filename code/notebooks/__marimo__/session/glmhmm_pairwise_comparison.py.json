@@ -10,13 +10,20 @@
       "code_hash": "0272e0f0c2c42b95fbc9ebf729adc36a",
       "outputs": [
         {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
+          "type": "error",
+          "ename": "exception",
+          "evalue": "No module named 'glmhmmt'",
+          "traceback": []
         }
       ],
-      "console": []
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_74718/__marimo__cell_Hbol_.py&quot;</span>, line <span class=\"m\">10</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">glmhmmt.runtime</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">get_runtime_paths</span>\n<span class=\"gr\">ModuleNotFoundError</span>: <span class=\"n\">No module named &#39;glmhmmt&#39;</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
     },
     {
       "id": "MJUe",
@@ -25,7 +32,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "This cell raised an exception: StopIteration",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -33,7 +40,7 @@
         {
           "type": "stream",
           "name": "stderr",
-          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_60763/__marimo__cell_MJUe_.py&quot;</span>, line <span class=\"m\">3</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_default_task</span> <span class=\"o\">=</span> <span class=\"s2\">&quot;2AFC&quot;</span> <span class=\"k\">if</span> <span class=\"s2\">&quot;2AFC&quot;</span> <span class=\"ow\">in</span> <span class=\"n\">_task_map</span><span class=\"o\">.</span><span class=\"n\">values</span><span class=\"p\">()</span> <span class=\"k\">else</span> <span class=\"nb\">next</span><span class=\"p\">(</span><span class=\"nb\">iter</span><span class=\"p\">(</span><span class=\"n\">_task_map</span><span class=\"o\">.</span><span class=\"n\">values</span><span class=\"p\">()))</span>\n<span class=\"w\">                                                                </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">StopIteration</span>\n</pre></div>\n</span>",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_60763/__marimo__cell_MJUe_.py&quot;</span>, line <span class=\"m\">4</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">ui_task</span> <span class=\"o\">=</span> <span class=\"n\">mo</span><span class=\"o\">.</span><span class=\"n\">ui</span><span class=\"o\">.</span><span class=\"n\">dropdown</span><span class=\"p\">(</span>\n<span class=\"w\">              </span><span class=\"pm\">^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/marimo/_plugins/ui/_impl/input.py&quot;</span>, line <span class=\"m\">1029</span>, in <span class=\"n\">__init__</span>\n<span class=\"w\">    </span><span class=\"nb\">super</span><span class=\"p\">()</span><span class=\"o\">.</span><span class=\"fm\">__init__</span><span class=\"p\">(</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/marimo/_plugins/ui/_core/ui_element.py&quot;</span>, line <span class=\"m\">167</span>, in <span class=\"n\">__init__</span>\n<span class=\"w\">    </span><span class=\"bp\">self</span><span class=\"o\">.</span><span class=\"n\">_initialize</span><span class=\"p\">(</span><span class=\"bp\">self</span><span class=\"o\">.</span><span class=\"n\">_args</span><span class=\"p\">)</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/marimo/_plugins/ui/_core/ui_element.py&quot;</span>, line <span class=\"m\">273</span>, in <span class=\"n\">_initialize</span>\n<span class=\"w\">    </span><span class=\"bp\">self</span><span class=\"o\">.</span><span class=\"n\">_value</span> <span class=\"o\">=</span> <span class=\"bp\">self</span><span class=\"o\">.</span><span class=\"n\">_initial_value</span> <span class=\"o\">=</span> <span class=\"bp\">self</span><span class=\"o\">.</span><span class=\"n\">_convert_value</span><span class=\"p\">(</span><span class=\"n\">initial_value</span><span class=\"p\">)</span>\n<span class=\"w\">                                        </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/marimo/_plugins/ui/_impl/input.py&quot;</span>, line <span class=\"m\">1055</span>, in <span class=\"n\">_convert_value</span>\n<span class=\"w\">    </span><span class=\"k\">raise</span> <span class=\"ne\">ValueError</span><span class=\"p\">(</span>\n<span class=\"gr\">ValueError</span>: <span class=\"n\">The option name &#39;MCDR-Accuracy&#39; is not a valid option. Please use one of the following options: [&#39;MCDR Accuracy&#39;, &#39;Nuo auditory&#39;]</span>\n</pre></div>\n</span>",
           "mimetype": "application/vnd.marimo+traceback"
         }
       ]
@@ -58,7 +65,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -71,7 +78,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -84,7 +91,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -97,7 +104,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -123,7 +130,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -136,7 +143,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -149,7 +156,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -188,7 +195,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -201,7 +208,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -214,7 +221,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -240,7 +247,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -253,7 +260,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -266,7 +273,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -279,7 +286,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],
@@ -312,7 +319,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (StopIteration): ",
+          "evalue": "An ancestor raised an exception (ValueError): ",
           "traceback": []
         }
       ],

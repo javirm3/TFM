@@ -51,48 +51,34 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "Unknown task 'MCDR'. Known tasks: ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stderr",
-          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_61619/__marimo__cell_bkHC_.py&quot;</span>, line <span class=\"m\">2</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">adapter</span> <span class=\"o\">=</span> <span class=\"n\">get_adapter</span><span class=\"p\">(</span><span class=\"n\">task_name</span><span class=\"p\">)</span>\n<span class=\"w\">              </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/tasks/__init__.py&quot;</span>, line <span class=\"m\">377</span>, in <span class=\"n\">get_adapter</span>\n<span class=\"w\">    </span><span class=\"k\">raise</span> <span class=\"ne\">ValueError</span><span class=\"p\">(</span><span class=\"sa\">f</span><span class=\"s2\">&quot;Unknown task </span><span class=\"si\">{</span><span class=\"n\">task</span><span class=\"si\">!r}</span><span class=\"s2\">. Known tasks: </span><span class=\"si\">{</span><span class=\"n\">known</span><span class=\"si\">}</span><span class=\"s2\">&quot;</span><span class=\"p\">)</span>\n<span class=\"gr\">ValueError</span>: <span class=\"n\">Unknown task &#39;MCDR&#39;. Known tasks: </span>\n</pre></div>\n</span>",
-          "mimetype": "application/vnd.marimo+traceback"
-        }
-      ]
+      "console": []
     },
     {
       "id": "lEQa",
       "code_hash": "ffd1e21b83f9c2b288771606019a2420",
       "outputs": [
         {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
+          "traceback": []
         }
       ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stdout",
-          "text": "Error applying default state for task MCDR: Unknown task 'MCDR'. Known tasks: \nError loading adapter for task MCDR: Unknown task 'MCDR'. Known tasks: \nError loading adapter for task MCDR: Unknown task 'MCDR'. Known tasks: \nError loading adapter for task MCDR: Unknown task 'MCDR'. Known tasks: \n",
-          "mimetype": "text/plain"
-        }
-      ]
+      "console": []
     },
     {
       "id": "PKri",
       "code_hash": "b2d97c47ff3ad67bd0e1e4ae98b742de",
       "outputs": [
         {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
+          "traceback": []
         }
       ],
       "console": []
@@ -104,7 +90,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -117,7 +103,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -143,7 +129,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -156,18 +142,11 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stdout",
-          "text": "Fitting GLM | Task=MCDR-Accuracy Tau=50 Hash=fd8bd415 Alias=None N=8\nFitting GLM | Task=MCDR-Accuracy Tau=50 N=8\n  Fitting A83...\n  Fitting A86...\n  Fitting A87...\n  Fitting A89...\n  Fitting A92...\n  Fitting A93...\n  Fitting A95...\n  Fitting A96...\nDone.\n",
-          "mimetype": "text/plain"
-        }
-      ]
+      "console": []
     },
     {
       "id": "emfo",
@@ -176,7 +155,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -189,7 +168,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -202,7 +181,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -213,10 +192,10 @@
       "code_hash": "e604770e8c83710bd2e0ffc8b93083c1",
       "outputs": [
         {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
+          "traceback": []
         }
       ],
       "console": []
@@ -228,7 +207,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -267,18 +246,11 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stderr",
-          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_61619/__marimo__cell_TqIu_.py&quot;</span>, line <span class=\"m\">6</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_fig_by_subject</span> <span class=\"o\">=</span> <span class=\"n\">plots</span><span class=\"o\">.</span><span class=\"n\">plot_emission_weights_by_subject</span><span class=\"p\">(</span>\n<span class=\"w\">                      </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/tasks/plots/mcdr_accuracy.py&quot;</span>, line <span class=\"m\">127</span>, in <span class=\"n\">plot_emission_weights_by_subject</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">_plot_emission_weights_by_subject_generic</span><span class=\"p\">(</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/model_plots.py&quot;</span>, line <span class=\"m\">864</span>, in <span class=\"n\">plot_emission_weights_by_subject</span>\n<span class=\"w\">    </span><span class=\"n\">_df_w</span><span class=\"p\">,</span> <span class=\"n\">_</span><span class=\"p\">,</span> <span class=\"n\">_feat_names</span><span class=\"p\">,</span> <span class=\"n\">_</span><span class=\"p\">,</span> <span class=\"n\">_state_pal</span><span class=\"p\">,</span> <span class=\"n\">_state_hue_order</span><span class=\"p\">,</span> <span class=\"n\">_cls_labels</span> <span class=\"o\">=</span> <span class=\"n\">_collect_emission_weight_frames</span><span class=\"p\">(</span>\n<span class=\"w\">                                                                          </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt/src/glmhmmt/model_plots.py&quot;</span>, line <span class=\"m\">827</span>, in <span class=\"n\">_collect_emission_weight_frames</span>\n<span class=\"w\">    </span><span class=\"n\">_logits</span> <span class=\"o\">=</span> <span class=\"p\">[</span><span class=\"nb\">float</span><span class=\"p\">(</span><span class=\"n\">_W</span><span class=\"p\">[</span><span class=\"n\">_k</span><span class=\"p\">,</span> <span class=\"mi\">0</span><span class=\"p\">,</span> <span class=\"n\">_fi</span><span class=\"p\">]),</span> <span class=\"mf\">0.0</span><span class=\"p\">,</span> <span class=\"nb\">float</span><span class=\"p\">(</span><span class=\"n\">_W</span><span class=\"p\">[</span><span class=\"n\">_k</span><span class=\"p\">,</span> <span class=\"mi\">1</span><span class=\"p\">,</span> <span class=\"n\">_fi</span><span class=\"p\">])]</span>\n<span class=\"w\">                                                 </span><span class=\"pm\">~~^^^^^^^^^^^^</span>\n<span class=\"gr\">IndexError</span>: <span class=\"n\">index 1 is out of bounds for axis 1 with size 1</span>\n</pre></div>\n</span>",
-          "mimetype": "application/vnd.marimo+traceback"
-        }
-      ]
+      "console": []
     },
     {
       "id": "Vxnm",
@@ -313,7 +285,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -339,7 +311,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -352,7 +324,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -365,7 +337,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -378,7 +350,7 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
@@ -391,30 +363,16 @@
         {
           "type": "error",
           "ename": "exception",
-          "evalue": "An ancestor raised an exception (ValueError): ",
+          "evalue": "An ancestor raised an exception (ModuleNotFoundError): ",
           "traceback": []
         }
       ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stderr",
-          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_61619/__marimo__cell_xXTn_.py&quot;</span>, line <span class=\"m\">4</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_trial_df_tweaked</span> <span class=\"o\">=</span> <span class=\"n\">apply_state_tweak_to_trial_df</span><span class=\"p\">(</span>\n<span class=\"w\">                        </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/notebooks/coefficient_editor_utils.py&quot;</span>, line <span class=\"m\">246</span>, in <span class=\"n\">apply_state_tweak_to_trial_df</span>\n<span class=\"w\">    </span><span class=\"n\">current</span> <span class=\"o\">=</span> <span class=\"n\">trial_df_sub</span><span class=\"p\">[</span><span class=\"n\">class_col</span><span class=\"p\">]</span><span class=\"o\">.</span><span class=\"n\">to_numpy</span><span class=\"p\">()</span><span class=\"o\">.</span><span class=\"n\">astype</span><span class=\"p\">(</span><span class=\"nb\">float</span><span class=\"p\">)</span>\n<span class=\"w\">              </span><span class=\"pm\">~~~~~~~~~~~~^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">1431</span>, in <span class=\"n\">__getitem__</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">get_df_item_by_key</span><span class=\"p\">(</span><span class=\"bp\">self</span><span class=\"p\">,</span> <span class=\"n\">key</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/_utils/getitem.py&quot;</span>, line <span class=\"m\">163</span>, in <span class=\"n\">get_df_item_by_key</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">df</span><span class=\"o\">.</span><span class=\"n\">get_column</span><span class=\"p\">(</span><span class=\"n\">key</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/dataframe/frame.py&quot;</span>, line <span class=\"m\">9193</span>, in <span class=\"n\">get_column</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">wrap_s</span><span class=\"p\">(</span><span class=\"bp\">self</span><span class=\"o\">.</span><span class=\"n\">_df</span><span class=\"o\">.</span><span class=\"n\">get_column</span><span class=\"p\">(</span><span class=\"n\">name</span><span class=\"p\">))</span>\n<span class=\"w\">                  </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">polars.exceptions.ColumnNotFoundError</span>: <span class=\"n\">&quot;p_error&quot; not found</span>\n</pre></div>\n</span>",
-          "mimetype": "application/vnd.marimo+traceback"
-        }
-      ]
+      "console": []
     },
     {
       "id": "AjVT",
       "code_hash": null,
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
-        }
-      ],
+      "outputs": [],
       "console": []
     }
   ]

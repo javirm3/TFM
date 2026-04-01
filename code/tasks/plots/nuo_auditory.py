@@ -53,6 +53,7 @@ from glmhmmt.plots_common import (
 )
 from glmhmmt.model_plots import plot_transition_weights
 from glmhmmt.views import _LABEL_RANK, get_state_palette
+from ..nuo_auditory import _stim_bin_centers, _stim_param_weight_map
 
 _SESSION_COL = "session"
 _SORT_COL = "trial"
@@ -763,13 +764,28 @@ def eval_glm_on_ild_grid(
     K, _C_m1, M = W.shape
 
     X_cols_list = list(X_cols)
+    stim_bin_indices = {
+        name: idx
+        for idx, name in enumerate(X_cols_list)
+        if isinstance(name, str) and name.startswith("stim_bin_")
+    }
+    stim_centers = _stim_bin_centers()
+    stim_bin_names = [f"stim_bin_{idx:02d}" for idx in range(len(stim_centers))]
+    stim_center_map = {
+        name: float(center)
+        for name, center in zip(stim_bin_names, stim_centers)
+    }
+    stim_param_idx = next((i for i, n in enumerate(X_cols_list) if n == "stim_param"), None)
+    stim_param_weights = _stim_param_weight_map() if stim_param_idx is not None else {}
 
     # Accept any of these as the stimulus / ILD column
     _STIM_NAMES = {"stim_vals", "stim_d", "ild_norm", "ILD", "ild", "stimulus"}
     ild_idx = next((i for i, n in enumerate(X_cols_list) if n in _STIM_NAMES), None)
     bias_idx = next((i for i, n in enumerate(X_cols_list) if n == "bias"), None)
-
-    ild_grid = np.linspace(-ild_max, ild_max, n_grid)
+    if stim_bin_indices or stim_param_idx is not None:
+        ild_grid = stim_centers.astype(float) * float(ild_max)
+    else:
+        ild_grid = np.linspace(-ild_max, ild_max, n_grid)
     ild_norm = ild_grid / ild_max
 
     gL, gR = 0.0, 0.0
@@ -790,16 +806,42 @@ def eval_glm_on_ild_grid(
             if float(_w.sum()) > 0:
                 weights_t = _w
 
-    if X_data is not None and ild_idx is not None:
+    stim_feature_indices = sorted(
+        set(
+            ([ild_idx] if ild_idx is not None else [])
+            + list(stim_bin_indices.values())
+            + ([stim_param_idx] if stim_param_idx is not None else [])
+        )
+    )
+
+    def _stim_bin_name_from_norm(stim_value: float) -> str:
+        return min(
+            stim_center_map,
+            key=lambda name: abs(stim_value - stim_center_map[name]),
+        )
+
+    if X_data is not None and (ild_idx is not None or stim_bin_indices or stim_param_idx is not None):
         # ── partial-dependence: average over real trial features ──────────────
         X_base = np.asarray(X_data, dtype=float).copy()
         for k in range(K):
             w = W[k, 0, :]
             other_logit = X_base @ w
-            stim_contrib = X_base[:, ild_idx] * w[ild_idx]
+            stim_contrib = (
+                X_base[:, stim_feature_indices] @ w[stim_feature_indices]
+                if stim_feature_indices
+                else 0.0
+            )
             base_logit = other_logit - stim_contrib
             for gi, sv in enumerate(ild_norm):
-                logit = base_logit + sv * w[ild_idx]
+                stim_logit = 0.0
+                if ild_idx is not None:
+                    stim_logit += sv * w[ild_idx]
+                stim_bin_name = _stim_bin_name_from_norm(float(sv))
+                for name, idx in stim_bin_indices.items():
+                    stim_logit += (1.0 if name == stim_bin_name else 0.0) * w[idx]
+                if stim_param_idx is not None:
+                    stim_logit += float(stim_param_weights.get(stim_bin_name, 0.0)) * w[stim_param_idx]
+                logit = base_logit + stim_logit
                 # W[k,0,:] parameterises P(class-0 = LEFT); class-1 (RIGHT) is
                 # the softmax reference (logit=0). So P(right) = sigmoid(-logit).
                 p_left = 1.0 / (1.0 + np.exp(-logit))
@@ -817,9 +859,18 @@ def eval_glm_on_ild_grid(
             if bias_idx is not None:
                 col_means[bias_idx] = 1.0
 
-        X_grid = np.tile(col_means, (n_grid, 1))
+        X_grid = np.tile(col_means, (len(ild_grid), 1))
+        if stim_feature_indices:
+            X_grid[:, stim_feature_indices] = 0.0
         if ild_idx is not None:
             X_grid[:, ild_idx] = ild_norm
+        for gi, sv in enumerate(ild_norm):
+            stim_bin_name = _stim_bin_name_from_norm(float(sv))
+            stim_bin_idx = stim_bin_indices.get(stim_bin_name)
+            if stim_bin_idx is not None:
+                X_grid[gi, stim_bin_idx] = 1.0
+            if stim_param_idx is not None:
+                X_grid[gi, stim_param_idx] = float(stim_param_weights.get(stim_bin_name, 0.0))
         if bias_idx is not None:
             X_grid[:, bias_idx] = 1.0  # bias is always 1
 
@@ -1234,6 +1285,7 @@ def _feature_label(feature_name: str) -> str:
         "at_correct": "Correct trace",
         "reward_trace": "Reward trace",
         "stim_vals": "Stimulus",
+        "stim_param": "Stimulus (param)",
         "bias": "Bias",
         "wsls": "WSLS",
     }

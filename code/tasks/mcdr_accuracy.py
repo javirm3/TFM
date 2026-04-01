@@ -12,20 +12,22 @@ from glmhmmt.tasks import TaskAdapter, _register
 
 _ALL_EMISSION_COLS: list[str] = [
     "bias",
-    "biasL", "biasC", "biasR", "onsetL", "onsetC", "onsetR", "delay",
-    "SL", "SC", "SR",
-    "SLxdelay", "SCxdelay", "SRxdelay",
-    "SLxD", "SCxD", "SRxD",
-    "D", "DL", "DC", "DR",
-    "A_L", "A_C", "A_R",
-    "speed1", "speed2", "speed3",
-    "stim1L", "stim1C", "stim1R",
-    "stim2L", "stim2C", "stim2R",
-    "stim3L", "stim3C", "stim3R",
-    "stim4L", "stim4C", "stim4R",
+    "onset",
+    "delay",
+    "stimulus_input",
+    "stimulus_x_delay",
+    "stim1",
+    "stim2",
+    "stim3",
+    "stim4",
+    "speed1",
+    "speed2",
+    "speed3",
+    "A_plus",
+    "A_minus",
 ]
 
-_ALL_TRANSITION_COLS: list[str] = ["A_plus", "A_minus", "A_L", "A_C", "A_R"]
+_ALL_TRANSITION_COLS: list[str] = ["A_plus", "A_minus"]
 
 
 @_register(["mcdr_accuracy", "mcdr-accuracy"])
@@ -43,16 +45,13 @@ class MCDRAccuracyAdapter(TaskAdapter):
     # Here class 0 = Error, class 1 = Correct (reference).
     # Negative raw weights increase P(correct).
     _SCORING_OPTIONS: dict = {
-        "S_coh (-w)": [("SL", "neg"), ("SR", "neg")],
-        "S1_coh (-w)": [("stim1L", "neg"), ("stim1R", "neg")],
-        "S2_coh (-w)": [("stim2L", "neg"), ("stim2R", "neg")],
-        "S3_coh (-w)": [("stim3L", "neg"), ("stim3R", "neg")],
-        "S4_coh (-w)": [("stim4L", "neg"), ("stim4R", "neg")],
-        "onset_coh (-w)": [("onsetL", "neg"), ("onsetR", "neg")],
-        "bias_coh (|w|)": [("biasL", "abs"), ("biasR", "abs")],
+        "stimulus_input (-w)": [("stimulus_input", "neg")],
+        "stimulus_input (|w|)": [("stimulus_input", "abs")],
+        "stimulus_x_delay (|w|)": [("stimulus_x_delay", "abs")],
+        "delay (|w|)": [("delay", "abs")],
         "bias (|w|)": [("bias", "abs")],
     }
-    scoring_key: str = "S_coh (-w)"
+    scoring_key: str = "stimulus_input (-w)"
 
     def subject_filter(self, df: pl.DataFrame) -> pl.DataFrame:
         return df.filter(pl.col("subject") != "A84")
@@ -69,70 +68,22 @@ class MCDRAccuracyAdapter(TaskAdapter):
                 pl.col("performance").cast(pl.Int32).alias("accuracy_response"),
                 pl.lit(1).cast(pl.Int32).alias("accuracy_stimulus"),
                 pl.col("performance").cast(pl.Boolean).alias("correct_bool"),
-                (pl.col("x_c") == "L").cast(pl.Float32).alias("biasL"),
-                (pl.col("x_c") == "C").cast(pl.Float32).alias("biasC"),
-                (pl.col("x_c") == "R").cast(pl.Float32).alias("biasR"),
                 pl.lit(1.0).cast(pl.Float32).alias("bias"),
+                pl.col("onset").cast(pl.Float32).alias("onset"),
                 pl.col("delay_d").cast(pl.Float32).alias("delay"),
-                ((pl.col("x_c") == "L") * pl.col("onset")).cast(pl.Float32).alias("onsetL"),
-                ((pl.col("x_c") == "C") * pl.col("onset")).cast(pl.Float32).alias("onsetC"),
-                ((pl.col("x_c") == "R") * pl.col("onset")).cast(pl.Float32).alias("onsetR"),
-                ((pl.col("x_c") == "L") * pl.col("stimd_n_z")).cast(pl.Float32).alias("SL"),
-                ((pl.col("x_c") == "C") * pl.col("stimd_n_z")).cast(pl.Float32).alias("SC"),
-                ((pl.col("x_c") == "R") * pl.col("stimd_n_z")).cast(pl.Float32).alias("SR"),
-                ((pl.col("x_c") == "L") * pl.col("delay_d")).cast(pl.Float32).alias("DL"),
-                ((pl.col("x_c") == "C") * pl.col("delay_d")).cast(pl.Float32).alias("DC"),
-                ((pl.col("x_c") == "R") * pl.col("delay_d")).cast(pl.Float32).alias("DR"),
-                pl.col("ttype_n").cast(pl.Float32).alias("D"),
-                ((pl.col("x_c") == "L") * pl.col("stimd_n_z") * pl.col("ttype_n")).cast(pl.Float32).alias("SLxD"),
-                ((pl.col("x_c") == "C") * pl.col("stimd_n_z") * pl.col("ttype_n")).cast(pl.Float32).alias("SCxD"),
-                ((pl.col("x_c") == "R") * pl.col("stimd_n_z") * pl.col("ttype_n")).cast(pl.Float32).alias("SRxD"),
-                ((pl.col("x_c") == "L") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SLxdelay"),
-                ((pl.col("x_c") == "C") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SCxdelay"),
-                ((pl.col("x_c") == "R") * pl.col("stimd_n_z") * pl.col("delay_d")).cast(pl.Float32).alias("SRxdelay"),
+                pl.col("ttype_n").cast(pl.Float32).alias("stimulus_input"),
+                (pl.col("ttype_n") * pl.col("delay_d")).cast(pl.Float32).alias("stimulus_x_delay"),
                 (
-                    (((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0)) | (pl.col("offset") == 0))
-                    & (pl.col("x_c") == "L")
-                ).cast(pl.Float32).alias("stim1L"),
+                    ((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0)) | (pl.col("offset") == 0)
+                ).cast(pl.Float32).alias("stim1"),
                 (
-                    (((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0)) | (pl.col("offset") == 0))
-                    & (pl.col("x_c") == "C")
-                ).cast(pl.Float32).alias("stim1C"),
+                    ((pl.col("onset") < pl.col("timepoint_2")) & (pl.col("offset") > pl.col("timepoint_1"))) | (pl.col("offset") == 0)
+                ).cast(pl.Float32).alias("stim2"),
                 (
-                    (((pl.col("onset") < pl.col("timepoint_1")) & (pl.col("offset") > 0)) | (pl.col("offset") == 0))
-                    & (pl.col("x_c") == "R")
-                ).cast(pl.Float32).alias("stim1R"),
-                (
-                    (((pl.col("onset") < pl.col("timepoint_2")) & (pl.col("offset") > pl.col("timepoint_1"))) | (pl.col("offset") == 0))
-                    & (pl.col("x_c") == "L")
-                ).cast(pl.Float32).alias("stim2L"),
-                (
-                    (((pl.col("onset") < pl.col("timepoint_2")) & (pl.col("offset") > pl.col("timepoint_1"))) | (pl.col("offset") == 0))
-                    & (pl.col("x_c") == "C")
-                ).cast(pl.Float32).alias("stim2C"),
-                (
-                    (((pl.col("onset") < pl.col("timepoint_2")) & (pl.col("offset") > pl.col("timepoint_1"))) | (pl.col("offset") == 0))
-                    & (pl.col("x_c") == "R")
-                ).cast(pl.Float32).alias("stim2R"),
-                (
-                    (((pl.col("onset") < pl.col("timepoint_3")) & (pl.col("offset") > pl.col("timepoint_2"))) | (pl.col("offset") == 0))
-                    & (pl.col("x_c") == "L")
-                ).cast(pl.Float32).alias("stim3L"),
-                (
-                    (((pl.col("onset") < pl.col("timepoint_3")) & (pl.col("offset") > pl.col("timepoint_2"))) | (pl.col("offset") == 0))
-                    & (pl.col("x_c") == "C")
-                ).cast(pl.Float32).alias("stim3C"),
-                (
-                    (((pl.col("onset") < pl.col("timepoint_3")) & (pl.col("offset") > pl.col("timepoint_2"))) | (pl.col("offset") == 0))
-                    & (pl.col("x_c") == "R")
-                ).cast(pl.Float32).alias("stim3R"),
-                ((pl.col("onset") < pl.col("timepoint_4")) & (pl.col("offset") > pl.col("timepoint_3")) & (pl.col("x_c") == "L")).cast(pl.Float32).alias("stim4L"),
-                ((pl.col("onset") < pl.col("timepoint_4")) & (pl.col("offset") > pl.col("timepoint_3")) & (pl.col("x_c") == "C")).cast(pl.Float32).alias("stim4C"),
-                ((pl.col("onset") < pl.col("timepoint_4")) & (pl.col("offset") > pl.col("timepoint_3")) & (pl.col("x_c") == "R")).cast(pl.Float32).alias("stim4R"),
+                    ((pl.col("onset") < pl.col("timepoint_3")) & (pl.col("offset") > pl.col("timepoint_2"))) | (pl.col("offset") == 0)
+                ).cast(pl.Float32).alias("stim3"),
+                ((pl.col("onset") < pl.col("timepoint_4")) & (pl.col("offset") > pl.col("timepoint_3"))).cast(pl.Float32).alias("stim4"),
                 pl.col("performance").shift(1).fill_null(0).cast(pl.Float32).over(self.session_col).alias("previous_outcome"),
-                pl.col("response").shift(1).fill_null(0.0).eq(0).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).over(self.session_col).alias("A_L"),
-                pl.col("response").shift(1).fill_null(0.0).eq(1).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).over(self.session_col).alias("A_C"),
-                pl.col("response").shift(1).fill_null(0.0).eq(2).cast(pl.Float32).ewm_mean(half_life=tau, adjust=False).over(self.session_col).alias("A_R"),
                 (1 / (pl.col("timepoint_3") - pl.col("timepoint_4"))).cast(pl.Float32).alias("speed3"),
                 (1 / (pl.col("timepoint_3") - pl.col("timepoint_2"))).cast(pl.Float32).alias("speed2"),
                 (1 / (pl.col("timepoint_2") - pl.col("timepoint_1"))).cast(pl.Float32).alias("speed1"),
@@ -247,8 +198,8 @@ class MCDRAccuracyAdapter(TaskAdapter):
         subjects: list,
     ) -> tuple:
         pairs = self._SCORING_OPTIONS.get(
-            getattr(self, "scoring_key", "S_coh (-w)"),
-            self._SCORING_OPTIONS["S_coh (-w)"],
+            getattr(self, "scoring_key", "stimulus_input (-w)"),
+            self._SCORING_OPTIONS["stimulus_input (-w)"],
         )
 
         def _score_states(weights: np.ndarray, feat_names: list[str]) -> np.ndarray:
