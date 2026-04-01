@@ -891,11 +891,9 @@ class CoefTweakerWidget(anywidget.AnyWidget):
                 
             available_ecols = (
                 adapter.available_emission_cols() + adapter.available_extra_emission_cols(df_all)
-                if self.is_2afc else adapter.available_emission_cols()
             )
             default_ecols = (
                 adapter.default_emission_cols() + adapter.default_extra_emission_cols(df_all)
-                if self.is_2afc else adapter.default_emission_cols()
             )
             self.emission_cols_options = available_ecols
             if not self.emission_cols:

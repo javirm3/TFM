@@ -11,6 +11,7 @@
 # ]
 # ///
 
+import notebook_bootstrap  # noqa: F401
 import marimo
 
 __generated_with = "0.21.1"

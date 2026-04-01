@@ -317,7 +317,21 @@ class NuoAuditoryAdapter(TaskAdapter):
         return list(_NUO_AUDITORY_TRANSITION_COLS)
 
     def available_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
-        return [c for c in list(_STIM_BIN_COLS) + list(_CHOICE_LAG_COLS) if c in df.columns]
+        extras: list[str] = [c for c in list(_STIM_BIN_COLS) + list(_CHOICE_LAG_COLS) if c in df.columns]
+        if extras:
+            return extras
+
+        raw_has_stim = "total_evidence_strength" in df.columns
+        raw_has_choice = "last_choice" in df.columns or "response" in df.columns
+        inferred: list[str] = []
+        if raw_has_stim:
+            inferred.extend(_STIM_BIN_COLS)
+        if raw_has_choice:
+            inferred.extend(_CHOICE_LAG_COLS)
+        return inferred
+
+    def default_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
+        return self.available_extra_emission_cols(df)
 
     def resolve_design_names(
         self,

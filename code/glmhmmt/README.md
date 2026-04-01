@@ -1,14 +1,22 @@
 `glmhmmt` is the installable GLM-HMM / GLM-HMMT package that lives inside this thesis repository.
 
-Install from a clone with `uv`:
+For work inside this thesis repository, use the workspace root:
 
 ```bash
-cd code/glmhmmt
+cd code
 uv sync
 uv run glmhmmt-fit-glmhmmt --help
 ```
 
 If you want the marimo notebooks too:
+
+```bash
+cd code
+uv sync --extra notebooks
+uv run marimo edit notebooks/glmhmmt_analysis.py
+```
+
+If you specifically want to work on `glmhmmt` as a standalone package project, you can still use:
 
 ```bash
 cd code/glmhmmt

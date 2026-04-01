@@ -824,6 +824,11 @@ dependencies = [
     { name = "zuko" },
 ]
 
+[package.optional-dependencies]
+notebooks = [
+    { name = "glmhmmt", extra = ["notebooks"] },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "absl-py", specifier = "==2.4.0" },
@@ -874,6 +879,7 @@ requires-dist = [
     { name = "fonttools", specifier = "==4.61.1" },
     { name = "gast", specifier = "==0.7.0" },
     { name = "glmhmmt", editable = "glmhmmt" },
+    { name = "glmhmmt", extras = ["notebooks"], marker = "extra == 'notebooks'", editable = "glmhmmt" },
     { name = "gpyreg", specifier = "==1.0.2" },
     { name = "grpcio", specifier = "==1.78.0" },
     { name = "h11", specifier = "==0.16.0" },
@@ -1021,6 +1027,7 @@ requires-dist = [
     { name = "zipp", specifier = "==3.23.0" },
     { name = "zuko", specifier = "==1.5.0" },
 ]
+provides-extras = ["notebooks"]
 
 [[package]]
 name = "cohere"

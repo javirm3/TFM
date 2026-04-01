@@ -1,3 +1,5 @@
+# noqa: F401
+
 import marimo
 
 __generated_with = "0.21.1"
@@ -26,6 +28,7 @@ def _():
         resolve_selected_model_id,
         select_subject_behavior_df,
     )
+    import notebook_bootstrap
     from glmhmmt.cli.fit_glm import main as fit_main, generate_model_id
     from glmhmmt.postprocess import build_trial_df
     from glmhmmt.runtime import get_runtime_paths

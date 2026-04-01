@@ -5,16 +5,16 @@ import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import { Icon } from 'astro-icon/components';
 
 const installSnippet = `git clone https://github.com/javirm3/TFM
-cd TFM/code/glmhmmt
+cd TFM/code
 uv sync
 
 # optional: include notebook extras
 uv sync --extra notebooks
 
 uv run glmhmmt-fit-glmhmmt --help
-uv run marimo edit ../notebooks/glmhmmt_analysis.py`;
+uv run marimo edit notebooks/glmhmmt_analysis.py`;
 
-const installOneLiner = 'git clone https://github.com/javirm3/TFM && cd TFM/code/glmhmmt && uv sync --extra notebooks';
+const installOneLiner = 'git clone https://github.com/javirm3/TFM && cd TFM/code && uv sync --extra notebooks';
 ---
 
 <!DOCTYPE html>
@@ -647,7 +647,7 @@ const installOneLiner = 'git clone https://github.com/javirm3/TFM && cd TFM/code
       <div id="code-content">
 <span class="comment"># clone and install with uv</span><br/>
 <span class="cmd">git clone</span> https://github.com/javirm3/TFM<br/>
-<span class="cmd">cd</span> TFM/code/glmhmmt<br/>
+<span class="cmd">cd</span> TFM/code<br/>
 <span class="cmd">uv sync</span><br/><br/>
 <span class="comment"># optional: include notebook extras</span><br/>
 <span class="cmd">uv sync</span> --extra notebooks<br/><br/>

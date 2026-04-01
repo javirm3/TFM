@@ -202,6 +202,11 @@ dependencies = [
     "zuko==1.5.0",
 ]
 
+[project.optional-dependencies]
+notebooks = [
+    "glmhmmt[notebooks]",
+]
+
 [tool.uv.workspace]
 members = ["glmhmmt/"]
 

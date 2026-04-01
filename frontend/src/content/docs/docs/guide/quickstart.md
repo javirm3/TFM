@@ -5,18 +5,18 @@ description: Install glmhmmt and fit your first GLM-HMM in minutes.
 
 ## Installation
 
-Clone the repository and install the package-local environment with `uv`:
+Clone the repository and install the thesis workspace with `uv`:
 
 ```bash
 git clone https://github.com/javirm3/TFM
-cd TFM/code/glmhmmt
+cd TFM/code
 uv sync
 ```
 
 If you also want the marimo notebooks and notebook-only dependencies:
 
 ```bash
-cd TFM/code/glmhmmt
+cd TFM/code
 uv sync --extra notebooks
 ```
 
@@ -35,7 +35,7 @@ Because `glmhmmt` is built on JAX, it pairs exceptionallly well with **[Marimo](
 
 To start an analysis notebook:
 ```bash
-uv run marimo edit ../notebooks/glmhmmt_analysis.py
+uv run marimo edit notebooks/glmhmmt_analysis.py
 ```
 
 ## Task-aware workflow

@@ -5,14 +5,14 @@ This package lives inside the thesis repo at `/Users/javierrodriguezmartinez/Doc
 ## Install
 
 ```bash
-cd /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt
+cd /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code
 uv sync
 ```
 
 For the marimo notebooks:
 
 ```bash
-cd /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt
+cd /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code
 uv sync --extra notebooks
 ```
 
@@ -51,10 +51,10 @@ uv run glmhmmt-fit-tau-sweep --model glmhmmt --K 2 --tau_min 10 --tau_max 60 --t
 ## Open Notebooks
 
 ```bash
-cd /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/glmhmmt
-uv run marimo edit ../notebooks/glm_analysis.py
-uv run marimo edit ../notebooks/glmhmm_analysis.py
-uv run marimo edit ../notebooks/glmhmmt_analysis.py
+cd /Users/javierrodriguezmartinez/Documents/MAMME/TFM/code
+uv run marimo edit notebooks/glm_analysis.py
+uv run marimo edit notebooks/glmhmm_analysis.py
+uv run marimo edit notebooks/glmhmmt_analysis.py
 ```
 
 The notebooks import `glmhmmt.runtime`, `glmhmmt.tasks`, and the packaged CLI modules directly. They no longer depend on repo-root `paths.py` or `scripts/` shims.

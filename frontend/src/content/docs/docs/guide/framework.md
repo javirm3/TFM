@@ -149,9 +149,9 @@ uv run glmhmmt-fit-glmhmmt --task two_afc --K 2
 Use the bundled marimo notebooks for exploration:
 
 ```bash
-uv run marimo edit ../notebooks/model_comparison.py
-uv run marimo edit ../notebooks/glmhmm_analysis.py
-uv run marimo edit ../notebooks/glmhmmt_analysis.py
+uv run marimo edit notebooks/model_comparison.py
+uv run marimo edit notebooks/glmhmm_analysis.py
+uv run marimo edit notebooks/glmhmmt_analysis.py
 ```
 
 ## Design rule
