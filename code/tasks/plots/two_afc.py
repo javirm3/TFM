@@ -36,6 +36,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+from matplotlib.lines import Line2D
 from pathlib import Path
 from scipy.stats import sem, ttest_1samp
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -281,29 +282,52 @@ def plot_weights_boxplot(
     ax_line.set_xlabel("")
     ax_line.set_title(title)
 
-    sns.boxplot(
-        data=df,
-        x="Feature",
-        y="Weight",
-        hue="State",
-        palette=colors[:K],
-        ax=ax_box,
-        width=0.8,
+    hue_width = 0.8 / K
+    positions = []
+    grouped_weights = []
+    for m in range(M):
+        for k in range(K):
+            positions.append(m + (k - (K - 1) / 2) * hue_width)
+            grouped_weights.append(W_avg[:, k, m])
+
+    box = ax_box.boxplot(
+        grouped_weights,
+        positions=positions,
+        widths=hue_width * 0.9,
+        patch_artist=True,
         showfliers=False,
-        boxprops={"alpha": 0.7},
+        showcaps=False,
     )
-    sns.stripplot(
-        data=df,
-        x="Feature",
-        y="Weight",
-        hue="State",
-        palette=colors[:K],
-        ax=ax_box,
-        dodge=True,
-        alpha=0.5,
-        zorder=1,
-        legend=False,
-    )
+
+    for patch in box["boxes"]:
+        patch.set(facecolor="white", edgecolor="#666666", linewidth=1.1)
+    for elem in ("whiskers", "caps"):
+        for artist in box[elem]:
+            artist.set(color="#666666", linewidth=1.0)
+    for idx, median in enumerate(box["medians"]):
+        median.set(color=colors[idx % K], linewidth=3)
+
+    for m in range(M):
+        for n in range(N):
+            xs = []
+            ys = []
+            for k in range(K):
+                xs.append(m + (k - (K - 1) / 2) * hue_width)
+                ys.append(W_avg[n, k, m])
+            ax_box.plot(xs, ys, color="#7A7A7A", alpha=0.18, lw=0.8, zorder=0)
+
+    for m in range(M):
+        for k in range(K):
+            x_pos = m + (k - (K - 1) / 2) * hue_width
+            ax_box.scatter(
+                np.full(N, x_pos),
+                W_avg[:, k, m],
+                color=colors[k],
+                alpha=0.6,
+                s=22,
+                zorder=3,
+                linewidths=0,
+            )
     ax_box.axhline(0, color="k", lw=0.8, ls="--")
 
     def get_star(pval):
@@ -320,8 +344,6 @@ def plot_weights_boxplot(
         y_range = 1
 
     state_pairs = list(itertools.combinations(range(K), 2))
-    hue_width = 0.8 / K
-
     for m in range(M):
         y_max = df[df["FeatureIdx"] == m]["Weight"].max()
         y_offset_step = y_range * 0.05
@@ -343,7 +365,7 @@ def plot_weights_boxplot(
                 x1 = m + offset_1
                 x2 = m + offset_2
 
-                h = y_range * 0.02
+                h = 0
                 ax_box.plot(
                     [x1, x1, x2, x2],
                     [current_y_offset, current_y_offset + h, current_y_offset + h, current_y_offset],
@@ -357,11 +379,11 @@ def plot_weights_boxplot(
     ax_box.set_xticklabels(feature_names, rotation=45, ha="right")
     ax_box.set_ylabel("Weight")
 
-    handles, labels_lgd = ax_box.get_legend_handles_labels()
-    if len(handles) >= K:
-        ax_box.legend(handles[:K], labels_lgd[:K], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
-    else:
-        ax_box.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    legend_handles = [
+        Line2D([0], [0], marker="o", linestyle="", markerfacecolor=colors[k], markeredgecolor="none", markersize=7, label=labels[k])
+        for k in range(K)
+    ]
+    ax_box.legend(legend_handles, labels[:K], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
 
     sns.despine(fig=fig)
     fig.tight_layout()
