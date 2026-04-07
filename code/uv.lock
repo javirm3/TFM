@@ -21,6 +21,7 @@ members = [
     "code",
     "glmhmmt",
 ]
+excludes = ["tensorflow-probability"]
 
 [[package]]
 name = "absl-py"
@@ -996,6 +997,7 @@ requires-dist = [
     { name = "sympy", specifier = "==1.13.1" },
     { name = "tensorboard", specifier = "==2.20.0" },
     { name = "tensorboard-data-server", specifier = "==0.7.2" },
+    { name = "tensorflow-probability" },
     { name = "terminado", specifier = "==0.18.1" },
     { name = "tfp-nightly", specifier = "==0.26.0.dev20260205" },
     { name = "tinycss2", specifier = "==1.4.0" },
@@ -1407,7 +1409,6 @@ dependencies = [
     { name = "numpy" },
     { name = "optax" },
     { name = "scikit-learn" },
-    { name = "tensorflow-probability" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/94/d3/875a498f7e00537b2f02637ed5e48fd4ff113cbb83a274a73f36ee682e9c/dynamax-1.0.1.tar.gz", hash = "sha256:197d566bb1ede90652a0bc0b65f1cb9eba0a6af5f8d3b8fb9b9cf94b1978a492", size = 137304, upload-time = "2025-05-10T11:17:12.861Z" }
@@ -5430,23 +5431,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7a/13/e503968fefabd4c6b2650af21e110aa8466fe21432cd7c43a84577a89438/tensorboard_data_server-0.7.2-py3-none-any.whl", hash = "sha256:7e0610d205889588983836ec05dc098e80f97b7e7bbff7e994ebb78f578d0ddb", size = 2356, upload-time = "2023-10-23T21:23:32.16Z" },
     { url = "https://files.pythonhosted.org/packages/b7/85/dabeaf902892922777492e1d253bb7e1264cadce3cea932f7ff599e53fea/tensorboard_data_server-0.7.2-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:9fe5d24221b29625dbc7328b0436ca7fc1c23de4acf4d272f1180856e32f9f60", size = 4823598, upload-time = "2023-10-23T21:23:33.714Z" },
     { url = "https://files.pythonhosted.org/packages/73/c6/825dab04195756cf8ff2e12698f22513b3db2f64925bdd41671bfb33aaa5/tensorboard_data_server-0.7.2-py3-none-manylinux_2_31_x86_64.whl", hash = "sha256:ef687163c24185ae9754ed5650eb5bc4d84ff257aabdc33f0cc6f74d8ba54530", size = 6590363, upload-time = "2023-10-23T21:23:35.583Z" },
-]
-
-[[package]]
-name = "tensorflow-probability"
-version = "0.25.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "absl-py" },
-    { name = "cloudpickle" },
-    { name = "decorator" },
-    { name = "dm-tree" },
-    { name = "gast" },
-    { name = "numpy" },
-    { name = "six" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/b6/e116761ceeb880b7ad4c6a7e1203538754dd7dda42538f08d6daaf8dfa4d/tensorflow_probability-0.25.0-py2.py3-none-any.whl", hash = "sha256:f3f4d6431656c0122906888afe1b67b4400e82bd7f254b45b92e6c5b84ea8e3e", size = 6979403, upload-time = "2024-11-08T16:25:57.238Z" },
 ]
 
 [[package]]

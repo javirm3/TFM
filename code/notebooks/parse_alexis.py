@@ -37,11 +37,9 @@ def normalize_subject_id(value):
 
 
 @app.cell
-def _(filter_behavior, paths, pl, subject_names_to_keep):
+def _(paths, pl):
     base_path = paths.DATA_PATH / "Alexis"
     experiment_folders = [f"2AFC_{i}" for i in range(1, 7)] + ["2AFC"]
-
-
 
     dfs = []
     for folder in experiment_folders:
@@ -81,40 +79,127 @@ def _(filter_behavior, paths, pl, subject_names_to_keep):
         if col not in ("experiment", "subject")  # keep string cols as-is
         and combined_df[col].cast(pl.Float64, strict=False).null_count() == combined_df[col].null_count()
     )
-    combined_df = combined_df.filter((pl.col("Experiment").is_in(['2AFC_2', '2AFC_3', '2AFC_4'])))
-    combined_df = combined_df.rename({"Subject" : "subject"})
-    combined_df = combined_df.with_columns(pl.col("subject").cast(pl.Int64, strict=False).cast(pl.Utf8))
+    combined_df
+    return (combined_df,)
+
+
+@app.cell
+def _(pd):
+    def filter_drug_sessions(df):
+        """Filter out saline sessions (Drug==0) that are not immediately followed by a drug session (Drug==1) for paired
+        saline-drug analyses (batch #6).
+        :return: df with only paired saline-drug sessions
+        """
+
+        # The column date is called differently depending on session or intersession data
+        if 'Date' in df.columns:
+            col_name = 'Date'  # Sessions
+            # df.drop_duplicates(subset=col_name, inplace=True)  # Keep a row per unique date
+        elif 'Dates' in df.columns:
+            col_name = 'Dates'  # Intersessions
+
+        # In case of sessions data
+        df[col_name] = pd.to_datetime(df[col_name])  # Convert to datetime if not already
+        df.sort_values(by=col_name, inplace=True)  # Sort by date
+        df.reset_index(drop=True, inplace=True)  # Reset index inplace
+
+        # Find saline sessions immediately followed by a drug session
+        paired_sessions = []
+        for i in range(len(df) - 1):
+            current = df.iloc[i]
+            next = df.iloc[i + 1]
+            if current.Drug == 0 and next.Drug == 1:
+                paired_sessions.append(df[col_name][i])
+
+        # Filter original df
+        df = df[(df[col_name].isin(paired_sessions) | (df.Drug == 1))]
+        df.reset_index(drop=True, inplace=True)
+
+        # Get summary df of paired sessions
+        # summary = (df[['Date', 'Drug']].drop_duplicates(['Date', 'Drug']).sort_values('Date').reset_index(drop=True))
+
+        return df
+
+    return (filter_drug_sessions,)
+
+
+@app.cell
+def _(combined_df, filter_behavior, paths, pl, subject_names_to_keep):
+    base_exp_df = combined_df.filter((pl.col("Experiment").is_in(['2AFC_2', '2AFC_3', '2AFC_4'])))
+    base_exp_df = base_exp_df.rename({"Subject" : "subject"})
+    base_exp_df = base_exp_df.with_columns(pl.col("subject").cast(pl.Int64, strict=False).cast(pl.Utf8))
     if subject_names_to_keep:
-        combined_df = combined_df.filter(
+        base_exp_df = base_exp_df.filter(
             pl.col("subject").is_in(subject_names_to_keep)
         )
-    combined_df = combined_df.select(
+    base_exp_df = base_exp_df.select(
         [c for c in ["subject", "Trial", "Side", "Choice", "Hit", "Punish", "Session", "ILD", "Filename", "Experiment", "Task", "P" ,"p", "Condition", "AW", "WarmUp", "Date"]
-         if c in combined_df.columns]
+         if c in base_exp_df.columns]
     )
-    combined_df = combined_df.with_columns(pl.col("ILD").replace({70: 20, -70 : -20 }))
+    base_exp_df = base_exp_df.with_columns(pl.col("ILD").replace({70: 20, -70 : -20 }))
     output_path = paths.DATA_PATH / "alexis_combined.parquet"
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    combined_df = pl.concat([
+    base_exp_df = pl.concat([
         pl.from_pandas(
             filter_behavior(
-                combined_df.filter(pl.col("subject") == subj).to_pandas()
+                base_exp_df.filter(pl.col("subject") == subj).to_pandas()
             )
         )
-        for subj in combined_df["subject"].unique().to_list()
+        for subj in base_exp_df["subject"].unique().to_list()
     ])
 
-    subjects_to_keep = ["325", "326", "327", "329", "330", "332", "333", "335", "337", "419", "420", "422", "616", "617", "619", "623", "561", "807", "820", "821", "873", "875", "907", "909", "911", "000", "001", "002", "003", "004", "006", "007", "009", "014", "014", "015", "016", "017", "018", "019", "020", "022", "023", "024", "025" ]
-    combined_df_filtered = combined_df.filter(pl.col("subject").is_in(subjects_to_keep))
-    combined_df_filtered.write_parquet(output_path)
+    subjects_to_keep = ["325", "326", "327", "329", "330", "332", "333", "335", "337", "419", "420", "422", "616", "617", "619", "623", "561", "807", "820", "821", "873", "875", "907", "909", "911", "000", "001", "002", "003", "004", "006", "007", "009", "14", "16", "17", "18", "19", "20", "22", "23", "24", "25" ]
+    base_exp_df_filtered = base_exp_df.filter(pl.col("subject").is_in(subjects_to_keep))
+    base_exp_df_filtered.write_parquet(output_path)
     print(f"Saved to {output_path}")
-    print(combined_df.group_by("subject").agg([pl.len().alias("n_trials")]).sort("n_trials"))
-    return (combined_df_filtered,)
+    print(base_exp_df.group_by("subject").agg([pl.len().alias("n_trials")]).sort("n_trials"))
+    return (subjects_to_keep,)
+
+
+@app.cell
+def _(
+    combined_df,
+    filter_behavior,
+    filter_drug_sessions,
+    paths,
+    pl,
+    subject_names_to_keep,
+    subjects_to_keep,
+):
+    drug_df = combined_df.filter((pl.col("Experiment").is_in(['2AFC_6'])))
+    drug_df = drug_df.rename({"Subject" : "subject"})
+    drug_df = drug_df.with_columns(pl.col("subject").cast(pl.Int64, strict=False).cast(pl.Utf8))
+    if subject_names_to_keep:
+        drug_df = drug_df.filter(
+            pl.col("subject").is_in(subject_names_to_keep)
+        )
+    drug_df = drug_df.select(
+        [c for c in ["subject", "Trial", "Side", "Drug", "Choice", "Hit", "Punish", "Session", "ILD", "Filename", "Experiment", "Task", "P" ,"p", "Condition", "AW", "WarmUp", "Date"]
+         if c in drug_df.columns]
+    )
+    drug_df = drug_df.with_columns(pl.col("ILD").replace({70: 20, -70 : -20 }))
+    output_path_drug = paths.DATA_PATH / "alexis_drug_combined.parquet"
+    output_path_drug.parent.mkdir(parents=True, exist_ok=True)
+    drug_df = drug_df.filter(pl.col("subject").is_in(subjects_to_keep))
+    drug_df = pl.concat([
+        pl.from_pandas(
+            filter_drug_sessions(filter_behavior(
+                drug_df.filter(pl.col("subject") == subj).to_pandas(), filter_drug=False,
+            ))
+        )
+        for subj in drug_df["subject"].unique().to_list()
+    ])
+
+    drug_df.write_parquet(output_path_drug)
+    print(f"Saved to {output_path_drug}")
+    print(drug_df.group_by("subject").agg([pl.len().alias("n_trials")]).sort("n_trials"))
+    drug_df
+    return
 
 
 app._unparsable_cell(
     r"""
-    Apply filter_behavior per subject per experiment; for 2AFC_6 tag each row with condition.
+    dApply filter_behavior per subject per experiment; for 2AFC_6 tag each row with condition.
         parts = []
         for (exp,), df_group in combined_df.group_by(["Experiment"], maintain_order=True):
        if exp not in ['2AFC_2', '2AFC_3', '2AFC_4', '2AFC_6']:
@@ -292,7 +377,7 @@ def _(pd):
     #     print(f'Total:{round((_ - len(df)) / 1000)}k trials')
 
     #     return df
-    return
+    return (filter_drug_sessions,)
 
 
 @app.cell

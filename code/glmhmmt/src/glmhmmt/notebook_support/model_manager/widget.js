@@ -447,6 +447,9 @@ function render({ model, el }) {
     const currentTau       = model.get("tau");
     const currentCvMode    = model.get("cv_mode");
     const currentCvRepeats = model.get("cv_repeats");
+    const showConditionFilter = model.get("show_condition_filter");
+    const conditionFilterOptions = model.get("condition_filter_options") || [];
+    const currentConditionFilter = model.get("condition_filter") || "all";
     const currentLapse     = model.get("lapse");
     const currentLapseMax  = model.get("lapse_max");
     const currentAlias     = model.get("alias");
@@ -603,6 +606,21 @@ function render({ model, el }) {
             </div>
           </div>
       `;
+
+      if (showConditionFilter) {
+        html += `
+          <div class="mm-col half-col">
+            <div class="mm-section">
+              <label class="mm-label">Condition Filter</label>
+              <select id="inp-condition-filter" class="mm-input small">
+                ${conditionFilterOptions.map(opt => `
+                  <option value="${opt}" ${currentConditionFilter === opt ? "selected" : ""}>${opt}</option>
+                `).join("")}
+              </select>
+            </div>
+          </div>
+        `;
+      }
 
       if (modelType === "glm" && is2afc) {
         html += `
@@ -877,6 +895,10 @@ function render({ model, el }) {
     bind("#inp-cv-repeats", "change", (e) => {
       const val = parseInt(e.target.value, 10);
       model.set("cv_repeats", Number.isFinite(val) && val > 0 ? val : 1);
+      model.save_changes();
+    });
+    bind("#inp-condition-filter", "change", (e) => {
+      model.set("condition_filter", e.target.value);
       model.save_changes();
     });
 

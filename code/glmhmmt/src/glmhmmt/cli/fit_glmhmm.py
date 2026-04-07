@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Callable
@@ -36,23 +37,47 @@ def generate_model_id(
     frozen_emissions: dict | None = None,
     cv_mode: str = "none",
     cv_repeats: int = 0,
+    condition_filter: str = "all",
 ) -> str:
     """Stable 8-char hash over the GLMHMM-defining model configuration."""
-    return stable_model_id(
-        task=task,
-        K=K,
-        tau=tau,
-        emission_cols=emission_cols,
-        frozen_emissions=frozen_emissions,
-        cv_mode=cv_mode,
-        cv_repeats=cv_repeats,
+    base_config = {
+        "task": task,
+        "K": int(K),
+        "tau": float(tau),
+        "emission_cols": sorted(emission_cols) if emission_cols else [],
+        "frozen_emissions": serialize_frozen_emissions(frozen_emissions),
+        "cv_mode": normalize_cv_mode(cv_mode),
+        "cv_repeats": int(cv_repeats) if normalize_cv_mode(cv_mode) != "none" else 0,
+    }
+    if str(task).upper() == "2AFC_DRUG":
+        base_config["condition_filter"] = _normalize_condition_filter(task, condition_filter)
+    return hashlib.md5(json.dumps(base_config, sort_keys=True).encode()).hexdigest()[:8]
+
+
+def _normalize_condition_filter(task: str, condition_filter: str | None) -> str:
+    if str(task).upper() != "2AFC_DRUG":
+        return "all"
+    value = str(condition_filter or "all").strip().lower()
+    return value if value in {"all", "saline", "drug"} else "all"
+
+
+def _filter_condition_df(df: pl.DataFrame, task: str, condition_filter: str | None) -> pl.DataFrame:
+    selected = _normalize_condition_filter(task, condition_filter)
+    if selected == "all" or df.is_empty():
+        return df
+    if "Drug" not in df.columns:
+        raise ValueError("2AFC_DRUG requires a 'Drug' column for condition filtering.")
+    target = 1 if selected == "drug" else 0
+    return (
+        df.filter(pl.col("Drug") == target)
     )
 
 
-def _load_subject_feature_df(subject: str, task: str, tau: float) -> tuple[Any, pl.DataFrame]:
+def _load_subject_feature_df(subject: str, task: str, tau: float, condition_filter: str = "all") -> tuple[Any, pl.DataFrame]:
     adapter = get_adapter(task)
     df = pl.read_parquet(get_data_dir() / adapter.data_file)
     df = adapter.subject_filter(df)
+    df = _filter_condition_df(df, task, condition_filter)
     df_sub = df.filter(pl.col("subject") == subject).sort(adapter.sort_col)
     feature_df = adapter.build_feature_df(df_sub, tau=tau)
     return adapter, feature_df
@@ -107,9 +132,10 @@ def fit_subject(
     task: str = "MCDR",
     verbose: bool = True,
     progress_callback: ProgressCallback | None = None,
+    condition_filter: str = "all",
 ) -> dict:
     """Fit a GLMHMM to a single subject's data, returning the best-fitting params and other info."""
-    adapter, feature_df = _load_subject_feature_df(subject, task, tau)
+    adapter, feature_df = _load_subject_feature_df(subject, task, tau, condition_filter=condition_filter)
     y, X, session_ids, names = _prepare_arrays(adapter, feature_df, emission_cols, adapter.session_col)
     num_classes = adapter.num_classes
     frozen = normalize_frozen_emissions(frozen_emissions)
@@ -176,8 +202,9 @@ def fit_subject_cv(
     task: str = "2AFC",
     verbose: bool = True,
     progress_callback: ProgressCallback | None = None,
+    condition_filter: str = "all",
 ) -> dict:
-    adapter, feature_df = _load_subject_feature_df(subject, task, tau)
+    adapter, feature_df = _load_subject_feature_df(subject, task, tau, condition_filter=condition_filter)
     labels = adapter.cv_balance_labels(feature_df)
     if labels is None:
         raise ValueError(f"Task {task!r} does not define CV balance labels.")
@@ -495,11 +522,13 @@ def main(
     cv_repeats: int = 0,
     verbose: bool = True,
     progress_callback: ProgressCallback | None = None,
+    condition_filter: str = "all",
 ):
     adapter = get_adapter(task)
     cv_mode = normalize_cv_mode(cv_mode)
     cv_repeats = int(cv_repeats) if cv_mode != "none" else 0
     frozen_spec = serialize_frozen_emissions(frozen_emissions)
+    condition_filter = _normalize_condition_filter(task, condition_filter)
     if out_dir is None:
         model_id = generate_model_id(
             task=task,
@@ -509,6 +538,7 @@ def main(
             frozen_emissions=frozen_spec,
             cv_mode=cv_mode,
             cv_repeats=cv_repeats,
+            condition_filter=condition_filter,
         )
         out_dir = get_results_dir() / "fits" / task / "glmhmm" / model_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -525,6 +555,7 @@ def main(
                 "model_id": out_dir.name,
                 "cv_mode": cv_mode,
                 "cv_repeats": int(cv_repeats),
+                "condition_filter": condition_filter,
             },
             _f,
             indent=4,
@@ -532,6 +563,7 @@ def main(
     if subjects is None:
         df = pl.read_parquet(get_data_dir() / adapter.data_file)
         df = adapter.subject_filter(df)
+        df = _filter_condition_df(df, task, condition_filter)
         subjects = df["subject"].unique().sort().to_list()
 
     for subj_idx, subj in enumerate(subjects, start=1):
@@ -566,6 +598,7 @@ def main(
                     task=task,
                     verbose=verbose,
                     progress_callback=_progress if progress_callback is not None else None,
+                    condition_filter=condition_filter,
                 )
                 save_cv_results(result, out_dir)
             else:
@@ -581,6 +614,7 @@ def main(
                     task=task,
                     verbose=verbose,
                     progress_callback=_progress if progress_callback is not None else None,
+                    condition_filter=condition_filter,
                 )
                 save_results(result, out_dir)
             if verbose:

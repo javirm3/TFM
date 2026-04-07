@@ -6,6 +6,7 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
+    import json
     import marimo as mo
 
     import matplotlib.pyplot as plt
@@ -30,6 +31,7 @@ def _():
         get_adapter,
         get_state_palette,
         get_task_options,
+        json,
         mo,
         np,
         paths,
@@ -55,12 +57,23 @@ def _(get_task_options, mo):
 
 
 @app.cell
-def _(paths, pl):
+def _(json, paths, pl):
     def model_aliases(task: str) -> list[str]:
         fit_root = paths.RESULTS / "fits" / task / "glmhmm"
         if not fit_root.exists():
             return []
         return sorted([child.name for child in fit_root.iterdir() if child.is_dir()])
+
+    def load_model_config(task: str, alias: str | None):
+        if not alias:
+            return {}
+        cfg_path = paths.RESULTS / "fits" / task / "glmhmm" / alias / "config.json"
+        if not cfg_path.exists():
+            return {}
+        try:
+            return json.loads(cfg_path.read_text())
+        except Exception:
+            return {}
 
     def load_metrics_dir(task: str, alias: str | None):
         if not alias:
@@ -104,7 +117,7 @@ def _(paths, pl):
             return []
         return sorted({int(v) for v in df["K"].drop_nulls().to_list()})
 
-    return load_metrics_dir, model_aliases, model_k_options
+    return load_metrics_dir, load_model_config, model_aliases, model_k_options
 
 
 @app.cell
@@ -219,6 +232,7 @@ def _(build_views, get_adapter, np, paths):
 @app.cell
 def _(
     load_fit_bundle,
+    load_model_config,
     load_metrics_dir,
     mo,
     pl,
@@ -246,6 +260,10 @@ def _(
     pairwise_alias_b = ui_alias_b.value
     pairwise_K = int(ui_pairwise_K.value)
     requested_subjects = list(ui_subjects.value)
+    pairwise_cfg_a = load_model_config(ui_task.value, pairwise_alias_a)
+    pairwise_cfg_b = load_model_config(ui_task.value, pairwise_alias_b)
+    pairwise_condition_a = str(pairwise_cfg_a.get("condition_filter", "all"))
+    pairwise_condition_b = str(pairwise_cfg_b.get("condition_filter", "all"))
 
     pairwise_adapter_a, pairwise_views_a = load_fit_bundle(
         ui_task.value,
@@ -301,6 +319,8 @@ def _(
         pairwise_metrics_a,
         pairwise_metrics_b,
         pairwise_notes_md,
+        pairwise_condition_a,
+        pairwise_condition_b,
         pairwise_views_a,
         pairwise_views_b,
     )
@@ -385,7 +405,28 @@ def _():
 
 @app.cell
 def _(pl):
-    def subject_behavior_df(df_all, *, subject, sort_col, session_col):
+    def subject_behavior_df(
+        df_all,
+        *,
+        subject,
+        sort_col,
+        session_col,
+        task_name="2AFC",
+        condition_filter="all",
+    ):
+        if str(task_name).upper() == "2AFC_DRUG":
+            selected = str(condition_filter or "all").strip().lower()
+            if selected in {"saline", "drug"}:
+                if "Drug" not in df_all.columns:
+                    raise ValueError("2AFC_DRUG requires a 'Drug' column for condition filtering.")
+                target = 1 if selected == "drug" else 0
+                df_all = (
+                    df_all.with_columns(
+                        pl.col("Drug").fill_null(0).cast(pl.Int64, strict=False).alias("__drug_filter")
+                    )
+                    .filter(pl.col("__drug_filter") == target)
+                    .drop("__drug_filter")
+                )
         df_sub = df_all.filter(pl.col("subject") == subject).sort(sort_col)
         if session_col in df_sub.columns:
             df_sub = df_sub.filter(
@@ -402,13 +443,15 @@ def _(
     df_all,
     pairwise_adapter_a,
     pairwise_adapter_b,
+    pairwise_condition_a,
+    pairwise_condition_b,
     pairwise_common_subjects,
     pairwise_views_a,
     pairwise_views_b,
     pl,
     subject_behavior_df,
 ):
-    def _build_pairwise_trial_df(adapter, views):
+    def _build_pairwise_trial_df(adapter, views, condition_filter):
         frames = []
         for _subject in pairwise_common_subjects:
             if _subject not in views:
@@ -418,6 +461,8 @@ def _(
                 subject=_subject,
                 sort_col=adapter.sort_col,
                 session_col=adapter.session_col,
+                task_name=adapter.task_key,
+                condition_filter=condition_filter,
             )
             if df_sub.height != views[_subject].T:
                 continue
@@ -431,8 +476,8 @@ def _(
             )
         return pl.concat(frames, how="diagonal") if frames else pl.DataFrame()
 
-    pairwise_trial_df_a = _build_pairwise_trial_df(pairwise_adapter_a, pairwise_views_a)
-    pairwise_trial_df_b = _build_pairwise_trial_df(pairwise_adapter_b, pairwise_views_b)
+    pairwise_trial_df_a = _build_pairwise_trial_df(pairwise_adapter_a, pairwise_views_a, pairwise_condition_a)
+    pairwise_trial_df_b = _build_pairwise_trial_df(pairwise_adapter_b, pairwise_views_b, pairwise_condition_b)
     return pairwise_trial_df_a, pairwise_trial_df_b
 
 
@@ -443,13 +488,15 @@ def _(
     pairwise_adapter_a,
     pairwise_alias_a,
     pairwise_alias_b,
+    pairwise_condition_a,
+    pairwise_condition_b,
     pairwise_common_subjects,
     pairwise_views_a,
     pairwise_views_b,
     pl,
     subject_behavior_df,
 ):
-    def _session_occupancy_records(alias: str, views: dict):
+    def _session_occupancy_records(alias: str, views: dict, condition_filter: str):
         records = []
         for _subject in pairwise_common_subjects:
             if _subject not in views:
@@ -460,6 +507,8 @@ def _(
                 subject=_subject,
                 sort_col=pairwise_adapter_a.sort_col,
                 session_col=pairwise_adapter_a.session_col,
+                task_name=pairwise_adapter_a.task_key,
+                condition_filter=condition_filter,
             )
             if df_sub.height != _view.T:
                 continue
@@ -478,8 +527,8 @@ def _(
                     )
         return records
 
-    occupancy_records = _session_occupancy_records(pairwise_alias_a, pairwise_views_a)
-    occupancy_records += _session_occupancy_records(pairwise_alias_b, pairwise_views_b)
+    occupancy_records = _session_occupancy_records(pairwise_alias_a, pairwise_views_a, pairwise_condition_a)
+    occupancy_records += _session_occupancy_records(pairwise_alias_b, pairwise_views_b, pairwise_condition_b)
     pairwise_subject_occupancy = (
         pl.DataFrame(occupancy_records)
         .group_by(["subject", "model_alias", "state_label"])

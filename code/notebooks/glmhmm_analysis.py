@@ -68,10 +68,26 @@ def _():
 
 @app.cell
 def _(get_adapter, model_cfg, paths, pl):
+    def filter_condition_df(df, task_name: str, condition_filter: str):
+        if str(task_name).upper() != "2AFC_DRUG":
+            return df
+        selected = str(condition_filter or "all").strip().lower()
+        if selected not in {"saline", "drug"}:
+            return df
+        if "Drug" not in df.columns:
+            raise ValueError("2AFC_DRUG requires a 'Drug' column for condition filtering.")
+        target = 1 if selected == "drug" else 0
+        return (
+            df.with_columns(pl.col("Drug").fill_null(0).cast(pl.Int64, strict=False).alias("__drug_filter"))
+            .filter(pl.col("__drug_filter") == target)
+            .drop("__drug_filter")
+        )
+
     task_name = model_cfg.task
     adapter = get_adapter(task_name)
     df_all = pl.read_parquet(paths.DATA_PATH / adapter.data_file)
     df_all = adapter.subject_filter(df_all)
+    df_all = filter_condition_df(df_all, task_name, model_cfg.condition_filter)
     is_2afc = adapter.num_classes == 2
     plots = adapter.get_plots()
     return adapter, df_all, is_2afc, plots, task_name
@@ -121,6 +137,7 @@ def _(model_cfg, task_name):
         model_cfg.frozen_emissions,
         model_cfg.cv_mode,
         model_cfg.cv_repeats,
+        model_cfg.condition_filter,
     )
     return (current_hash,)
 
@@ -258,6 +275,7 @@ def _(
                 cv_repeats=_cv_repeats,
                 n_restarts=_n_restarts,
                 verbose=False,
+                condition_filter=model_cfg.condition_filter,
                 progress_callback=_on_progress,
             )
         mm_widget.saved_model_name = _selected_id

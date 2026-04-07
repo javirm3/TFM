@@ -49,6 +49,11 @@ glmhmmt-fit-glmhmm = "glmhmmt.cli.fit_glmhmm:main"
 glmhmmt-fit-glmhmmt = "glmhmmt.cli.fit_glmhmmt:main"
 glmhmmt-fit-tau-sweep = "glmhmmt.cli.fit_tau_sweep:main"
 
+[tool.uv]
+# Exclude the stable distribution pulled transitively by Dynamax so the
+# `tensorflow_probability` import path comes from `tfp-nightly`.
+exclude-dependencies = ["tensorflow-probability"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

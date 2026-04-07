@@ -67,7 +67,9 @@ _2AFC_EMISSION_GROUPS: list[dict] = [
     {"key": "wsls",          "label": "WSLS",            "members": {"N": "wsls"}},
 ]
 
-_BINARY_TASK_KEYS = {"2AFC", "NUO_AUDITORY"}
+_BINARY_TASK_KEYS = {"2AFC", "2AFC_DRUG", "NUO_AUDITORY"}
+_CONDITION_FILTER_TASKS = {"2AFC_DRUG"}
+_CONDITION_FILTER_OPTIONS = ["all", "saline", "drug"]
 
 _MCDR_TRANSITION_GROUPS: list[dict] = [
     {"key": "A_plus",  "label": "A+",         "members": {"N": "A_plus"}},
@@ -169,6 +171,7 @@ class model_cfg:
     tau: int = 50
     cv_mode: str = "none"
     cv_repeats: int = 5
+    condition_filter: str = "all"
     lapse: bool = False
     lapse_max: float = 0.2
     emission_cols: list[str] = field(default_factory=list)
@@ -189,6 +192,7 @@ class model_cfg:
             tau=int(value.get("tau", 50)),
             cv_mode=_normalize_cv_mode(value.get("cv_mode", "none")),
             cv_repeats=int(value.get("cv_repeats", 5)),
+            condition_filter=str(value.get("condition_filter", "all")),
             lapse=bool(value.get("lapse", False)),
             lapse_max=float(value.get("lapse_max", 0.2)),
             emission_cols=list(value.get("emission_cols", [])),
@@ -229,6 +233,9 @@ class ModelManagerWidget(anywidget.AnyWidget):
     tau       = traitlets.Int(50).tag(sync=True)
     cv_mode   = traitlets.Unicode("none").tag(sync=True)
     cv_repeats = traitlets.Int(5).tag(sync=True)
+    condition_filter_options = traitlets.List(traitlets.Unicode(), default_value=[]).tag(sync=True)
+    condition_filter = traitlets.Unicode("all").tag(sync=True)
+    show_condition_filter = traitlets.Bool(False).tag(sync=True)
 
     lapse     = traitlets.Bool(False).tag(sync=True)
     lapse_max = traitlets.Float(0.2).tag(sync=True)
@@ -269,6 +276,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
                 "tau": int(self.tau),
                 "cv_mode": self.cv_mode,
                 "cv_repeats": int(self.cv_repeats),
+                "condition_filter": self.condition_filter,
                 "lapse": bool(self.lapse),
                 "lapse_max": float(self.lapse_max),
                 "emission_cols": list(self.emission_cols),
@@ -292,6 +300,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
         self.alias_status = ""
         self.saved_model_name = ""
         self.alias = ""
+        self.condition_filter = "all"
         self._apply_default_state()
         self._update_options()
 
@@ -303,6 +312,8 @@ class ModelManagerWidget(anywidget.AnyWidget):
         self.saved_model_name = ""
         self.alias = ""
         self.frozen_emissions = {}
+        if self.model_type == "glmhmmt":
+            self.condition_filter = "all"
         self._update_options()
 
     @traitlets.observe("alias")
@@ -363,6 +374,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
             self.tau = int(cfg["tau"])
         self.cv_mode = _normalize_cv_mode(cfg.get("cv_mode", "none"))
         self.cv_repeats = int(cfg.get("cv_repeats", 5))
+        self.condition_filter = str(cfg.get("condition_filter", "all"))
         k = _get_K_from_config(cfg)
         if isinstance(k, int):
             self.K = k
@@ -389,6 +401,7 @@ class ModelManagerWidget(anywidget.AnyWidget):
             self.tau       = 50
             self.cv_mode   = "none"
             self.cv_repeats = 5
+            self.condition_filter = "all"
             self.lapse     = False
             self.lapse_max = 0.2
             is_2afc = adapter.num_classes == 2
@@ -446,6 +459,8 @@ class ModelManagerWidget(anywidget.AnyWidget):
             "cv_repeats": int(self.cv_repeats) if cv_mode != "none" else 0,
             "emission_cols": list(self.emission_cols),
         }
+        if self._supports_condition_filter():
+            cfg["condition_filter"] = self.condition_filter
         if self.model_type == "glm":
             cfg["lapse"] = bool(self.lapse)
             cfg["lapse_max"] = float(self.lapse_max)
@@ -474,6 +489,8 @@ class ModelManagerWidget(anywidget.AnyWidget):
         if _normalize_cv_mode(saved.get("cv_mode", "none")) != _normalize_cv_mode(self.cv_mode):
             return False
         if _normalize_cv_mode(self.cv_mode) != "none" and int(saved.get("cv_repeats", 0)) != int(self.cv_repeats):
+            return False
+        if self._supports_condition_filter() and str(saved.get("condition_filter", "all")) != self.condition_filter:
             return False
         if saved.get("emission_cols", []) != list(self.emission_cols):
             return False
@@ -581,6 +598,9 @@ class ModelManagerWidget(anywidget.AnyWidget):
         self.emission_groups   = _build_regressor_groups(self.emission_cols_options, e_reg)
         self.transition_groups = _build_regressor_groups(self.transition_cols_options, t_reg)
 
+    def _supports_condition_filter(self) -> bool:
+        return self.task.upper() in _CONDITION_FILTER_TASKS and self.model_type != "glmhmmt"
+
     def _build_model_info_list(
         self, fits_path: Path, default_info: dict
     ) -> tuple[list[str], list[dict]]:
@@ -634,6 +654,12 @@ class ModelManagerWidget(anywidget.AnyWidget):
         try:
             adapter = get_adapter(self.task)
             self.is_2afc = adapter.num_classes == 2
+            self.show_condition_filter = self._supports_condition_filter()
+            self.condition_filter_options = list(_CONDITION_FILTER_OPTIONS) if self.show_condition_filter else []
+            if not self.show_condition_filter:
+                self.condition_filter = "all"
+            elif self.condition_filter not in _CONDITION_FILTER_OPTIONS:
+                self.condition_filter = "all"
 
             df_all   = pl.read_parquet(_paths().DATA_PATH / adapter.data_file)
             df_all   = adapter.subject_filter(df_all)

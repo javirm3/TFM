@@ -170,6 +170,7 @@ dependencies = [
     "tensorboard==2.20.0",
     "tensorboard-data-server==0.7.2",
     # "tensorflow-probability==0.25.0",
+    "tensorflow-probability",
     "terminado==0.18.1",
     "tfp-nightly==0.26.0.dev20260205",
     "tinycss2==1.4.0",
@@ -206,6 +207,12 @@ dependencies = [
 notebooks = [
     "glmhmmt[notebooks]",
 ]
+
+[tool.uv]
+# Dynamax still declares a dependency on the stable `tensorflow-probability`
+# distribution, but this project needs `tfp-nightly` so that the imported
+# `tensorflow_probability` module is compatible with the pinned JAX version.
+exclude-dependencies = ["tensorflow-probability"]
 
 [tool.uv.workspace]
 members = ["glmhmmt/"]
