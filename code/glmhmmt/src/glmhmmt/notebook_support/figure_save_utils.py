@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+from typing import Any
 
 import anywidget
 import traitlets
 
 from glmhmmt.runtime import load_app_config
+from .anywidget_compat import wrap_anywidget
 
 
 class SaveFigureAnyWidget(anywidget.AnyWidget):
@@ -96,7 +98,7 @@ class SaveFigureAnyWidget(anywidget.AnyWidget):
 def get_plot_save_format(config_path: Path | None) -> str:
     cfg = load_app_config(config_path)
     fmt = str(cfg.get("plots", {}).get("save_format", "pdf")).lower().strip(". ")
-    if fmt not in {"pdf", "svg"}:
+    if fmt not in {"pdf", "svg", "png"}:
         fmt = "pdf"
     return fmt
 
@@ -112,9 +114,47 @@ def build_plot_path(results_dir: Path, task_name: str, model_id: str, stem: str,
     return out_dir / f"{sanitize_stem(stem)}.{fmt}"
 
 
-def save_figure(fig, *, results_dir: Path, config_path: Path | None, task_name: str, model_id: str, stem: str) -> Path:
+def _axis_for_location(fig: Any, location: tuple[int, int]):
+    row, col = (int(location[0]), int(location[1]))
+    for ax in getattr(fig, "axes", []):
+        get_subplotspec = getattr(ax, "get_subplotspec", None)
+        if get_subplotspec is None:
+            continue
+        spec = get_subplotspec()
+        if spec is None:
+            continue
+        if row in range(spec.rowspan.start, spec.rowspan.stop) and col in range(spec.colspan.start, spec.colspan.stop):
+            return ax
+    raise ValueError(f"No subplot found at location ({row}, {col}).")
+
+
+def _save_axis(fig: Any, ax: Any, out_path: Path, fmt: str) -> Path:
+    if hasattr(fig, "canvas") and fig.canvas is not None:
+        fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    bbox = ax.get_tightbbox(renderer).transformed(fig.dpi_scale_trans.inverted())
+    save_kwargs = {"bbox_inches": bbox}
+    if fmt != "svg":
+        save_kwargs["dpi"] = 300
+    fig.savefig(out_path, **save_kwargs)
+    return out_path
+
+
+def save_figure(
+    fig,
+    *,
+    results_dir: Path,
+    config_path: Path | None,
+    task_name: str,
+    model_id: str,
+    stem: str,
+    location: tuple[int, int] | None = None,
+) -> Path:
     fmt = get_plot_save_format(config_path)
     out_path = build_plot_path(results_dir, task_name, model_id, stem, fmt)
+    if location is not None:
+        ax = _axis_for_location(fig, location)
+        return _save_axis(fig, ax, out_path, fmt)
     if hasattr(fig, "canvas") and fig.canvas is not None:
         fig.canvas.draw()
     save_kwargs = {"bbox_inches": "tight"}
@@ -141,7 +181,7 @@ class PlotSaver:
         self._save_all._save_observer = self._handle_save_all_click
         self._save_all_ui = None
 
-    def _save_one(self, fig, *, stem: str) -> Path:
+    def _save_one(self, fig, *, stem: str, location: tuple[int, int] | None = None) -> Path:
         return save_figure(
             fig,
             results_dir=self.results_dir,
@@ -149,13 +189,15 @@ class PlotSaver:
             task_name=self.task_name,
             model_id=self.model_id,
             stem=stem,
+            location=location,
         )
 
-    def _register(self, fig, *, name: str, stem: str) -> None:
+    def _register(self, fig, *, name: str, stem: str, location: tuple[int, int] | None = None) -> None:
         self._registry[stem] = {
             "fig": fig,
             "name": name,
             "stem": stem,
+            "location": location,
         }
         self._save_all.disabled = not bool(self._registry)
 
@@ -171,7 +213,11 @@ class PlotSaver:
         errors: list[tuple[str, Exception]] = []
         for item in list(self._registry.values()):
             try:
-                out_path = self._save_one(item["fig"], stem=str(item["stem"]))
+                out_path = self._save_one(
+                    item["fig"],
+                    stem=str(item["stem"]),
+                    location=item["location"],
+                )
                 saved_paths.append(out_path)
             except Exception as exc:
                 errors.append((str(item["name"]), exc))
@@ -207,20 +253,33 @@ class PlotSaver:
     def save_all_widget(self, label: str = "Save all model plots"):
         self._save_all.label = label
         if self._save_all_ui is None:
-            self._save_all_ui = self.mo.ui.anywidget(self._save_all)
+            self._save_all_ui = wrap_anywidget(self._save_all)
         return self._save_all_ui
 
-    def __call__(self, fig, name: str, *, stem: str | None = None, label: str | None = None):
-        _stem = stem or sanitize_stem(name.lower())
+    def __call__(
+        self,
+        fig,
+        name: str,
+        *,
+        stem: str | None = None,
+        label: str | None = None,
+        location: tuple[int, int] | None = None,
+    ):
+        if location is not None:
+            row, col = (int(location[0]), int(location[1]))
+            _default_stem = f"{sanitize_stem(name.lower())}_r{row}_c{col}"
+        else:
+            _default_stem = sanitize_stem(name.lower())
+        _stem = stem or _default_stem
         button_label = label or f"Save .{self.fmt}"
-        self._register(fig, name=name, stem=_stem)
+        self._register(fig, name=name, stem=_stem, location=location)
         widget = SaveFigureAnyWidget(label=button_label)
 
         def _handle_click(change):
             if int(change["new"]) <= int(change["old"]):
                 return
             try:
-                out_path = self._save_one(fig, stem=_stem)
+                out_path = self._save_one(fig, stem=_stem, location=location)
                 self.mo.status.toast(
                     "Saved",
                     f"<span style='color:#6b7280'>{out_path.name}</span>",
@@ -234,7 +293,7 @@ class PlotSaver:
 
         widget.observe(_handle_click, names="clicks")
         widget._save_observer = _handle_click
-        return self.mo.ui.anywidget(widget)
+        return wrap_anywidget(widget)
 
 
 def make_plot_saver(mo, *, results_dir: Path, config_path: Path | None, task_name: str, model_id: str):
@@ -257,6 +316,7 @@ def save_button(
     model_id: str,
     stem: str,
     label: str = "Save",
+    location: tuple[int, int] | None = None,
 ):
     fmt = get_plot_save_format(config_path)
     return make_plot_saver(
@@ -270,4 +330,5 @@ def save_button(
         name=label,
         stem=stem,
         label=f"{label} .{fmt}",
+        location=location,
     )

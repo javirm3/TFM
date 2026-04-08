@@ -15,6 +15,7 @@ def _():
         build_editor_payload,
         make_plot_saver,
         model_cfg as ModelCfg,
+        wrap_anywidget,
     )
     from glmhmmt.notebook_support.analysis_common import (
         build_trial_and_weights_df,
@@ -62,6 +63,7 @@ def _():
         resolve_selected_model_id,
         select_subject_behavior_df,
         sns,
+        wrap_anywidget,
     )
 
 
@@ -77,14 +79,14 @@ def _(get_adapter, model_cfg, paths, pl):
 
 
 @app.cell
-def _(ModelManagerWidget, mo):
+def _(ModelManagerWidget, mo, wrap_anywidget):
     mm_widget = ModelManagerWidget(
         model_type="glmhmmt",
         task="MCDR",
         K=2,
         tau=50,
     )
-    ui_model_manager = mo.ui.anywidget(mm_widget)
+    ui_model_manager = wrap_anywidget(mm_widget)
     return mm_widget, ui_model_manager
 
 
@@ -428,16 +430,19 @@ def _(K, mo, paths, plots, save_plot, selected, views):
         save_path=_save_path,
     )
 
-    _subject_figs, _summary_figs = plots.plot_emission_weights(views=_views_sel, K=K)
+    _fig_emission_line = plots.plot_emission_weights_summary_lineplot(views=_views_sel, K=K)
+    _fig_emission_box = plots.plot_emission_weights_summary_boxplot(views=_views_sel, K=K)
 
     mo.vstack([
-               # _subject_figs,
-               _summary_figs,
-               mo.hstack([save_plot(_summary_figs, f"Emission Weights lineplot",
-                                    stem=f"emissions_lineplot",), 
-                          save_plot(_summary_figs, f"Emission Weights boxplot",
-                                    stem=f"emissions_boxplot",),
-             ], gap = "15"), ], align="center")
+        mo.hstack([_fig_emission_line, _fig_emission_box], gap="15"),
+        mo.hstack(
+            [
+                save_plot(_fig_emission_line, "Emission Weights lineplot", stem="emissions_lineplot"),
+                save_plot(_fig_emission_box, "Emission Weights boxplot", stem="emissions_boxplot"),
+            ],
+            gap="15",
+        ),
+    ], align="center")
     return
 
 
@@ -721,6 +726,7 @@ def _(
     ui_editor_side,
     ui_editor_state,
     ui_editor_subject,
+    wrap_anywidget,
 ):
     _subj = ui_editor_subject.value
     _view = editor_views[_subj]
@@ -747,7 +753,7 @@ def _(
         display_reference_class_idx=_display_reference_class_idx,
     )
 
-    coef_editor = mo.ui.anywidget(
+    coef_editor = wrap_anywidget(
         CoefficientEditorWidget(
             title="Coefficient editor",
             subtitle=_payload["subtitle"],
@@ -990,10 +996,10 @@ def _(
 
 
 @app.cell
-def _(mo):
+def _(mo, wrap_anywidget):
     from wigglystuff import TangleSlider
 
-    THRESH_ui = mo.ui.anywidget(
+    THRESH_ui = wrap_anywidget(
         TangleSlider(
             amount=0.9,
             min_value=0.0,
@@ -1072,11 +1078,18 @@ def _(K, mo, plots, trial_df, ui_subjects_traj, views):
 
 
 @app.cell
-def _(K, THRESH_ui, mo, plots, trial_df, ui_subjects_traj, views):
+def _(K, THRESH_ui, mo, plots, save_plot, trial_df, ui_subjects_traj, views):
     # ── d. Fractional occupancy & state-change histogram ─────────────────────
     _selected_occ = [s for s in ui_subjects_traj.value if s in views]
     mo.stop(not _selected_occ, mo.md("Select subjects above."))
     _fig_occ = plots.plot_state_occupancy(
+        views={s: views[s] for s in _selected_occ},
+        trial_df=trial_df,
+        session_col="session",
+        sort_col="trial_idx",
+        switch_posterior_threshold=THRESH_ui.amount,
+    )
+    _fig_occ_overall = plots.plot_state_occupancy_overall_boxplot(
         views={s: views[s] for s in _selected_occ},
         trial_df=trial_df,
         session_col="session",
@@ -1096,6 +1109,12 @@ def _(K, THRESH_ui, mo, plots, trial_df, ui_subjects_traj, views):
             f"changes between confident MAP assignments with posterior ≥ {THRESH_ui.amount:.2f}."
         ),
         _fig_occ,
+        _fig_occ_overall,
+        save_plot(
+            _fig_occ_overall,
+            "fractional occupancy overview",
+            stem="state_occupancy_overall",
+        ),
     ], align="center")
     return
 

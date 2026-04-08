@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.21.1"
+__generated_with = "0.22.5"
 app = marimo.App(width="full")
 
 
@@ -14,6 +14,7 @@ def _():
         apply_state_tweak_to_view,
         build_editor_payload,
         make_plot_saver,
+
         model_cfg as ModelCfg,
     )
     from glmhmmt.notebook_support.analysis_common import (
@@ -386,18 +387,19 @@ def _(K, mo, paths, plots, save_plot, selected, views):
         save_path=_save_path,
     )
 
-    _subject_figs, _summary_figs = plots.plot_emission_weights(views=_views_sel, K=K)
+    _fig_emission_line = plots.plot_emission_weights_summary_lineplot(views=_views_sel, K=K)
+    _fig_emission_box = plots.plot_emission_weights_summary_boxplot(views=_views_sel, K=K)
 
     mo.vstack([
-               _subject_figs,
-                save_plot(_subject_figs, f"Emission Weights",
-                                    stem=f"emissions_summary",),
-               _summary_figs,
-               mo.hstack([save_plot(_summary_figs, f"Emission Weights lineplot",
-                                    stem=f"emissions_lineplot",), 
-                          save_plot(_summary_figs, f"Emission Weights boxplot",
-                                    stem=f"emissions_boxplot",),
-             ], gap = "15"), ], align="center")
+        mo.hstack([_fig_emission_line, _fig_emission_box], gap="15"),
+        mo.hstack(
+            [
+                save_plot(_fig_emission_line, "Emission Weights lineplot", stem="emissions_lineplot"),
+                save_plot(_fig_emission_box, "Emission Weights boxplot", stem="emissions_boxplot"),
+            ],
+            gap="15",
+        ),
+    ], align="center")
     return
 
 
@@ -1161,12 +1163,20 @@ def _(THRESH_ui, mo, plots, save_plot, selected, trial_df, views):
         sort_col="trial_idx",
         switch_posterior_threshold=THRESH_ui.amount,
     )
+    _fig_occ_overall = plots.plot_state_occupancy_overall_boxplot(
+        views={s: views[s] for s in selected},
+        trial_df=trial_df,
+        session_col="session",
+        sort_col="trial_idx",
+        switch_posterior_threshold=THRESH_ui.amount,
+    )
     mo.vstack([
         _fig_occ,
+        _fig_occ_overall,
         save_plot(
-            _fig_occ,
-            "fractional occupancy and state changes per session",
-            stem="state_occupancy",
+            _fig_occ_overall,
+            "fractional occupancy overview",
+            stem="state_occupancy_overall",
         ),
         mo.md(
             f"changes between confident MAP assignments with posterior ≥ {THRESH_ui}."
@@ -1194,7 +1204,7 @@ def _(THRESH_ui, mo, plots, save_plot, trial_df, ui_subjects_traj, views):
         session_col="session",
         sort_col="trial_idx",
         switch_posterior_threshold=THRESH_ui.amount,
-        window=50
+        window=25
     )
     _fig_change_by_subject = plots.plot_change_triggered_posteriors_by_subject(
         views=_views_sel,
@@ -1202,7 +1212,7 @@ def _(THRESH_ui, mo, plots, save_plot, trial_df, ui_subjects_traj, views):
         session_col="session",
         sort_col="trial_idx",
         switch_posterior_threshold=THRESH_ui.amount,
-        window=50
+        window=25
     )
     mo.vstack([
         mo.md(
@@ -1234,12 +1244,6 @@ def _(mo, selected):
         label="Subject",
     )
     return (ui_session_subj,)
-
-
-@app.cell
-def _(ui_session_subj):
-    ui_session_subj.value
-    return
 
 
 @app.cell
@@ -1303,7 +1307,7 @@ def _(
         save_plot(
             _fig,
             "session statistics",
-            stem=f"session_deepdive_{_subj}_{_sess}",
+            stem=f"session_stats_{_subj}_{_sess}",
         ),
     ], align="center")
     return
@@ -1444,7 +1448,7 @@ def _(mo, task_name):
 
     # ── SSM GLM-HMM safety check (2AFC only) ──────────────────────────────────
     mo.stop(
-        task_name != "2AFC",
+        task_name != "2AFC_DRUG",
         mo.md("ℹ️ **SSM safety check is only available for the 2AFC task.** Switch task to 2AFC above."),
     )
     ssm_run_btn = mo.ui.run_button(label="▶ Run SSM safety check")

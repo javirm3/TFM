@@ -137,12 +137,17 @@ def _(get_adapter, mo, paths, pl, ui_task):
     default_scoring = getattr(adapter, "scoring_key", scoring_options[0]) if scoring_options else None
     if scoring_options and default_scoring not in scoring_options:
         default_scoring = scoring_options[0]
-    ui_scoring_key = mo.ui.dropdown(
+    ui_scoring_key_a = mo.ui.dropdown(
         options=scoring_options,
         value=default_scoring,
-        label="State scoring regressor",
+        label="Model A state scoring regressor",
     )
-    return df_all, ui_scoring_key, ui_subjects
+    ui_scoring_key_b = mo.ui.dropdown(
+        options=scoring_options,
+        value=default_scoring,
+        label="Model B state scoring regressor",
+    )
+    return df_all, ui_scoring_key_a, ui_scoring_key_b, ui_subjects
 
 
 @app.cell
@@ -183,7 +188,8 @@ def _(
     ui_alias_a,
     ui_alias_b,
     ui_pairwise_K,
-    ui_scoring_key,
+    ui_scoring_key_a,
+    ui_scoring_key_b,
     ui_subjects,
     ui_task,
 ):
@@ -195,7 +201,7 @@ def _(
             ),
             mo.hstack([ui_task, ui_pairwise_K]),
             mo.hstack([ui_alias_a, ui_alias_b]),
-            mo.hstack([ui_scoring_key]),
+            mo.hstack([ui_scoring_key_a, ui_scoring_key_b]),
             mo.hstack([ui_subjects]),
         ]
     )
@@ -239,7 +245,8 @@ def _(
     ui_alias_a,
     ui_alias_b,
     ui_pairwise_K,
-    ui_scoring_key,
+    ui_scoring_key_a,
+    ui_scoring_key_b,
     ui_subjects,
     ui_task,
 ):
@@ -270,14 +277,14 @@ def _(
         pairwise_alias_a,
         pairwise_K,
         requested_subjects,
-        ui_scoring_key.value,
+        ui_scoring_key_a.value,
     )
     pairwise_adapter_b, pairwise_views_b = load_fit_bundle(
         ui_task.value,
         pairwise_alias_b,
         pairwise_K,
         requested_subjects,
-        ui_scoring_key.value,
+        ui_scoring_key_b.value,
     )
 
     pairwise_common_subjects = [
@@ -305,7 +312,8 @@ def _(
     pairwise_notes_md = (
         f"- Comparing `{pairwise_alias_a}` vs `{pairwise_alias_b}` at `K={pairwise_K}`.\n"
         f"- Common cached subjects: **{len(pairwise_common_subjects)} / {len(requested_subjects)}**.\n"
-        f"- State labels are aligned with scoring key `{ui_scoring_key.value}`.\n"
+        f"- `{pairwise_alias_a}` scoring key: `{ui_scoring_key_a.value}`.\n"
+        f"- `{pairwise_alias_b}` scoring key: `{ui_scoring_key_b.value}`.\n"
         "- Occupancy below uses posterior fractional occupancy averaged within session, then across sessions within subject.\n"
         "- Accuracy below uses MAP state labels from `build_trial_df`, averaged within subject."
     )
@@ -884,7 +892,51 @@ def _(Line2D, np, plt, sns, ttest_rel):
         fig.tight_layout()
         return fig
 
-    return plot_paired_category_boxplot, plot_paired_metric_boxplot
+    def plot_metric_delta_boxplot(
+        *,
+        df_pd,
+        alias_a: str,
+        alias_b: str,
+        delta_col: str,
+        title: str,
+        ylabel: str,
+    ):
+        fig, ax = plt.subplots(figsize=(3.6, 4), constrained_layout=False)
+        if df_pd.empty or delta_col not in df_pd.columns:
+            ax.text(0.5, 0.5, "No data", ha="center", va="center")
+            ax.set_title(title)
+            return fig
+
+        values = df_pd[delta_col].to_numpy(dtype=float)
+        rng = np.random.default_rng(42)
+        jitter = rng.uniform(-0.05, 0.05, size=len(values))
+        box = ax.boxplot(
+            values,
+            positions=[0],
+            widths=0.34,
+            patch_artist=True,
+            showfliers=False,
+            zorder=1,
+        )
+        _style_boxplot(box, median_color="#2F7D32")
+        ax.scatter(
+            jitter,
+            values,
+            color="#2F7D32",
+            alpha=0.55,
+            s=28,
+            zorder=3,
+        )
+        ax.axhline(0, color="#7A7A7A", linestyle="--", linewidth=1.0, alpha=0.85)
+        ax.set_xticks([0])
+        ax.set_xticklabels([f"{alias_b} - {alias_a}"], rotation=15, ha="right")
+        ax.set_title(title)
+        ax.set_ylabel(ylabel)
+        sns.despine(ax=ax)
+        fig.tight_layout()
+        return fig
+
+    return plot_paired_category_boxplot, plot_paired_metric_boxplot, plot_metric_delta_boxplot
 
 
 @app.cell
@@ -941,6 +993,7 @@ def _(
     pairwise_alias_a,
     pairwise_alias_b,
     pairwise_metric_deltas,
+    plot_metric_delta_boxplot,
     plot_paired_metric_boxplot,
 ):
     ll_fig = plot_paired_metric_boxplot(
@@ -952,7 +1005,27 @@ def _(
         title="Log-likelihood per trial",
         ylabel="LL / trial",
     )
-    mo.vstack([mo.md("### LL comparison"), ll_fig])
+    ll_delta_fig = plot_metric_delta_boxplot(
+        df_pd=pairwise_metric_deltas.to_pandas(),
+        alias_a=pairwise_alias_a,
+        alias_b=pairwise_alias_b,
+        delta_col="delta_ll_per_trial",
+        title="Per-subject LL increase",
+        ylabel="ΔLL / trial",
+    )
+    mo.vstack(
+        [
+            mo.md("### LL comparison"),
+            mo.md("Positive `ΔLL` means model B improves log-likelihood relative to model A."),
+            mo.hstack(
+                [
+                    mo.vstack([mo.md("Raw paired LL"), ll_fig], align="center"),
+                    mo.vstack([mo.md("Per-subject ΔLL"), ll_delta_fig], align="center"),
+                ],
+                widths="equal",
+            ),
+        ]
+    )
     return
 
 

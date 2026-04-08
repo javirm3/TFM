@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.21.1"
+__generated_with = "0.22.5"
 app = marimo.App(width="full")
 
 
@@ -177,7 +177,7 @@ def _(
         [c for c in ["subject", "Trial", "Side", "Drug", "Choice", "Hit", "Punish", "Session", "ILD", "Filename", "Experiment", "Task", "P" ,"p", "Condition", "AW", "WarmUp", "Date"]
          if c in drug_df.columns]
     )
-    # drug_df = drug_df.with_columns(pl.col("ILD").replace({70: 20, -70 : -20 }))
+    drug_df = drug_df.with_columns(pl.col("ILD").replace({70: 20, -70 : -20 }))
     output_path_drug = paths.DATA_PATH / "alexis_drug_combined.parquet"
     output_path_drug.parent.mkdir(parents=True, exist_ok=True)
     drug_df = drug_df.filter(pl.col("subject").is_in(subjects_to_keep))

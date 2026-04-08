@@ -45,7 +45,6 @@ _ALL_2AFC_TRANSITION_COLS: list[str] = [
     "prev_abs_stim",
     "prev_reward",
     "cumulative_reward",
-    "Drug",
 ]
 _AVAILABLE_2AFC_TRANSITION_COLS: list[str] = list(_ALL_2AFC_TRANSITION_COLS)
 _STIM_PARAM_COL = "stim_param"

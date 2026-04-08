@@ -25,6 +25,7 @@ from glmhmmt.model_plots import (
     plot_state_dwell_times,
     plot_state_posterior_count_kde,
     plot_state_occupancy,
+    plot_state_occupancy_overall_boxplot,
     plot_transition_matrix,
     plot_transition_matrix_by_subject,
     plot_tau_sweep,
@@ -271,6 +272,81 @@ def plot_emission_weights_summary(
     fig.tight_layout()
     sns.despine(fig=fig)
     return fig
+
+
+def plot_emission_weights_summary_lineplot(
+    views: Optional[dict] = None,
+    K: Optional[int] = None,
+    save_path=None,
+    *,
+    arrays_store: Optional[dict] = None,
+    state_labels: Optional[dict] = None,
+    names: Optional[dict] = None,
+    subjects: Optional[Sequence[str]] = None,
+) -> plt.Figure:
+    _ = save_path, K
+    arrays_store, state_labels, names, subjects = _resolve_emission_plot_inputs(
+        views=views,
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+    if not subjects:
+        return _empty_plot()
+
+    weights_df, _, feat_names, state_order = _binary_emission_frames(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+    fig, ax = plt.subplots(figsize=(max(7, len(feat_names) * 0.75), 4))
+    sns.lineplot(
+        data=weights_df,
+        x="feature",
+        y="weight",
+        hue="state",
+        hue_order=state_order,
+        palette={state: _state_color(state, idx) for idx, state in enumerate(state_order)},
+        markers=True,
+        marker="o",
+        markersize=8,
+        markeredgewidth=0,
+        errorbar="se",
+        ax=ax,
+    )
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+    ax.set_ylabel("Correct logit weight")
+    ax.set_xlabel("")
+    ax.set_title("Emission weights line summary")
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles, labels, frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    fig.tight_layout()
+    sns.despine(fig=fig)
+    return fig
+
+
+def plot_emission_weights_summary_boxplot(
+    views: Optional[dict] = None,
+    K: Optional[int] = None,
+    save_path=None,
+    *,
+    arrays_store: Optional[dict] = None,
+    state_labels: Optional[dict] = None,
+    names: Optional[dict] = None,
+    subjects: Optional[Sequence[str]] = None,
+) -> plt.Figure:
+    return plot_emission_weights_summary(
+        views=views,
+        K=K,
+        save_path=save_path,
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
 
 
 def plot_emission_weights(

@@ -25,6 +25,8 @@ from glmhmmt.model_plots import (
     _state_color,
     plot_emission_weights as _plot_emission_weights_generic,
     plot_emission_weights_by_subject as _plot_emission_weights_by_subject_generic,
+    plot_emission_weights_summary_boxplot as _plot_emission_weights_summary_boxplot_generic,
+    plot_emission_weights_summary_lineplot as _plot_emission_weights_summary_lineplot_generic,
     plot_posterior_probs,
     plot_change_triggered_posteriors_by_subject,
     plot_change_triggered_posteriors_summary,
@@ -36,6 +38,7 @@ from glmhmmt.model_plots import (
     plot_state_dwell_times,
     plot_state_posterior_count_kde,
     plot_state_occupancy,
+    plot_state_occupancy_overall_boxplot,
     plot_transition_matrix,
     plot_transition_matrix_by_subject,
     plot_tau_sweep,
@@ -189,6 +192,76 @@ def plot_emission_weights_summary(
     )
     plt.close(fig_detail)
     return fig_summary
+
+
+def plot_emission_weights_summary_lineplot(
+    views: Optional[dict] = None,
+    K: Optional[int] = None,
+    save_path=None,
+    *,
+    arrays_store: Optional[dict] = None,
+    state_labels: Optional[dict] = None,
+    names: Optional[dict] = None,
+    subjects: Optional[Sequence[str]] = None,
+) -> plt.Figure:
+    _ = save_path
+    arrays_store, state_labels, names, subjects = _resolve_emission_plot_inputs(
+        views=views,
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+    if not subjects:
+        return _empty_plot()
+
+    K = int(K) if K is not None else _infer_emission_K(
+        views=views,
+        arrays_store=arrays_store,
+        subjects=subjects,
+    )
+    return _plot_emission_weights_summary_lineplot_generic(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        K=K,
+        subjects=subjects,
+    )
+
+
+def plot_emission_weights_summary_boxplot(
+    views: Optional[dict] = None,
+    K: Optional[int] = None,
+    save_path=None,
+    *,
+    arrays_store: Optional[dict] = None,
+    state_labels: Optional[dict] = None,
+    names: Optional[dict] = None,
+    subjects: Optional[Sequence[str]] = None,
+) -> plt.Figure:
+    _ = save_path
+    arrays_store, state_labels, names, subjects = _resolve_emission_plot_inputs(
+        views=views,
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+    if not subjects:
+        return _empty_plot()
+
+    K = int(K) if K is not None else _infer_emission_K(
+        views=views,
+        arrays_store=arrays_store,
+        subjects=subjects,
+    )
+    return _plot_emission_weights_summary_boxplot_generic(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        K=K,
+        subjects=subjects,
+    )
 
 
 def plot_emission_weights(
@@ -532,7 +605,6 @@ def plot_categorical_performance_by_state(
         legend_labels.append(f"{label} model")
 
     ax3.legend(legend_handles, legend_labels, fontsize=8, frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
-    fig.suptitle(model_name, y=1.02)
     sns.despine(fig=fig)
     fig.tight_layout()
     return fig, axes

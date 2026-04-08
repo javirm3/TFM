@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.21.1"
+__generated_with = "0.22.5"
 app = marimo.App(width="full")
 
 
@@ -603,10 +603,12 @@ def _(
 def _(plt, results_plot, sns, ui_bic_baseline):
     def _cov_group(label):
         _label = str(label).lower()
-        if "3 cov" in _label:
+        if "3 cov" in _label or  "3cov" in _label:
             return "3 covs"
         if "2 cov" in _label:
             return "2 covs"
+        if "base_lapses" in _label:
+            return "GLM"
         return None
 
     _raw = results_plot.to_pandas()
@@ -618,7 +620,7 @@ def _(plt, results_plot, sns, ui_bic_baseline):
         .sort_values(["cov_group", "K"])
     )
 
-    _cov_order = [grp for grp in ["2 covs", "3 covs"] if grp in _cov_mean["cov_group"].unique()]
+    _cov_order = [grp for grp in ["GLM", "2 covs", "3 covs"] if grp in _cov_mean["cov_group"].unique()]
     _palette = {
         _group: _color
         for _group, _color in zip(_cov_order, sns.color_palette("tab10", n_colors=max(1, len(_cov_order))))
@@ -1051,13 +1053,19 @@ def _(adapter, mo):
     _default_key = getattr(adapter, "scoring_key", _opts[0]) if _opts else None
     if _opts and _default_key not in _opts:
         _default_key = _opts[0]
-    ui_pairwise_scoring_key = mo.ui.dropdown(
+
+    ui_pairwise_scoring_key_a = mo.ui.dropdown(
         options=_opts,
         value=_default_key,
-        label="State scoring regressor",
+        label="Model A state scoring regressor",
     )
-    mo.hstack([ui_pairwise_scoring_key])
-    return (ui_pairwise_scoring_key,)
+    ui_pairwise_scoring_key_b = mo.ui.dropdown(
+        options=_opts,
+        value=_default_key,
+        label="Model B state scoring regressor",
+    )
+    mo.hstack([ui_pairwise_scoring_key_a, ui_pairwise_scoring_key_b])
+    return ui_pairwise_scoring_key_a, ui_pairwise_scoring_key_b
 
 
 @app.cell
@@ -1069,7 +1077,8 @@ def _(
     ui_pairwise_K,
     ui_pairwise_alias_a,
     ui_pairwise_alias_b,
-    ui_pairwise_scoring_key,
+    ui_pairwise_scoring_key_a,
+    ui_pairwise_scoring_key_b,
     ui_subjects,
     ui_task,
 ):
@@ -1097,7 +1106,7 @@ def _(
         pairwise_alias_a,
         pairwise_K,
         requested_subjects,
-        scoring_key=ui_pairwise_scoring_key.value,
+        scoring_key=ui_pairwise_scoring_key_a.value,
     )
     pairwise_adapter_b, pairwise_arrays_b, pairwise_names_b, pairwise_views_b = load_fit_bundle(
         ui_task.value,
@@ -1105,7 +1114,7 @@ def _(
         pairwise_alias_b,
         pairwise_K,
         requested_subjects,
-        scoring_key=ui_pairwise_scoring_key.value,
+        scoring_key=ui_pairwise_scoring_key_b.value,
     )
 
     pairwise_common_subjects = [
@@ -1176,12 +1185,15 @@ def _(
     pairwise_missing_a,
     pairwise_missing_b,
     requested_subjects,
-    ui_pairwise_scoring_key,
+    ui_pairwise_scoring_key_a,
+    ui_pairwise_scoring_key_b,
 ):
     _notes = [
         f"- Comparing `{pairwise_alias_a}` vs `{pairwise_alias_b}` at `K={pairwise_K}`.",
-        f"- Semantic state alignment uses scoring key `{ui_pairwise_scoring_key.value}`.",
         f"- Common cached subjects: **{len(pairwise_common_subjects)} / {len(requested_subjects)}**.",
+        f"- `{pairwise_alias_a}` scoring key: `{ui_pairwise_scoring_key_a.value}`.",
+        f"- `{pairwise_alias_b}` scoring key: `{ui_pairwise_scoring_key_b.value}`.",
+        "- Transition deltas are aligned by semantic state label.",
     ]
     if pairwise_missing_a:
         _notes.append(
@@ -1337,6 +1349,30 @@ def _(np, plt, sns):
             return _exp / _exp.sum(axis=-1, keepdims=True)
         return None
 
+    def _reindex_transition_matrix(
+        matrix: np.ndarray,
+        source_labels: list[str],
+        target_labels: list[str],
+    ) -> np.ndarray:
+        _source_index = {label: idx for idx, label in enumerate(source_labels)}
+        _aligned = np.full((len(target_labels), len(target_labels)), np.nan, dtype=float)
+        for _row_idx, _row_label in enumerate(target_labels):
+            _src_row = _source_index.get(_row_label)
+            if _src_row is None:
+                continue
+            for _col_idx, _col_label in enumerate(target_labels):
+                _src_col = _source_index.get(_col_label)
+                if _src_col is None:
+                    continue
+                _aligned[_row_idx, _col_idx] = matrix[_src_row, _src_col]
+        return _aligned
+
+    def _finite_max_abs(matrix: np.ndarray) -> float:
+        _finite = matrix[np.isfinite(matrix)]
+        if _finite.size == 0:
+            return 1e-12
+        return max(float(np.max(np.abs(_finite))), 1e-12)
+
     def plot_pairwise_transition_matrices(
         *,
         arrays_a: dict,
@@ -1348,8 +1384,8 @@ def _(np, plt, sns):
         alias_b: str,
     ) -> plt.Figure:
         def _mean_transition(arrays_store: dict, views: dict):
-            _mats = []
-            _labels = None
+            _subject_entries = []
+            _labels = []
             for _subject in subjects:
                 if _subject not in views:
                     continue
@@ -1357,25 +1393,42 @@ def _(np, plt, sns):
                 if _mat is None:
                     continue
                 _order = [int(k) for k in views[_subject].state_idx_order]
-                _mats.append(_mat[np.ix_(_order, _order)])
-                if _labels is None:
-                    _labels = [
-                        views[_subject].state_name_by_idx.get(int(k), f"State {k}")
-                        for k in _order
-                    ]
-            if not _mats:
+                _subject_labels = [
+                    views[_subject].state_name_by_idx.get(int(k), f"State {k}")
+                    for k in _order
+                ]
+                for _label in _subject_labels:
+                    if _label not in _labels:
+                        _labels.append(_label)
+                _subject_entries.append(
+                    (
+                        _mat[np.ix_(_order, _order)],
+                        _subject_labels,
+                    )
+                )
+            if not _subject_entries:
                 return None, []
-            return np.mean(_mats, axis=0), _labels or []
+            _aligned_mats = [
+                _reindex_transition_matrix(_mat, _subject_labels, _labels)
+                for _mat, _subject_labels in _subject_entries
+            ]
+            return np.nanmean(np.stack(_aligned_mats, axis=0), axis=0), _labels
 
         _mat_a, _labels_a = _mean_transition(arrays_a, views_a)
         _mat_b, _labels_b = _mean_transition(arrays_b, views_b)
         if _mat_a is None or _mat_b is None:
             raise ValueError("No transition matrices were available for the common subject set.")
 
-        _labels = _labels_a if _labels_a else _labels_b
-        _vmax = max(float(np.nanmax(_mat_a)), float(np.nanmax(_mat_b)), 1e-12)
+        _labels = []
+        for _label in _labels_a + _labels_b:
+            if _label not in _labels:
+                _labels.append(_label)
+        _mat_a = _reindex_transition_matrix(_mat_a, _labels_a, _labels)
+        _mat_b = _reindex_transition_matrix(_mat_b, _labels_b, _labels)
+
+        _vmax = max(_finite_max_abs(_mat_a), _finite_max_abs(_mat_b))
         _delta = _mat_b - _mat_a
-        _dmax = max(float(np.nanmax(np.abs(_delta))), 1e-12)
+        _dmax = _finite_max_abs(_delta)
 
         fig, axes = plt.subplots(1, 3, figsize=(13, 4), constrained_layout=False)
         for _ax, _mat, _title in [
@@ -1416,7 +1469,9 @@ def _(np, plt, sns):
         axes[2].set_yticklabels(_labels, rotation=0)
         axes[2].set_xlabel("To state")
         axes[2].set_ylabel("From state")
-        fig.suptitle(f"Mean transition matrices in semantic state order  (n={len(subjects)} subjects)")
+        fig.suptitle(
+            f"Mean transition matrices aligned by semantic state label  (n={len(subjects)} subjects)"
+        )
         fig.tight_layout(rect=(0, 0, 1, 0.94))
         return fig
 

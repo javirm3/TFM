@@ -28,6 +28,7 @@ def _():
         build_editor_payload,
         make_plot_saver,
         model_cfg as ModelCfg,
+        wrap_anywidget,
     )
     from glmhmmt.notebook_support.analysis_common import (
         build_trial_and_weights_df,
@@ -65,6 +66,7 @@ def _():
         resolve_selected_model_id,
         select_subject_behavior_df,
         sns,
+        wrap_anywidget,
     )
 
 
@@ -87,7 +89,7 @@ def _(get_adapter, model_cfg, paths, pl):
 
 
 @app.cell
-def _(ModelManagerWidget, mo):
+def _(ModelManagerWidget, mo, wrap_anywidget):
     mm_widget = ModelManagerWidget(
         model_type="glm",
         task="MCDR",
@@ -95,7 +97,7 @@ def _(ModelManagerWidget, mo):
         lapse=False,
         lapse_max=0.2,
     )
-    ui_model_manager = mo.ui.anywidget(mm_widget)
+    ui_model_manager = wrap_anywidget(mm_widget)
     return (ui_model_manager,)
 
 
@@ -500,6 +502,7 @@ def _(
     ui_editor_side,
     ui_editor_state,
     ui_editor_subject,
+    wrap_anywidget,
 ):
     subject = ui_editor_subject.value
     view = editor_views[subject]
@@ -527,7 +530,7 @@ def _(
         display_reference_class_idx=_display_reference_class_idx,
     )
 
-    coef_editor = mo.ui.anywidget(
+    coef_editor = wrap_anywidget(
         CoefficientEditorWidget(
             title="Coefficient editor",
             subtitle=coef_editor_payload["subtitle"],

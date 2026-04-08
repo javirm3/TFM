@@ -1,0 +1,211 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.22.5",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "6219322d2d600f3062517bb1965b79f1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "01cdf9539c55d429634dd2c5f110e7f3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "886d0be0652decfa7a15881ac9a36782",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "39cc12b6045048edf18f595773736213",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "339de1e9026b1fb9d51d964f75b8d3da",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "21cd7b454b0bd5ec7b48c484bc663ded",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "5f084bd7159699f54efb3b01f4b64aee",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "50c80d16a1ee55e4c79111ae329bc88a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"glmhmm-drug-comparison\">GLMHMM Drug Comparison</h2></span><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Compare occupancy and fit quality across <code>2AFC</code> and <code>2AFC_DRUG</code> GLM-HMM fits. The overall section uses cohort-level grouped comparisons; the drug-only section reuses matched subjects across the three drug aliases.</span></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='PKri-0' random-id='89f3f0c7-cc68-b265-ef4a-e588f641e245'><marimo-dropdown data-initial-value='[&quot;3covs_2states&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;2AFC alias&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;14a1b806&quot;,&quot;2 states 2 cov&quot;,&quot;241f9a9b&quot;,&quot;3 covs 2 states frozen stim&quot;,&quot;3 covs 2 states frozen stim at&quot;,&quot;3 covs 2 states frozen stim_param at&quot;,&quot;3 covs 2 states param&quot;,&quot;3 covs 3 states cv&quot;,&quot;3 covs 4 states cv&quot;,&quot;3 states 2 cov&quot;,&quot;3covs_2states&quot;,&quot;3covs_2states_fixed&quot;,&quot;5461d98e&quot;,&quot;9049f659&quot;,&quot;9e059fbf&quot;,&quot;b54cc662&quot;,&quot;efc17f0d&quot;,&quot;f75b8a44&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='Xref-0' random-id='8c596e88-955e-aa68-c15a-cad8fc599cb7'><marimo-dropdown data-initial-value='[&quot;2&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Shared K&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;2&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='PKri-1' random-id='aea68930-b1ae-ed09-cdcb-38480d191e96'><marimo-dropdown data-initial-value='[&quot;3covs_2states&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;2AFC_DRUG all&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;3covs_2states&quot;,&quot;3covs_2states_drug&quot;,&quot;3covs_2states_drug_fixed&quot;,&quot;3covs_2states_fixed&quot;,&quot;3covs_2states_saline&quot;,&quot;3covs_2states_saline_fixed&quot;,&quot;3f8aa511&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='PKri-2' random-id='1550166a-aab3-3c4b-6b9d-537afaf68553'><marimo-dropdown data-initial-value='[&quot;3covs_2states_saline&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;2AFC_DRUG saline&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;3covs_2states&quot;,&quot;3covs_2states_drug&quot;,&quot;3covs_2states_drug_fixed&quot;,&quot;3covs_2states_fixed&quot;,&quot;3covs_2states_saline&quot;,&quot;3covs_2states_saline_fixed&quot;,&quot;3f8aa511&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='PKri-3' random-id='60ab0606-3559-ec03-f5fe-4f8c4f9a726d'><marimo-dropdown data-initial-value='[&quot;3covs_2states_drug&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;2AFC_DRUG drug&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;3covs_2states&quot;,&quot;3covs_2states_drug&quot;,&quot;3covs_2states_drug_fixed&quot;,&quot;3covs_2states_fixed&quot;,&quot;3covs_2states_saline&quot;,&quot;3covs_2states_saline_fixed&quot;,&quot;3f8aa511&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='PKri-4' random-id='17d68d16-9e4c-44c4-14dc-d860b1e9c97c'><marimo-dropdown data-initial-value='[&quot;stim_vals (-w)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;State scoring regressor&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;stim_vals (-w)&quot;,&quot;stim_vals (|w|)&quot;,&quot;stim_param (-w)&quot;,&quot;stim_param (|w|)&quot;,&quot;at_choice (|w|)&quot;,&quot;wsls (|w|)&quot;,&quot;bias (|w|)&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "6a3738de5b22edfa2f2d0834d15d6db4",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "6a208e071978d93a7061220f4c872384",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><ul>\n<li>Shared <code>K</code>: <strong>2</strong>.</li>\n<li>Semantic state alignment uses scoring key <code>stim_vals (-w)</code>.</li>\n<li><code>2AFC</code> uses <code>3covs_2states</code> with <strong>25</strong> cached subjects.</li>\n<li><code>2AFC_DRUG all</code> uses <code>3covs_2states</code> with <strong>10</strong> cached subjects.</li>\n<li><code>2AFC_DRUG saline</code> uses <code>3covs_2states_saline</code> with <strong>9</strong> cached subjects.</li>\n<li><code>2AFC_DRUG drug</code> uses <code>3covs_2states_drug</code> with <strong>8</strong> cached subjects.</li>\n<li>Drug-only matched subset across all/saline/drug: <strong>8</strong> subjects.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "ac1437902e919a6d51eaced154f253eb",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "bcd5907f16510ef1006187be3b3f5571",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "type Datetime('\u03bcs') is incompatible with expected type String",
+          "traceback": null
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_71150/__marimo__cell_emfo_.py&quot;</span>, line <span class=\"m\">159</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">overall_trial_df</span> <span class=\"o\">=</span> <span class=\"n\">build_trial_level_df</span><span class=\"p\">(</span><span class=\"n\">overall_specs</span><span class=\"p\">)</span>\n<span class=\"w\">                       </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/var/folders/gk/r166p6nx2bb5zf2rlwww8fc00000gn/T/marimo_71150/__marimo__cell_emfo_.py&quot;</span>, line <span class=\"m\">135</span>, in <span class=\"n\">build_trial_level_df</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">pl</span><span class=\"o\">.</span><span class=\"n\">concat</span><span class=\"p\">(</span><span class=\"n\">frames</span><span class=\"p\">,</span> <span class=\"n\">how</span><span class=\"o\">=</span><span class=\"s2\">&quot;diagonal&quot;</span><span class=\"p\">)</span> <span class=\"k\">if</span> <span class=\"n\">frames</span> <span class=\"k\">else</span> <span class=\"n\">pl</span><span class=\"o\">.</span><span class=\"n\">DataFrame</span><span class=\"p\">(</span><span class=\"n\">schema</span><span class=\"o\">=</span><span class=\"n\">trial_schema</span><span class=\"p\">)</span>\n<span class=\"w\">           </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n  File <span class=\"nb\">&quot;/Users/javierrodriguezmartinez/Documents/MAMME/TFM/code/.venv/lib/python3.11/site-packages/polars/functions/eager.py&quot;</span>, line <span class=\"m\">247</span>, in <span class=\"n\">concat</span>\n<span class=\"w\">    </span><span class=\"n\">out</span> <span class=\"o\">=</span> <span class=\"n\">wrap_df</span><span class=\"p\">(</span><span class=\"n\">plr</span><span class=\"o\">.</span><span class=\"n\">concat_df_diagonal</span><span class=\"p\">(</span><span class=\"n\">elems</span><span class=\"p\">))</span>\n<span class=\"w\">                  </span><span class=\"pm\">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>\n<span class=\"gr\">polars.exceptions.SchemaError</span>: <span class=\"n\">type Datetime(&#39;\u03bcs&#39;) is incompatible with expected type String</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "de1d976c5cfba6da98891c85a3150a1e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "c3604287295c9df2732a1c83a403c7c4",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (SchemaError): ",
+          "traceback": null
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "c4fdff026f0c98195ad93de7da82c7af",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (SchemaError): ",
+          "traceback": null
+        }
+      ],
+      "console": []
+    }
+  ]
+}

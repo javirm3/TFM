@@ -19,7 +19,12 @@ def _():
 
     from dynamax.utils.utils import find_permutation
     from glmhmmt.model import SoftmaxGLMHMM
-    from glmhmmt.notebook_support import CoefficientEditorWidget, ModelManagerWidget, model_cfg as ModelCfg
+    from glmhmmt.notebook_support import (
+        CoefficientEditorWidget,
+        ModelManagerWidget,
+        model_cfg as ModelCfg,
+        wrap_anywidget,
+    )
     from glmhmmt.runtime import get_runtime_paths
     from glmhmmt.tasks import get_adapter
     from glmhmmt.views import build_views
@@ -45,6 +50,7 @@ def _():
         pl,
         plt,
         sns,
+        wrap_anywidget,
     )
 
 
@@ -72,14 +78,14 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(ModelManagerWidget, mo):
+def _(ModelManagerWidget, mo, wrap_anywidget):
     mm_widget = ModelManagerWidget(
         model_type="glmhmm",
         task="MCDR",
         K=2,
         tau=50,
     )
-    ui_model_manager = mo.ui.anywidget(mm_widget)
+    ui_model_manager = wrap_anywidget(mm_widget)
     return (ui_model_manager,)
 
 
@@ -226,6 +232,7 @@ def _(
     reference_label,
     ui_fit_subject,
     ui_load_fit,
+    wrap_anywidget,
 ):
     from wigglystuff import TangleSlider
 
@@ -265,7 +272,7 @@ def _(
                     ),
                 )
         _subtitle = f"{reference_label} is the implicit reference class."
-        coef_editors[f"state_{_k}"] = mo.ui.anywidget(
+        coef_editors[f"state_{_k}"] = wrap_anywidget(
             CoefficientEditorWidget(
                 title=f"State {_k} emission weights",
                 subtitle=_subtitle,
@@ -287,7 +294,7 @@ def _(
                 (_k, _j),
                 0.9 if _k == _j else 0.1 / max(K_val - 1, 1),
             )
-            a_sliders[_key] = mo.ui.anywidget(
+            a_sliders[_key] = wrap_anywidget(
                 TangleSlider(
                     amount=round(float(_default), 2),
                     min_value=0.01,

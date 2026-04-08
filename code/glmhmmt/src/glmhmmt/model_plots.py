@@ -18,6 +18,7 @@ from glmhmmt.plots_common import (
     plot_state_posterior_count_kde as _plot_state_posterior_count_kde_common,
     plot_session_trajectories as _plot_session_trajectories_common,
     plot_state_occupancy as _plot_state_occupancy_common,
+    plot_state_occupancy_overall_boxplot as _plot_state_occupancy_overall_boxplot_common,
     plot_state_dwell_times_by_subject as _plot_state_dwell_times_by_subject_common,
     plot_state_dwell_times_summary as _plot_state_dwell_times_summary_common,
     plot_state_dwell_times as _plot_state_dwell_times_common,
@@ -852,6 +853,182 @@ def _collect_emission_weight_frames(
     return _df_w, _df_ag, _feat_names, _ag_order, _state_pal, _state_hue_order, _CLS_LABELS
 
 
+def _pvalue_star(pval: float) -> str:
+    if pval < 0.001:
+        return "***"
+    if pval < 0.01:
+        return "**"
+    if pval < 0.05:
+        return "*"
+    return "ns"
+
+
+def _draw_emission_summary_lineplot(
+    ax,
+    *,
+    df_ag: pd.DataFrame,
+    ag_order: list[str],
+    state_pal: dict[str, str],
+    state_hue_order: list[str],
+    title: str,
+) -> None:
+    if df_ag.empty:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        ax.set_title(title)
+        return
+
+    sns.lineplot(
+        data=df_ag,
+        x="feature",
+        y="weight",
+        hue="state",
+        ax=ax,
+        markers=True,
+        marker="o",
+        markersize=8,
+        markeredgewidth=0,
+        alpha=0.85,
+        errorbar="se",
+        palette=state_pal,
+        hue_order=state_hue_order,
+        err_kws={"edgecolor": "none", "linewidth": 0},
+    )
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+    ax.set_ylabel("ΔP (from 1/3 baseline)")
+    ax.set_xlabel("")
+    ax.set_title(title)
+    if ag_order:
+        ax.set_xticks(range(len(ag_order)))
+        ax.set_xticklabels(ag_order)
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        legend = ax.legend(
+            handles,
+            labels,
+            frameon=False,
+            bbox_to_anchor=(1.01, 1),
+            loc="upper left",
+        )
+        legend.set_title("")
+
+
+def _draw_emission_summary_boxplot(
+    ax,
+    *,
+    df_ag: pd.DataFrame,
+    ag_order: list[str],
+    state_pal: dict[str, str],
+    state_hue_order: list[str],
+    title: str | None = None,
+) -> None:
+    from scipy.stats import ttest_rel
+    import itertools
+
+    if df_ag.empty:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        if title:
+            ax.set_title(title)
+        return
+
+    sns.boxplot(
+        data=df_ag,
+        x="feature",
+        y="weight",
+        hue="state",
+        ax=ax,
+        palette=state_pal,
+        hue_order=state_hue_order,
+        width=0.8,
+        showfliers=False,
+        boxprops={"alpha": 0.7},
+    )
+    sns.stripplot(
+        data=df_ag,
+        x="feature",
+        y="weight",
+        hue="state",
+        ax=ax,
+        palette=state_pal,
+        hue_order=state_hue_order,
+        dodge=True,
+        alpha=0.5,
+        zorder=1,
+        legend=False,
+    )
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
+
+    k_states = len(state_hue_order)
+    if k_states > 1:
+        state_pairs = list(itertools.combinations(range(k_states), 2))
+        hue_width = 0.8 / k_states
+        y_range = df_ag["weight"].max() - df_ag["weight"].min()
+        if pd.isna(y_range) or y_range == 0:
+            y_range = 1
+
+        for feat_idx, feat in enumerate(ag_order):
+            feat_df = df_ag[df_ag["feature"] == feat]
+            if feat_df.empty:
+                continue
+
+            y_max = feat_df["weight"].max()
+            y_offset_step = y_range * 0.05
+            current_y_offset = y_max + y_offset_step
+
+            for p1, p2 in state_pairs:
+                s1 = state_hue_order[p1]
+                s2 = state_hue_order[p2]
+                df1 = feat_df[feat_df["state"] == s1].set_index("subject")["weight"]
+                df2 = feat_df[feat_df["state"] == s2].set_index("subject")["weight"]
+                common_subjs = df1.index.intersection(df2.index)
+                if len(common_subjs) < 2:
+                    continue
+
+                w1 = df1.loc[common_subjs].values
+                w2 = df2.loc[common_subjs].values
+
+                try:
+                    _stat, pval = ttest_rel(w1, w2)
+                    star = _pvalue_star(pval)
+                except Exception:
+                    star = ""
+
+                if not star:
+                    continue
+
+                offset_1 = (p1 - (k_states - 1) / 2) * hue_width
+                offset_2 = (p2 - (k_states - 1) / 2) * hue_width
+                x1 = feat_idx + offset_1
+                x2 = feat_idx + offset_2
+                h = y_range * 0.02
+                ax.plot(
+                    [x1, x1, x2, x2],
+                    [current_y_offset, current_y_offset + h, current_y_offset + h, current_y_offset],
+                    lw=1,
+                    c="k",
+                )
+                ax.text((x1 + x2) / 2, current_y_offset + h, star, ha="center", va="bottom", color="k")
+                current_y_offset += y_offset_step * 1.5
+
+    ax.set_xticks(range(len(ag_order)))
+    ax.set_xticklabels(ag_order)
+    ax.set_xlabel("")
+    ax.set_ylabel("ΔP (from 1/3 baseline)")
+    if title:
+        ax.set_title(title)
+
+    handles, labels = ax.get_legend_handles_labels()
+    if len(handles) >= k_states:
+        ax.legend(
+            handles[:k_states],
+            labels[:k_states],
+            frameon=False,
+            bbox_to_anchor=(1.01, 1),
+            loc="upper left",
+        )
+    elif handles:
+        ax.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+
+
 def plot_emission_weights_by_subject(
     arrays_store: dict,
     state_labels: dict,
@@ -930,6 +1107,64 @@ def plot_emission_weights_by_subject(
     return fig_bar
 
 
+def plot_emission_weights_summary_lineplot(
+    arrays_store: dict,
+    state_labels: dict,
+    names: dict,
+    K: int,
+    subjects: list,
+    save_path=None,
+):
+    _ = save_path
+    _df_w, _df_ag, _feat_names, _ag_order, _state_pal, _state_hue_order, _CLS_LABELS = _collect_emission_weight_frames(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+    fig, ax = plt.subplots(figsize=(max(6.0, 2.1 * max(1, len(_ag_order))), 4.2))
+    _draw_emission_summary_lineplot(
+        ax,
+        df_ag=_df_ag,
+        ag_order=_ag_order,
+        state_pal=_state_pal,
+        state_hue_order=_state_hue_order,
+        title=f"Emission weights - collapsed line summary  (K={K})",
+    )
+    fig.tight_layout()
+    sns.despine(fig=fig)
+    return fig
+
+
+def plot_emission_weights_summary_boxplot(
+    arrays_store: dict,
+    state_labels: dict,
+    names: dict,
+    K: int,
+    subjects: list,
+    save_path=None,
+):
+    _ = save_path
+    _df_w, _df_ag, _feat_names, _ag_order, _state_pal, _state_hue_order, _CLS_LABELS = _collect_emission_weight_frames(
+        arrays_store=arrays_store,
+        state_labels=state_labels,
+        names=names,
+        subjects=subjects,
+    )
+    fig, ax = plt.subplots(figsize=(max(6.0, 2.1 * max(1, len(_ag_order))), 4.2))
+    _draw_emission_summary_boxplot(
+        ax,
+        df_ag=_df_ag,
+        ag_order=_ag_order,
+        state_pal=_state_pal,
+        state_hue_order=_state_hue_order,
+        title=f"Emission weights - collapsed box summary  (K={K})",
+    )
+    fig.tight_layout()
+    sns.despine(fig=fig)
+    return fig
+
+
 def plot_emission_weights(
     arrays_store: dict,
     state_labels: dict,
@@ -952,104 +1187,28 @@ def plot_emission_weights(
     )
 
     # ── 1. Agonist (collapsed) figure ─────────────────────────────────────────
-    fig_ag, axes_ag = plt.subplots(1, 2, figsize=(len(_ag_order) * 2, 4), sharex=True)
+    fig_ag, axes_ag = plt.subplots(1, 2, figsize=(max(8.0, len(_ag_order) * 3.0), 4.2), sharex=True)
     ax_ag_line, ax_ag_box = axes_ag
-    
-    sns.lineplot(
-        data=_df_ag, x="feature", y="weight", hue="state", ax=ax_ag_line,
-        markers=True, marker="o", markersize=8, markeredgewidth=0,
-        alpha=0.85, errorbar="se",
-        palette=_state_pal, hue_order=_state_hue_order,
-        err_kws={"edgecolor": "none", "linewidth": 0},
+
+    _draw_emission_summary_lineplot(
+        ax_ag_line,
+        df_ag=_df_ag,
+        ag_order=_ag_order,
+        state_pal=_state_pal,
+        state_hue_order=_state_hue_order,
+        title=f"Emission weights - collapsed view  (K={K})",
     )
-    ax_ag_line.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
-    ax_ag_line.set_ylabel("ΔP (from 1/3 baseline)")
-    ax_ag_line.set_xlabel("")
-    ax_ag_line.set_title(f"Emission weights - collapsed view  (K={K})")
-    ax_ag_line.get_legend().set_title("")
-    ax_ag_line.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
-
-    sns.boxplot(
-        data=_df_ag, x="feature", y="weight", hue="state", ax=ax_ag_box,
-        palette=_state_pal, hue_order=_state_hue_order,
-        width=0.8, showfliers=False, boxprops={'alpha': 0.7}
+    _draw_emission_summary_boxplot(
+        ax_ag_box,
+        df_ag=_df_ag,
+        ag_order=_ag_order,
+        state_pal=_state_pal,
+        state_hue_order=_state_hue_order,
     )
-    sns.stripplot(
-        data=_df_ag, x="feature", y="weight", hue="state", ax=ax_ag_box,
-        palette=_state_pal, hue_order=_state_hue_order,
-        dodge=True, alpha=0.5, zorder=1, legend=False
-    )
-    ax_ag_box.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
 
-    # Statistical annotations for agonist figure
-    from scipy.stats import ttest_rel
-    import itertools
-
-    def get_star(pval):
-        if pval < 0.001: return "***"
-        elif pval < 0.01: return "**"
-        elif pval < 0.05: return "*"
-        return "ns"
-
-    K_ag = len(_state_hue_order) # Number of states
-    state_pairs = list(itertools.combinations(range(K_ag), 2))
-    hue_width = 0.8 / K_ag
-
-    y_range_ag = _df_ag["weight"].max() - _df_ag["weight"].min()
-    if pd.isna(y_range_ag) or y_range_ag == 0:
-        y_range_ag = 1
-
-    for m, feat in enumerate(_ag_order):
-        feat_df = _df_ag[_df_ag["feature"] == feat]
-        if feat_df.empty: continue
-        
-        y_max = feat_df["weight"].max()
-        y_offset_step = y_range_ag * 0.05
-        current_y_offset = y_max + y_offset_step
-
-        for p1, p2 in state_pairs:
-            s1 = _state_hue_order[p1]
-            s2 = _state_hue_order[p2]
-            
-            # Align by subject for paired t-test
-            df1 = feat_df[feat_df["state"] == s1].set_index("subject")["weight"]
-            df2 = feat_df[feat_df["state"] == s2].set_index("subject")["weight"]
-            
-            common_subjs = df1.index.intersection(df2.index)
-            if len(common_subjs) < 2: continue
-            
-            w1 = df1.loc[common_subjs].values
-            w2 = df2.loc[common_subjs].values
-
-            try:
-                stat, pval = ttest_rel(w1, w2)
-                star = get_star(pval)
-            except Exception:
-                star = ""
-
-            if star:
-                offset_1 = (p1 - (K_ag - 1) / 2) * hue_width
-                offset_2 = (p2 - (K_ag - 1) / 2) * hue_width
-                x1 = m + offset_1
-                x2 = m + offset_2
-                
-                h = y_range_ag * 0.02
-                ax_ag_box.plot([x1, x1, x2, x2], [current_y_offset, current_y_offset+h, current_y_offset+h, current_y_offset], lw=1, c='k')
-                ax_ag_box.text((x1+x2)/2, current_y_offset+h, star, ha='center', va='bottom', color='k')
-                current_y_offset += y_offset_step * 1.5
-
-
-    ax_ag_box.set_xticks(range(len(_ag_order)))
-    ax_ag_box.set_xticklabels(_ag_order)
-    ax_ag_box.set_xlabel("")
-    ax_ag_box.set_ylabel("ΔP (from 1/3 baseline)")
-    
-    handles, labels_lgd = ax_ag_box.get_legend_handles_labels()
-    if len(handles) >= K_ag:
-        ax_ag_box.legend(handles[:K_ag], labels_lgd[:K_ag], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
-    else:
-        ax_ag_box.legend(frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
-        
+    K_ag = len(_state_hue_order)
+    state_pairs = []
+    hue_width = 0.8 / K_ag if K_ag else 0.8
     fig_ag.tight_layout()
     sns.despine(fig=fig_ag)
 
@@ -1429,6 +1588,22 @@ def plot_state_occupancy(
     **kwargs,
 ):
     return _plot_state_occupancy_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        **kwargs,
+    )
+
+
+def plot_state_occupancy_overall_boxplot(
+    views: dict,
+    trial_df,
+    session_col: str = "session",
+    sort_col: str = "trial_idx",
+    **kwargs,
+):
+    return _plot_state_occupancy_overall_boxplot_common(
         views,
         trial_df,
         session_col=session_col,

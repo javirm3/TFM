@@ -1,9 +1,9 @@
 """
-nuo_auditory.py
-───────────────
-Plotting utilities for the Nuo auditory 2AFC task.
+two_afc.py
+──────────
+Plotting utilities for 2-AFC (binary) GLM-HMM results.
 
-This is the task-owned Nuo auditory plotting module exposed via
+This is the task-owned 2AFC plotting module exposed via
 ``TaskAdapter.get_plots()``. Its public API mirrors the task plot interface
 used by the analysis notebooks.
 
@@ -40,6 +40,7 @@ from matplotlib.lines import Line2D
 from pathlib import Path
 from scipy.stats import sem, ttest_1samp
 from typing import Dict, List, Optional, Sequence, Tuple
+from ..two_afc_delay import _stim_param_weight_map, EMISSION_REGRESSOR_LABELS
 from glmhmmt.plots_common import (
     custom_boxplot,
     plot_state_accuracy as _plot_state_accuracy_common,
@@ -56,19 +57,9 @@ from glmhmmt.plots_common import (
 )
 from glmhmmt.model_plots import plot_transition_weights
 from glmhmmt.views import _LABEL_RANK, get_state_palette
-from ..nuo_auditory import _stim_bin_centers, _stim_param_weight_map, EMISSION_REGRESSOR_LABELS
-
-_SESSION_COL = "session"
-_SORT_COL = "trial"
-_RESPONSE_COL = "response"
-_PERFORMANCE_COL = "performance"
-_EVIDENCE_COL = "total_evidence_strength"
-_CONDITION_COL = "difficulty"
-_EXPERIMENT_COL = "stimulus_modality"
-_PLOT_CHOICE_LEFT_COL = "_plot_choice_left"
 
 # ── state colour palette ──────────────────────────────────────────────────────
-
+sns.set_style("ticks")
 
 def _state_colors(K: int) -> List[str]:
     return get_state_palette(K)[:K]
@@ -105,16 +96,6 @@ def _default_labels(K: int, C: int = 2) -> List[str]:
     if K == 3:
         return ["Engaged", "Biased L", "Biased R"]
     return [f"State {k}" for k in range(K)]
-
-
-def _with_plot_choice_left(
-    df: pd.DataFrame,
-    choice_col: str,
-) -> Tuple[pd.DataFrame, str]:
-    """Return a copy of *df* with a plotting column for P(left)."""
-    out = df.copy()
-    out[_PLOT_CHOICE_LEFT_COL] = 1.0 - pd.to_numeric(out[choice_col], errors="coerce")
-    return out, _PLOT_CHOICE_LEFT_COL
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -170,6 +151,7 @@ def plot_weights(
     weights: np.ndarray,
     feature_names: Sequence[str],
     state_labels: Optional[Sequence[str]] = None,
+    state_colors: Optional[Sequence[str]] = None,
     title: str = "GLM-HMM weights",
     figsize: Optional[Tuple[float, float]] = None,
     ax: Optional[plt.Axes] = None,
@@ -195,7 +177,7 @@ def plot_weights(
         W = W[:, None, :]
     K, C_m1, M = W.shape
     labels = list(state_labels) if state_labels else _default_labels(K, C_m1 + 1)
-    colors = _state_colors(K)
+    colors = list(state_colors) if state_colors is not None else _state_colors(K)
     x = np.arange(M)
     width = 0.8 / K
 
@@ -259,6 +241,7 @@ def plot_weights_boxplot(
     all_weights: np.ndarray,
     feature_names: Sequence[str],
     state_labels: Optional[Sequence[str]] = None,
+    state_colors: Optional[Sequence[str]] = None,
     title: str = "GLM-HMM weights (across subjects)",
     figsize: Optional[Tuple[float, float]] = None,
 ) -> plt.Figure:
@@ -273,7 +256,7 @@ def plot_weights_boxplot(
     W_avg = W.mean(axis=2)
 
     labels = list(state_labels) if state_labels else _default_labels(K, C_m1 + 1)
-    colors = _state_colors(K)
+    colors = list(state_colors) if state_colors is not None else _state_colors(K)
     x = np.arange(M)
 
     # Convert to DataFrame for seaborn
@@ -296,7 +279,9 @@ def plot_weights_boxplot(
     fig, axes = plt.subplots(1, 2, figsize=figsize or (8, 4), sharex=True)
     ax_line, ax_box = axes
 
-    sns.lineplot( data=df, x="Feature", y="Weight", hue="State", palette=colors[:K], ax=ax_line, markers=True, marker="o", markersize=8, markeredgewidth=0, alpha=0.85, errorbar="se", legend=False,)
+    palette = {labels[k]: colors[k] for k in range(K)}
+    sns.lineplot( data=df, x="Feature", y="Weight", hue="State", palette=palette, ax=ax_line, markers=True, marker="o", markersize=8, markeredgewidth=0, alpha=0.85, errorbar="se", legend=False,
+                 err_kws={"edgecolor": "none", "linewidth": 0},)
     ax_line.axhline(0, color="k", lw=0.8, ls="--")
     ax_line.set_ylabel("Weight")
     ax_line.set_xlabel("")
@@ -316,10 +301,8 @@ def plot_weights_boxplot(
         widths=hue_width * 0.9,
         patch_artist=True,
         showfliers=False,
-        boxprops={"facecolor": "white", "linewidth": 1.2},
-        whiskerprops={"color": "black", "linewidth": 1.1},
-        capprops={"color": "black", "linewidth": 0},
-        medianprops={"linewidth": 2.0},
+        showcaps=False,
+        zorder=0,
     )
 
     for patch in box["boxes"]:
@@ -328,7 +311,7 @@ def plot_weights_boxplot(
         for artist in box[elem]:
             artist.set(color="#666666", linewidth=1.0)
     for idx, median in enumerate(box["medians"]):
-        median.set(color=colors[idx % K], linewidth=2.2)
+        median.set(color=colors[idx % K], linewidth=3)
 
     for m in range(M):
         for n in range(N):
@@ -337,20 +320,20 @@ def plot_weights_boxplot(
             for k in range(K):
                 xs.append(m + (k - (K - 1) / 2) * hue_width)
                 ys.append(W_avg[n, k, m])
-            ax_box.plot(xs, ys, color="#7A7A7A", alpha=0.18, lw=0.8, zorder=0)
+            ax_box.plot(xs, ys, color="#7A7A7A", alpha=0.125, lw=1.5, zorder=5)
 
-    for m in range(M):
-        for k in range(K):
-            x_pos = m + (k - (K - 1) / 2) * hue_width
-            ax_box.scatter(
-                np.full(N, x_pos),
-                W_avg[:, k, m],
-                color=colors[k],
-                alpha=0.8,
-                s=22,
-                zorder=3,
-                linewidths=0,
-            )
+    # for m in range(M):
+    #     for k in range(K):
+    #         x_pos = m + (k - (K - 1) / 2) * hue_width
+    #         ax_box.scatter(
+    #             np.full(N, x_pos),
+    #             W_avg[:, k, m],
+    #             color=colors[k],
+    #             alpha=0.6,
+    #             s=22,
+    #             zorder=3,
+    #             linewidths=0,
+    #         )
     ax_box.axhline(0, color="k", lw=0.8, ls="--")
 
     def get_star(pval):
@@ -388,7 +371,7 @@ def plot_weights_boxplot(
                 x1 = m + offset_1
                 x2 = m + offset_2
 
-                h = y_range * 0.02
+                h = 0
                 ax_box.plot(
                     [x1, x1, x2, x2],
                     [current_y_offset, current_y_offset + h, current_y_offset + h, current_y_offset],
@@ -696,7 +679,7 @@ def plot_model_comparison_diffs(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Psychometric helpers
+# Psychometric helpers  (2AFC equivalent of categorical performance panels)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _LABELED_ILDS = {-8, 8}
@@ -769,7 +752,7 @@ def eval_glm_on_ild_grid(
     Args:
         weights:     ``(K, C-1, M)`` or ``(C-1, M)`` emission weight array.
         X_cols:      Ordered list of M feature names matching the weight columns.
-        ild_max:     Maximum absolute evidence value used for normalisation.
+        ild_max:     Maximum |ILD| used for normalisation in ``parse_glmhmm``.
         n_grid:      Number of ILD points in the evaluation grid.
         lapse_rates: ``[gamma_L, gamma_R]`` lapse parameters from fitting.
                      *None* means no lapse correction.
@@ -792,17 +775,15 @@ def eval_glm_on_ild_grid(
     K, _C_m1, M = W.shape
 
     X_cols_list = list(X_cols)
-    stim_bin_indices = {
-        name: idx
+
+    stim_abs_indices = {
+        int(name.removeprefix("stim_")): idx
         for idx, name in enumerate(X_cols_list)
-        if isinstance(name, str) and name.startswith("stim_bin_")
+        if isinstance(name, str)
+        and name.startswith("stim_")
+        and name.removeprefix("stim_").isdigit()
     }
-    stim_centers = _stim_bin_centers()
-    stim_bin_names = [f"stim_bin_{idx:02d}" for idx in range(len(stim_centers))]
-    stim_center_map = {
-        name: float(center)
-        for name, center in zip(stim_bin_names, stim_centers)
-    }
+
     stim_param_idx = next((i for i, n in enumerate(X_cols_list) if n == "stim_param"), None)
     stim_param_weights = _stim_param_weight_map() if stim_param_idx is not None else {}
 
@@ -810,8 +791,22 @@ def eval_glm_on_ild_grid(
     _STIM_NAMES = {"stim_vals", "stim_d", "ild_norm", "ILD", "ild", "stimulus"}
     ild_idx = next((i for i, n in enumerate(X_cols_list) if n in _STIM_NAMES), None)
     bias_idx = next((i for i, n in enumerate(X_cols_list) if n == "bias"), None)
-    if stim_bin_indices or stim_param_idx is not None:
-        ild_grid = stim_centers.astype(float) * float(ild_max)
+    if stim_abs_indices or stim_param_idx is not None:
+        observed_levels = sorted(set(stim_abs_indices) | set(stim_param_weights) | {0})
+        signed_levels = sorted(
+            {
+                float(level)
+                for level in observed_levels
+                if level == 0
+            }
+            | {
+                signed
+                for level in observed_levels
+                if level != 0
+                for signed in (-float(level), float(level))
+            }
+        )
+        ild_grid = np.asarray(signed_levels, dtype=float)
     else:
         ild_grid = np.linspace(-ild_max, ild_max, n_grid)
     ild_norm = ild_grid / ild_max
@@ -824,7 +819,7 @@ def eval_glm_on_ild_grid(
         elif len(_lr) == 1:
             gL = gR = float(_lr[0])
 
-    p_right = np.zeros((K, n_grid))
+    p_right = np.zeros((K, len(ild_grid)))
 
     weights_t = None
     if X_data is not None and trial_weights is not None:
@@ -837,18 +832,12 @@ def eval_glm_on_ild_grid(
     stim_feature_indices = sorted(
         set(
             ([ild_idx] if ild_idx is not None else [])
-            + list(stim_bin_indices.values())
+            + list(stim_abs_indices.values())
             + ([stim_param_idx] if stim_param_idx is not None else [])
         )
     )
 
-    def _stim_bin_name_from_norm(stim_value: float) -> str:
-        return min(
-            stim_center_map,
-            key=lambda name: abs(stim_value - stim_center_map[name]),
-        )
-
-    if X_data is not None and (ild_idx is not None or stim_bin_indices or stim_param_idx is not None):
+    if X_data is not None and (ild_idx is not None or stim_abs_indices or stim_param_idx is not None):
         # ── partial-dependence: average over real trial features ──────────────
         X_base = np.asarray(X_data, dtype=float).copy()
         for k in range(K):
@@ -860,15 +849,24 @@ def eval_glm_on_ild_grid(
                 else 0.0
             )
             base_logit = other_logit - stim_contrib
-            for gi, sv in enumerate(ild_norm):
+            for gi, (ild_value, sv) in enumerate(zip(ild_grid, ild_norm)):
                 stim_logit = 0.0
                 if ild_idx is not None:
                     stim_logit += sv * w[ild_idx]
-                stim_bin_name = _stim_bin_name_from_norm(float(sv))
-                for name, idx in stim_bin_indices.items():
-                    stim_logit += (1.0 if name == stim_bin_name else 0.0) * w[idx]
+                for stim_abs, stim_abs_idx in stim_abs_indices.items():
+                    if stim_abs == 0:
+                        stim_value = 1.0 if ild_value == 0 else 0.0
+                    else:
+                        stim_value = float(np.sign(ild_value)) if abs(ild_value) == float(stim_abs) else 0.0
+                    stim_logit += stim_value * w[stim_abs_idx]
                 if stim_param_idx is not None:
-                    stim_logit += float(stim_param_weights.get(stim_bin_name, 0.0)) * w[stim_param_idx]
+                    if ild_value == 0:
+                        stim_param_value = float(stim_param_weights.get(0, 0.0))
+                    else:
+                        stim_param_value = float(np.sign(ild_value)) * float(
+                            stim_param_weights.get(int(abs(ild_value)), 0.0)
+                        )
+                    stim_logit += stim_param_value * w[stim_param_idx]
                 logit = base_logit + stim_logit
                 # W[k,0,:] parameterises P(class-0 = LEFT); class-1 (RIGHT) is
                 # the softmax reference (logit=0). So P(right) = sigmoid(-logit).
@@ -892,13 +890,25 @@ def eval_glm_on_ild_grid(
             X_grid[:, stim_feature_indices] = 0.0
         if ild_idx is not None:
             X_grid[:, ild_idx] = ild_norm
-        for gi, sv in enumerate(ild_norm):
-            stim_bin_name = _stim_bin_name_from_norm(float(sv))
-            stim_bin_idx = stim_bin_indices.get(stim_bin_name)
-            if stim_bin_idx is not None:
-                X_grid[gi, stim_bin_idx] = 1.0
-            if stim_param_idx is not None:
-                X_grid[gi, stim_param_idx] = float(stim_param_weights.get(stim_bin_name, 0.0))
+        for stim_abs, stim_abs_idx in stim_abs_indices.items():
+            if stim_abs == 0:
+                X_grid[:, stim_abs_idx] = (ild_grid == 0).astype(float)
+            else:
+                X_grid[:, stim_abs_idx] = np.where(
+                    np.abs(ild_grid) == float(stim_abs),
+                    np.sign(ild_grid),
+                    0.0,
+                )
+        if stim_param_idx is not None:
+            stim_param_vals = np.zeros(len(ild_grid), dtype=float)
+            for gi, ild_value in enumerate(ild_grid):
+                if ild_value == 0:
+                    stim_param_vals[gi] = float(stim_param_weights.get(0, 0.0))
+                else:
+                    stim_param_vals[gi] = float(np.sign(ild_value)) * float(
+                        stim_param_weights.get(int(abs(ild_value)), 0.0)
+                    )
+            X_grid[:, stim_param_idx] = stim_param_vals
         if bias_idx is not None:
             X_grid[:, bias_idx] = 1.0  # bias is always 1
 
@@ -1014,7 +1024,7 @@ def _mean_glm_curve(
     marginalised rather than fixed to 0.
 
     Returns:
-        ``(ild_grid, mean_p_left)`` or *None* if no valid fits are found.
+        ``(ild_grid, mean_p_right)`` or *None* if no valid fits are found.
     """
     all_p: list[np.ndarray] = []
     ild_g: Optional[np.ndarray] = None
@@ -1061,7 +1071,6 @@ def _mean_glm_curve(
                 if not np.any(_lr > 0):
                     _lr = None
             ig, pg = eval_glm_on_ild_grid(W, cols, ild_max=ild_max, lapse_rates=_lr, X_data=X_data)
-            pg = 1.0 - np.asarray(pg, dtype=float)
         except Exception:
             continue
 
@@ -1098,7 +1107,7 @@ def _subject_glm_curves(
     ild_max: float,
     state_k: Optional[int] = None,
 ) -> dict:
-    """Return {subject: (ild_grid, p_left)} for per-subject psychometric backgrounds."""
+    """Return {subject: (ild_grid, p_right)} for per-subject psychometric backgrounds."""
     out: dict = {}
     for subj in subjects:
         curve = _mean_glm_curve(arrays_store, [subj], X_cols, ild_max=ild_max, state_k=state_k)
@@ -1166,7 +1175,6 @@ def _mean_glm_feature_curve(
                 lapse_rates=_lr,
                 X_data=X_data,
             )
-            pg = 1.0 - np.asarray(pg, dtype=float)
         except Exception:
             continue
 
@@ -1203,7 +1211,7 @@ def _subject_glm_feature_curves(
     state_k: Optional[int] = None,
     n_grid: int = 300,
 ) -> dict:
-    """Return {subject: (feature_grid, p_left)} for per-subject feature backgrounds."""
+    """Return {subject: (feature_grid, p_right)} for per-subject feature backgrounds."""
     out: dict = {}
     for subj in subjects:
         curve = _mean_glm_feature_curve(
@@ -1314,6 +1322,92 @@ def _format_feature_labels(feature_names: Sequence[str]) -> list[str]:
     return [_feature_label(name) for name in feature_names]
 
 
+def _reorder_two_afc_emission_features(
+    weights: np.ndarray,
+    feature_names: Sequence[str],
+) -> tuple[np.ndarray, list[str]]:
+    """Put stimulus, |bias|, and action-trace features first for 2AFC emission plots."""
+    feat_names = list(feature_names)
+    if not feat_names:
+        return np.asarray(weights), feat_names
+
+    def _group(idx: int, name: str) -> tuple[int, int]:
+        lname = name.lower()
+        if lname.startswith("stim"):
+            return (0, idx)
+        if lname == "bias":
+            return (1, idx)
+        if lname.startswith("at_"):
+            return (2, idx)
+        return (3, idx)
+
+    order = [idx for idx, _ in sorted(enumerate(feat_names), key=lambda item: _group(item[0], item[1]))]
+    W = np.take(np.asarray(weights), order, axis=-1).copy()
+    ordered_names = [feat_names[idx] for idx in order]
+
+    for idx, name in enumerate(ordered_names):
+        if name.lower() == "bias":
+            W[..., idx] = np.abs(W[..., idx])
+
+    return W, ordered_names
+
+
+def _reorder_two_afc_emission_states(
+    weights: np.ndarray,
+    state_labels: Sequence[str],
+) -> tuple[np.ndarray, list[str]]:
+    """Move Disengaged to the front for 2AFC emission plot display order."""
+    labels = list(state_labels)
+    if not labels:
+        return np.asarray(weights), labels
+
+    disengaged = [idx for idx, label in enumerate(labels) if label.lower() == "disengaged"]
+    remaining = [idx for idx in range(len(labels)) if idx not in disengaged]
+    order = disengaged + remaining
+    W = np.take(np.asarray(weights), order, axis=0)
+    ordered_labels = [labels[idx] for idx in order]
+    return W, ordered_labels
+
+
+def _quantile_bin_spec(values: np.ndarray, n_bins: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Return explicit quantile bin edges and midpoint centers."""
+    x = np.asarray(values, dtype=float)
+    x = x[np.isfinite(x)]
+    if x.size == 0:
+        raise ValueError("Cannot bin an empty array.")
+
+    requested_bins = max(int(n_bins), 1)
+    unique_vals = np.unique(x)
+    if unique_vals.size == 1:
+        v = float(unique_vals[0])
+        return np.asarray([v - 0.5, v + 0.5], dtype=float), np.asarray([v], dtype=float)
+
+    bin_edges = np.quantile(x, np.linspace(0.0, 1.0, requested_bins + 1))
+    bin_edges = np.unique(np.asarray(bin_edges, dtype=float))
+    if bin_edges.size < 2:
+        v = float(unique_vals[0])
+        return np.asarray([v - 0.5, v + 0.5], dtype=float), np.asarray([v], dtype=float)
+
+    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    return bin_edges, bin_centers
+
+
+def _quantile_bin_assignments(
+    values: np.ndarray,
+    n_bins: int,
+    *,
+    bin_edges: Optional[np.ndarray] = None,
+    bin_centers: Optional[np.ndarray] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Assign values to quantile bins using explicit edges and midpoint centers."""
+    if bin_edges is None or bin_centers is None:
+        bin_edges, bin_centers = _quantile_bin_spec(values, n_bins=n_bins)
+
+    bin_idx = np.digitize(np.asarray(values, dtype=float), bin_edges, right=True) - 1
+    bin_idx = np.clip(bin_idx, 0, len(bin_centers) - 1).astype(int)
+    return bin_idx, bin_centers
+
+
 def _binned_feature_summary(
     df: pd.DataFrame,
     feature_col: str,
@@ -1322,6 +1416,8 @@ def _binned_feature_summary(
     subj_col: str,
     n_bins: int = 9,
     weight_col: Optional[str] = None,
+    bin_edges: Optional[np.ndarray] = None,
+    bin_centers: Optional[np.ndarray] = None,
 ) -> Optional[Tuple[pd.DataFrame, list[float]]]:
     needed = [feature_col, choice_col, pred_col, subj_col]
     d = df.dropna(subset=[c for c in needed if c in df.columns]).copy()
@@ -1335,25 +1431,19 @@ def _binned_feature_summary(
     if d.empty:
         return None
 
-    unique_vals = np.sort(d[feature_col].unique())
-    if len(unique_vals) <= max(6, n_bins):
-        d["_x_bin"] = d[feature_col]
-        centers = (
-            d.groupby("_x_bin", observed=True)[feature_col]
-            .median()
-            .rename("center")
-            .reset_index()
-            .sort_values("center")
-        )
-    else:
-        d["_x_bin"] = pd.qcut(d[feature_col], q=n_bins, duplicates="drop")
-        centers = (
-            d.groupby("_x_bin", observed=True)[feature_col]
-            .median()
-            .rename("center")
-            .reset_index()
-            .sort_values("center")
-        )
+    bin_idx, bin_centers = _quantile_bin_assignments(
+        d[feature_col].to_numpy(dtype=float),
+        n_bins=n_bins,
+        bin_edges=bin_edges,
+        bin_centers=bin_centers,
+    )
+    d["_x_bin"] = bin_idx
+    centers = pd.DataFrame(
+        {
+            "_x_bin": np.arange(len(bin_centers), dtype=int),
+            "center": bin_centers,
+        }
+    )
 
     if weight_col is not None and weight_col in d.columns:
         rows = []
@@ -1461,6 +1551,7 @@ def _style_legacy_psych_axis(ax: plt.Axes, xticks: Sequence[float]) -> None:
     _apply_ild_axis_ticks(ax, xticks)
     ax.axhline(0.5, color="tab:gray", ls="--", lw=1.6)
     ax.axvline(0.0, color="tab:gray", ls="--", lw=1.6)
+    ax.set_xlim([-21, 21])
     ax.set_ylim([0, 1])
     ax.set_yticks([0, 0.5, 1], [0, 0.5, 1])
     ax.tick_params(axis="both", labelsize=11)
@@ -1469,6 +1560,7 @@ def _style_legacy_psych_axis(ax: plt.Axes, xticks: Sequence[float]) -> None:
     ax.title.set_size(13)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    ax.set_ylabel(f"$p(\mathrm{{right}})$")
 
 
 def _resolve_plot_col(df: pd.DataFrame, preferred: str, candidates: Sequence[str]) -> str:
@@ -1530,7 +1622,7 @@ def _attach_rank_state_model_cols(
     df: pd.DataFrame,
     views: dict,
     subj_col: str = "subject",
-    base_col: str = "pL_state",
+    base_col: str = "pR_state",
 ) -> pd.DataFrame:
     """Attach rank-aligned per-state model columns from raw-state trial_df columns."""
     if df.empty or subj_col not in df.columns or not views:
@@ -1576,12 +1668,12 @@ def _attach_rank_state_model_cols(
 def _psych_panel(
     ax: plt.Axes,
     df: pd.DataFrame,
-    ild_col: str = _EVIDENCE_COL,
-    choice_col: str = _RESPONSE_COL,
+    ild_col: str = "ILD",
+    choice_col: str = "response",
     pred_col: str = "p_pred",
     subj_col: str = "subject",
     title: str = "",
-    xlabel: str = "Evidence strength",
+    xlabel: str = "ILD (dB)",
     ylabel: Optional[str] = None,
     color: str = "k",
     smooth_curve: Optional[Tuple[np.ndarray, np.ndarray]] = None,
@@ -1589,11 +1681,11 @@ def _psych_panel(
     subject_curves: Optional[dict] = None,
     tick_ilds: Optional[Sequence[float]] = None,
 ) -> None:
-    """Draw a pooled psychometric curve (P(left) vs evidence strength) on ax.
+    """Draw a pooled psychometric curve (P(right) vs ILD) on ax.
 
     Style mirrors plot_pc_across_batches:
     - Per-subject individual traces drawn with low alpha.
-    - Extreme stimulus positions compressed so inner values are not squeezed.
+    - Extreme ILD positions compressed so inner values are not squeezed.
     - Pooled mean ± SEM as error-bar markers; model as a solid black line.
     - axhline at 0.5, axvline at 0.
     """
@@ -1601,11 +1693,10 @@ def _psych_panel(
         ax.set_title(title)
         return
 
-    choice_col = _resolve_plot_col(df, choice_col, (_RESPONSE_COL,))
-    df_plot, choice_col = _with_plot_choice_left(df, choice_col)
+    choice_col = _resolve_plot_col(df, choice_col, ("response", "Choice"))
 
     subj_agg = (
-        df_plot.groupby([subj_col, ild_col], observed=True)
+        df.groupby([subj_col, ild_col], observed=True)
         .agg(data_mean=(choice_col, "mean"), model_mean=(pred_col, "mean"))
         .reset_index()
     )
@@ -1645,7 +1736,7 @@ def _psych_panel(
             xi, yi = curve
             ax.plot(xi, yi, "-", color=color, alpha=0.12, lw=1.2, zorder=2)
 
-    # model line: smooth sigmoid over a dense stimulus grid (if available)
+    # model line: smooth sigmoid over dense ILD grid (if available) else aggregated p_pred
     if smooth_curve is not None:
         ild_g, p_g = smooth_curve
         x0, x1 = float(xticks[0]), float(xticks[-1])
@@ -1663,10 +1754,10 @@ def _psych_panel(
     ax.set_xlim(xticks[0], xticks[-1])
     ax.set_ylim(0, 1)
     ax.set_yticks([0, 0.5, 1])
-    ax.set_title(title)
+    # ax.set_title(title)
     ax.set_xlabel(xlabel)
-    if ylabel:
-        ax.set_ylabel(ylabel)
+    # if ylabel:
+    #     ax.set_ylabel(ylabel)
 
 
 def _psych_state_panel(
@@ -1688,15 +1779,12 @@ def _psych_state_panel(
     show_data_smooth: bool = True,
     show_model_smooth: bool = True,
     model_line_mode: str = "smooth",
-    bin_points: bool = False,
-    n_bins: int = 9,
 ) -> Tuple:
-    """Draw state-specific P(left) psychometric on ax. Returns (data_h, model_h)."""
+    """Draw state-specific psychometric on ax.  Returns (data_h, model_h)."""
     if df_state.empty:
         return None, None
 
-    choice_col = _resolve_plot_col(df_state, choice_col, (_RESPONSE_COL,))
-    df_state, choice_col = _with_plot_choice_left(df_state, choice_col)
+    choice_col = _resolve_plot_col(df_state, choice_col, ("response", "Choice"))
     empirical_smooth = None
     if weight_col is not None and weight_col in df_state.columns:
         empirical_smooth = _mean_weighted_empirical_curve(
@@ -1707,99 +1795,62 @@ def _psych_state_panel(
             weight_col=weight_col,
             grid=smooth_curve[0] if smooth_curve is not None else None,
         )
-    if bin_points:
-        summary = _binned_feature_summary(
-            df_state,
-            feature_col=ild_col,
-            choice_col=choice_col,
-            pred_col=pred_col,
-            subj_col=subj_col,
-            n_bins=n_bins,
-            weight_col=weight_col,
-        )
-        if summary is None:
-            return None, None
-        subj_agg, _ = summary
-        agg = (
-            subj_agg.groupby("_x_bin", observed=True)
-            .agg(
-                x=("center", "median"),
-                md=("data_mean", "mean"),
-                sd=("data_mean", "std"),
-                nd=("data_mean", "count"),
-                mm=("model_mean", "mean"),
+    if weight_col is not None and weight_col in df_state.columns:
+        _rows = []
+        for (subj, ild), grp in df_state.groupby([subj_col, ild_col], observed=True):
+            w = pd.to_numeric(grp[weight_col], errors="coerce").to_numpy(dtype=float)
+            y = pd.to_numeric(grp[choice_col], errors="coerce").to_numpy(dtype=float)
+            m = pd.to_numeric(grp[pred_col], errors="coerce").to_numpy(dtype=float)
+            mask = np.isfinite(w) & np.isfinite(y) & np.isfinite(m) & (w > 0)
+            if not np.any(mask):
+                continue
+            w = w[mask]
+            w_sum = float(w.sum())
+            if w_sum <= 0:
+                continue
+            _rows.append(
+                {
+                    subj_col: subj,
+                    ild_col: ild,
+                    "data_mean": float(np.dot(y[mask], w) / w_sum),
+                    "model_mean": float(np.dot(m[mask], w) / w_sum),
+                }
             )
-            .reset_index(drop=True)
-            .sort_values("x")
-        )
-        x = agg["x"].to_numpy(dtype=float)
-        md = agg["md"].to_numpy(dtype=float)
-        sd = agg["sd"].fillna(0.0).to_numpy(dtype=float)
-        nd = agg["nd"].clip(lower=1).to_numpy(dtype=float)
-        mm = agg["mm"].to_numpy(dtype=float)
-        sem_d = sd / np.sqrt(nd)
+        subj_agg = pd.DataFrame(_rows)
     else:
-        if weight_col is not None and weight_col in df_state.columns:
-            _rows = []
-            for (subj, ild), grp in df_state.groupby([subj_col, ild_col], observed=True):
-                w = pd.to_numeric(grp[weight_col], errors="coerce").to_numpy(dtype=float)
-                y = pd.to_numeric(grp[choice_col], errors="coerce").to_numpy(dtype=float)
-                m = pd.to_numeric(grp[pred_col], errors="coerce").to_numpy(dtype=float)
-                mask = np.isfinite(w) & np.isfinite(y) & np.isfinite(m) & (w > 0)
-                if not np.any(mask):
-                    continue
-                w = w[mask]
-                w_sum = float(w.sum())
-                if w_sum <= 0:
-                    continue
-                _rows.append(
-                    {
-                        subj_col: subj,
-                        ild_col: ild,
-                        "data_mean": float(np.dot(y[mask], w) / w_sum),
-                        "model_mean": float(np.dot(m[mask], w) / w_sum),
-                    }
-                )
-            subj_agg = pd.DataFrame(_rows)
-        else:
-            subj_agg = (
-                df_state.groupby([subj_col, ild_col], observed=True)
-                .agg(data_mean=(choice_col, "mean"), model_mean=(pred_col, "mean"))
-                .reset_index()
-            )
-        if subj_agg.empty:
-            return None, None
-        ilds = sorted(subj_agg[ild_col].unique())
-        x = np.array(ilds, dtype=float)
-        xticks = np.array(_resolve_ild_ticks(ilds, tick_ilds), dtype=float)
-
-        agg = (
-            subj_agg.groupby(ild_col)
-            .agg(
-                md=("data_mean", "mean"),
-                sd=("data_mean", "std"),
-                nd=("data_mean", "count"),
-                mm=("model_mean", "mean"),
-            )
-            .reindex(ilds)
+        subj_agg = (
+            df_state.groupby([subj_col, ild_col], observed=True)
+            .agg(data_mean=(choice_col, "mean"), model_mean=(pred_col, "mean"))
+            .reset_index()
         )
-        md = agg["md"].values
-        sd = agg["sd"].fillna(0).values
-        nd = agg["nd"].clip(lower=1).values
-        mm = agg["mm"].values
-        sem_d = sd / np.sqrt(nd)
+    if subj_agg.empty:
+        return None, None
+    ilds = sorted(subj_agg[ild_col].unique())
+    xpos = np.array(ilds, dtype=float)
+    xticks = np.array(_resolve_ild_ticks(ilds, tick_ilds), dtype=float)
+
+    agg = (
+        subj_agg.groupby(ild_col)
+        .agg(
+            md=("data_mean", "mean"),
+            sd=("data_mean", "std"),
+            nd=("data_mean", "count"),
+            mm=("model_mean", "mean"),
+        )
+        .reindex(ilds)
+    )
+    md = agg["md"].values
+    sd = agg["sd"].fillna(0).values
+    nd = agg["nd"].clip(lower=1).values
+    mm = agg["mm"].values
+    sem_d = sd / np.sqrt(nd)
 
     if show_subject_traces and background_style == "data":
         # per-subject individual traces (low alpha)
         for subj, grp in subj_agg.groupby(subj_col):
-            if bin_points:
-                grp = grp.sort_values("center")
-                xi = grp["center"].to_numpy(dtype=float)
-                yi = grp["data_mean"].to_numpy(dtype=float)
-            else:
-                grp_ilds = [i for i in ilds if i in grp[ild_col].values]
-                xi = np.array(grp_ilds, dtype=float)
-                yi = grp.set_index(ild_col).reindex(grp_ilds)["data_mean"].values
+            grp_ilds = [i for i in ilds if i in grp[ild_col].values]
+            xi = np.array(grp_ilds, dtype=float)
+            yi = grp.set_index(ild_col).reindex(grp_ilds)["data_mean"].values
             ax.plot(xi, yi, "-o", color=color, alpha=0.14, lw=1.1, ms=4.0, zorder=2)
     elif show_subject_traces and background_style == "model" and subject_curves is not None:
         for subj, curve in subject_curves.items():
@@ -1815,7 +1866,7 @@ def _psych_state_panel(
     data_h = None
     if show_weighted_points:
         data_h = ax.errorbar(
-            x,
+            xpos,
             md,
             yerr=sem_d,
             fmt="o",
@@ -1830,30 +1881,17 @@ def _psych_state_panel(
     # smooth sigmoid model line (if available) else aggregated p_pred
     if show_model_smooth and model_line_mode == "smooth" and smooth_curve is not None:
         ild_g, p_g = smooth_curve
-        # Clip the dense grid to the observed evidence range so the sigmoid
+        # Clip the dense grid to the observed ILD range so the sigmoid
         # doesn't extend far beyond the data and compress the visible area.
-        _x0, _x1 = float(np.nanmin(x)), float(np.nanmax(x))
+        _x0, _x1 = float(xticks[0]), float(xticks[-1])
         _clip = (ild_g >= _x0) & (ild_g <= _x1)
         (model_h,) = ax.plot(ild_g[_clip], p_g[_clip], "-", color=color, lw=2.3, zorder=6, label="_nolegend_")
     elif show_model_smooth:
-        (model_h,) = ax.plot(x, mm, "-", color=color, lw=2.3, zorder=6, label="_nolegend_")
+        (model_h,) = ax.plot(xpos, mm, "-", color=color, lw=2.3, zorder=6, label="_nolegend_")
     else:
         model_h = None
 
-    if bin_points:
-        ax.axhline(0.5, color="tab:gray", ls="--", lw=1.6)
-        ax.axvline(0.0, color="tab:gray", ls="--", lw=1.6)
-        ax.set_ylim([0, 1])
-        ax.set_yticks([0, 0.5, 1], [0, 0.5, 1])
-        ax.tick_params(axis="both", labelsize=11)
-        ax.xaxis.label.set_size(12)
-        ax.yaxis.label.set_size(12)
-        ax.title.set_size(13)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.set_xlim(float(np.nanmin(x)), float(np.nanmax(x)))
-    else:
-        _style_legacy_psych_axis(ax, xticks)
+    _style_legacy_psych_axis(ax, xticks)
     return data_h, model_h
 
 
@@ -1871,18 +1909,19 @@ def _regressor_state_panel(
     background_style: str = "data",
     subject_curves: Optional[dict] = None,
     n_bins: int = 9,
+    bin_edges: Optional[np.ndarray] = None,
+    bin_centers: Optional[np.ndarray] = None,
     weight_col: Optional[str] = None,
     show_weighted_points: bool = True,
     show_data_smooth: bool = True,
     show_model_smooth: bool = True,
     model_line_mode: str = "smooth",
 ) -> Tuple:
-    """Draw state-specific P(left) vs arbitrary regressor on ax."""
+    """Draw state-specific P(right) vs arbitrary regressor on ax."""
     if df_state.empty:
         return None, None
 
-    choice_col = _resolve_plot_col(df_state, choice_col, (_RESPONSE_COL,))
-    df_state, choice_col = _with_plot_choice_left(df_state, choice_col)
+    choice_col = _resolve_plot_col(df_state, choice_col, ("response", "Choice"))
     empirical_smooth = None
     if weight_col is not None and weight_col in df_state.columns:
         empirical_smooth = _mean_weighted_empirical_curve(
@@ -1901,6 +1940,8 @@ def _regressor_state_panel(
         subj_col,
         n_bins=n_bins,
         weight_col=weight_col,
+        bin_edges=bin_edges,
+        bin_centers=bin_centers,
     )
     if summary is None:
         return None, None
@@ -1975,7 +2016,25 @@ def _regressor_state_panel(
     ax.axhline(0.5, color="tab:gray", ls="--", lw=1.6)
     ax.axvline(0.0, color="tab:gray", ls="--", lw=1.6)
     ax.set_ylim(0, 1)
-    ax.set_yticks([0, 0.5, 1])
+    ax.set_yticks([0, 0.5, 1], [0, 0.5, 1])
+    ax.set_xlim([-1,1])
+    ax.set_xticks([-1,-0.5, 0, 0.5, 1], labels = ["-1", "0.5", "0", "0.5", "1"])
+    ax.xaxis.set_ticks_position("bottom")
+    ax.tick_params(
+        axis="x",
+        which="major",
+        bottom=True,
+        top=False,
+        direction="out",
+        length=7,
+        width=1.1,
+        color="#111827",
+        labelcolor="#111827",
+        pad=4,
+    )
+    ax.spines["bottom"].set_visible(True)
+    ax.spines["bottom"].set_linewidth(1.1)
+    ax.set_ylabel(f"$p(\mathrm{{right}})$")
     return data_h, model_h
 
 
@@ -1985,25 +2044,26 @@ def _regressor_state_panel(
 
 
 def prepare_predictions_df(df_pred):
-    """Prepare a Nuo auditory trial-level predictions DataFrame for plotting.
+    """Prepare a 2-AFC Trial-level predictions DataFrame for plotting.
 
     Accepts a polars or pandas DataFrame that already contains the per-Trial
     model predictions (``pL``, ``pR``) produced by the fit script.
 
     Expected input columns
     ----------------------
-    stimulus             : int  - correct side (0 = left, 1 = right)
-    response             : int  - subject choice from ``last_choice``
-    performance          : int/bool - trial correct (1) or incorrect (0)
-    total_evidence_strength : float - signed auditory evidence
+    Side / stimulus : int  - correct side (0 = left, 1 = right)
+    Choice / response : int  - animal's choice (0 = left, 1 = right)
+    Hit / performance : int/bool - trial correct (1) or incorrect (0)
     pL               : float - model P(left choice)
     pR               : float - model P(right choice)
 
     Added / ensured output columns
     ------------------------------
     correct_bool    : bool  - Trial accuracy
-    p_pred          : float - model P(left) used on the psychometric y-axis
-    p_model_correct : float - model P(correct stimulus)
+    p_pred          : float - model P(right)  → psychometric x-axis
+    p_model_correct : float - model P(correct Side)
+    stimulus / Side : int   - canonical aliases for correct side
+    response / Choice : int - canonical aliases for animal choice
 
     Returns
     -------
@@ -2019,19 +2079,35 @@ def prepare_predictions_df(df_pred):
     if _is_polars:
         df = df_pred.clone()
 
-        required = {"stimulus", _RESPONSE_COL, _PERFORMANCE_COL, _EVIDENCE_COL}
-        missing = sorted(required.difference(df.columns))
-        if missing:
-            raise ValueError(f"Missing required Nuo auditory columns: {missing}")
+        if "stimulus" not in df.columns:
+            if "Side" in df.columns:
+                df = df.with_columns(pl.col("Side").cast(pl.Int64).alias("stimulus"))
+            else:
+                raise ValueError("No 'Side' or 'stimulus' column found.")
+        if "Side" not in df.columns:
+            df = df.with_columns(pl.col("stimulus").cast(pl.Int64).alias("Side"))
+
+        if "response" not in df.columns:
+            if "Choice" in df.columns:
+                df = df.with_columns(pl.col("Choice").cast(pl.Int64).alias("response"))
+            else:
+                raise ValueError("No 'Choice' or 'response' column found.")
+        if "Choice" not in df.columns:
+            df = df.with_columns(pl.col("response").cast(pl.Int64).alias("Choice"))
 
         if "correct_bool" not in df.columns:
-            df = df.with_columns(pl.col(_PERFORMANCE_COL).cast(pl.Boolean).alias("correct_bool"))
+            if "Hit" in df.columns:
+                df = df.with_columns(pl.col("Hit").cast(pl.Boolean).alias("correct_bool"))
+            elif "performance" in df.columns:
+                df = df.with_columns(pl.col("performance").cast(pl.Boolean).alias("correct_bool"))
+            else:
+                raise ValueError("No 'Hit', 'performance', or 'correct_bool' column found.")
 
         if "pL" not in df.columns or "pR" not in df.columns:
             raise ValueError("Missing 'pL' or 'pR' columns (model predictions).")
 
         df = df.with_columns(
-            pl.col("pL").alias("p_pred"),
+            pl.col("pR").alias("p_pred"),
             pl.when(pl.col("stimulus") == 0).then(pl.col("pL")).otherwise(pl.col("pR")).alias("p_model_correct"),
         )
 
@@ -2041,18 +2117,34 @@ def prepare_predictions_df(df_pred):
         # pandas path
         df = df_pred.copy()
 
-        required = {"stimulus", _RESPONSE_COL, _PERFORMANCE_COL, _EVIDENCE_COL}
-        missing = sorted(required.difference(df.columns))
-        if missing:
-            raise ValueError(f"Missing required Nuo auditory columns: {missing}")
+        if "stimulus" not in df.columns:
+            if "Side" in df.columns:
+                df["stimulus"] = df["Side"].astype(int)
+            else:
+                raise ValueError("No 'Side' or 'stimulus' column found.")
+        if "Side" not in df.columns:
+            df["Side"] = df["stimulus"].astype(int)
+
+        if "response" not in df.columns:
+            if "Choice" in df.columns:
+                df["response"] = df["Choice"].astype(int)
+            else:
+                raise ValueError("No 'Choice' or 'response' column found.")
+        if "Choice" not in df.columns:
+            df["Choice"] = df["response"].astype(int)
 
         if "correct_bool" not in df.columns:
-            df["correct_bool"] = df[_PERFORMANCE_COL].astype(bool)
+            if "Hit" in df.columns:
+                df["correct_bool"] = df["Hit"].astype(bool)
+            elif "performance" in df.columns:
+                df["correct_bool"] = df["performance"].astype(bool)
+            else:
+                raise ValueError("No 'Hit', 'performance', or 'correct_bool' column found.")
 
         if "pL" not in df.columns or "pR" not in df.columns:
             raise ValueError("Missing 'pL' or 'pR' columns (model predictions).")
 
-        df["p_pred"] = df["pL"]
+        df["p_pred"] = df["pR"]
         df["p_model_correct"] = df.apply(lambda row: row["pL"] if row["stimulus"] == 0 else row["pR"], axis=1)
 
         return df
@@ -2092,15 +2184,17 @@ def plot_emission_weights_by_subject(
     all_w = []
     for idx, subj in enumerate(valid_subjs):
         ax = axes_s[idx // n_cols][idx % n_cols]
-        W_raw = views[subj].emission_weights
+        W_raw = -views[subj].emission_weights  # flip sign: raw W = logit(Left); -W = logit(Right) (intuitive)
         slbls = views[subj].state_name_by_idx
-        # reorder by rank so color index 0 = Engaged = green, 1 = Disengaged = orange
         rank_order = views[subj].state_idx_order  # [Engaged_k, Disengaged_k, ...]
         W = W_raw[rank_order]
         lbls = [slbls.get(k, f"S{k}") for k in rank_order]
+        W, lbls = _reorder_two_afc_emission_states(W, lbls)
+        colors = [_state_color(label, fallback_idx=i, K=K) for i, label in enumerate(lbls)]
         fn_subj = views[subj].feat_names or feat_names
-        plot_weights(W, fn_subj, state_labels=lbls, title=f"Subject {subj}", ax=ax)
-        all_w.append(np.asarray(W))  # rank-reordered so position k=0 = Engaged across all subjects
+        W_plot, fn_plot = _reorder_two_afc_emission_features(W, fn_subj)
+        plot_weights(W_plot, fn_plot, state_labels=lbls, state_colors=colors, title=f"Subject {subj}", ax=ax)
+        all_w.append(np.asarray(W))
 
     for idx in range(len(valid_subjs), n_rows * n_cols):
         axes_s[idx // n_cols][idx % n_cols].set_visible(False)
@@ -2130,18 +2224,27 @@ def plot_emission_weights_summary(
         return fig
 
     all_w = []
+    display_labels = None
     for subj in valid_subjs:
-        W_raw = views[subj].emission_weights
+        W_raw = -views[subj].emission_weights
         rank_order = views[subj].state_idx_order
-        all_w.append(np.asarray(W_raw[rank_order]))
+        slbls = views[subj].state_name_by_idx
+        lbls = [slbls.get(k, f"S{k}") for k in rank_order]
+        W_plot, lbls = _reorder_two_afc_emission_states(W_raw[rank_order], lbls)
+        if display_labels is None:
+            display_labels = lbls
+        all_w.append(np.asarray(W_plot))
 
     if len(all_w) > 1:
         W_stack = np.stack(all_w, axis=0)
         if W_stack.ndim == 3:
             W_stack = W_stack[:, :, None, :]
         fn = feat_names or (views[valid_subjs[0]].feat_names or [])
+        W_stack, fn = _reorder_two_afc_emission_features(W_stack, fn)
+        hue_order = display_labels or list(_hue_order[:K])
+        state_colors = [_state_color(label, fallback_idx=i, K=K) for i, label in enumerate(hue_order)]
         fig_multi = plot_weights_boxplot(
-            W_stack, fn, state_labels=_hue_order[:K], title=f"Emission weights - all subjects  (K={K})"
+            W_stack, fn, state_labels=hue_order, state_colors=state_colors, title=f"Emission weights - all subjects  (K={K})"
         )
     else:
         fig_multi = plot_emission_weights_by_subject(views=views, K=K)
@@ -2159,10 +2262,16 @@ def _prepare_emission_summary_arrays(
         return None, [], [], []
 
     all_w = []
+    display_labels = None
     for subj in valid_subjs:
-        W_raw = views[subj].emission_weights
+        W_raw = -views[subj].emission_weights
         rank_order = views[subj].state_idx_order
-        all_w.append(np.asarray(W_raw[rank_order]))
+        slbls = views[subj].state_name_by_idx
+        lbls = [slbls.get(k, f"S{k}") for k in rank_order]
+        W_plot, lbls = _reorder_two_afc_emission_states(W_raw[rank_order], lbls)
+        if display_labels is None:
+            display_labels = lbls
+        all_w.append(np.asarray(W_plot))
 
     if not all_w:
         return None, [], [], []
@@ -2171,7 +2280,8 @@ def _prepare_emission_summary_arrays(
     if W_stack.ndim == 3:
         W_stack = W_stack[:, :, None, :]
     fn = feat_names or (views[valid_subjs[0]].feat_names or [])
-    hue_order = list(_build_state_palette({s: v.state_name_by_idx for s, v in views.items()})[1][:K])
+    W_stack, fn = _reorder_two_afc_emission_features(W_stack, fn)
+    hue_order = display_labels or [f"State {k}" for k in range(K)]
     state_colors = [_state_color(label, fallback_idx=i, K=K) for i, label in enumerate(hue_order)]
     return W_stack, fn, hue_order, state_colors
 
@@ -2216,6 +2326,7 @@ def plot_emission_weights_summary_lineplot(
         markeredgewidth=0,
         alpha=0.85,
         errorbar="se",
+        err_kws={"edgecolor": "none", "linewidth": 0},
     )
     ax.axhline(0, color="k", lw=0.8, ls="--")
     ax.set_ylabel("Weight")
@@ -2260,10 +2371,8 @@ def plot_emission_weights_summary_boxplot(
         widths=hue_width * 0.9,
         patch_artist=True,
         showfliers=False,
-        boxprops={"facecolor": "white", "linewidth": 1.2},
-        whiskerprops={"color": "black", "linewidth": 1.1},
-        capprops={"color": "black", "linewidth": 0},
-        medianprops={"linewidth": 2.0},
+        showcaps=False,
+        zorder=0,
     )
     for patch in box["boxes"]:
         patch.set(facecolor="white", edgecolor="#666666", linewidth=1.1)
@@ -2271,7 +2380,7 @@ def plot_emission_weights_summary_boxplot(
         for artist in box[elem]:
             artist.set(color="#666666", linewidth=1.0)
     for idx, median in enumerate(box["medians"]):
-        median.set(color=state_colors[idx % n_states], linewidth=2.2)
+        median.set(color=state_colors[idx % n_states], linewidth=3)
 
     for feat_idx in range(n_features):
         for subj_idx in range(N):
@@ -2280,20 +2389,8 @@ def plot_emission_weights_summary_boxplot(
             for state_idx in range(n_states):
                 xs.append(feat_idx + (state_idx - (n_states - 1) / 2) * hue_width)
                 ys.append(W_avg[subj_idx, state_idx, feat_idx])
-            ax.plot(xs, ys, color="#7A7A7A", alpha=0.18, lw=0.8, zorder=0)
+            ax.plot(xs, ys, color="#7A7A7A", alpha=0.125, lw=1.5, zorder=5)
 
-    for feat_idx in range(n_features):
-        for state_idx in range(n_states):
-            x_pos = feat_idx + (state_idx - (n_states - 1) / 2) * hue_width
-            ax.scatter(
-                np.full(N, x_pos),
-                W_avg[:, state_idx, feat_idx],
-                color=state_colors[state_idx],
-                alpha=0.8,
-                s=22,
-                zorder=3,
-                linewidths=0,
-            )
     ax.axhline(0, color="k", lw=0.8, ls="--")
 
     def _star(pval: float) -> str:
@@ -2327,14 +2424,8 @@ def plot_emission_weights_summary_boxplot(
             offset_2 = (p2 - (n_states - 1) / 2) * hue_width
             x1 = feat_idx + offset_1
             x2 = feat_idx + offset_2
-            h = y_range * 0.02
-            ax.plot(
-                [x1, x1, x2, x2],
-                [current_y_offset, current_y_offset + h, current_y_offset + h, current_y_offset],
-                lw=1,
-                c="k",
-            )
-            ax.text((x1 + x2) / 2, current_y_offset + h, star, ha="center", va="bottom", color="k")
+            ax.plot([x1, x1, x2, x2], [current_y_offset, current_y_offset, current_y_offset, current_y_offset], lw=1, c="k")
+            ax.text((x1 + x2) / 2, current_y_offset, star, ha="center", va="bottom", color="k")
             current_y_offset += y_offset_step * 1.5
 
     ax.set_xticks(range(n_features))
@@ -2493,27 +2584,27 @@ def plot_state_accuracy(
     views: dict,
     trial_df,
     thresh: float = 0.5,
-    session_col: str = _SESSION_COL,
-    sort_col: str = _SORT_COL,
-    performance_col: str = _PERFORMANCE_COL,
-    stim_col: str = _EVIDENCE_COL,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
+    performance_col: str = "correct_bool",
+    stim_col: str = "ILD",
     **kwargs,
 ) -> Tuple[plt.Figure, pd.DataFrame]:
     return _plot_state_accuracy_common(
         views,
         trial_df,
         thresh=thresh,
-        performance_candidates=("correct_bool", performance_col),
-        stim_candidates=(stim_col, "stimulus"),
-        stim_label="Evidence≠0",
+        performance_candidates=(performance_col, "performance"),
+        stim_candidates=(stim_col, "stimulus", "ILD"),
+        stim_label="ILD≠0",
     )
 
 
 def plot_session_trajectories(
     views: dict,
     trial_df,
-    session_col: str = _SESSION_COL,
-    sort_col: str = _SORT_COL,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
     **kwargs,
 ) -> plt.Figure:
     return _plot_session_trajectories_common(
@@ -2539,8 +2630,8 @@ def plot_state_posterior_count_kde(
 def plot_change_triggered_posteriors_summary(
     views: dict,
     trial_df,
-    session_col: str = _SESSION_COL,
-    sort_col: str = _SORT_COL,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
     switch_posterior_threshold: float | None = None,
     window: int = 15,
     **kwargs,
@@ -2558,8 +2649,8 @@ def plot_change_triggered_posteriors_summary(
 def plot_change_triggered_posteriors_by_subject(
     views: dict,
     trial_df,
-    session_col: str = _SESSION_COL,
-    sort_col: str = _SORT_COL,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
     switch_posterior_threshold: float | None = None,
     window: int = 15,
     **kwargs,
@@ -2577,8 +2668,8 @@ def plot_change_triggered_posteriors_by_subject(
 def plot_state_occupancy(
     views: dict,
     trial_df,
-    session_col: str = _SESSION_COL,
-    sort_col: str = _SORT_COL,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
     **kwargs,
 ) -> plt.Figure:
     return _plot_state_occupancy_common(
@@ -2593,8 +2684,8 @@ def plot_state_occupancy(
 def plot_state_occupancy_overall_boxplot(
     views: dict,
     trial_df,
-    session_col: str = _SESSION_COL,
-    sort_col: str = _SORT_COL,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
     **kwargs,
 ) -> plt.Figure:
     return _plot_state_occupancy_overall_boxplot_common(
@@ -2673,8 +2764,8 @@ def plot_session_deepdive(
     trial_df,
     subj: str,
     sess,
-    session_col: str = _SESSION_COL,
-    sort_col: str = _SORT_COL,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
     switch_posterior_threshold: float | None = None,
     **kwargs,
 ) -> plt.Figure:
@@ -2686,9 +2777,9 @@ def plot_session_deepdive(
         session_col=session_col,
         sort_col=sort_col,
         switch_posterior_threshold=switch_posterior_threshold,
-        performance_candidates=("correct_bool", _PERFORMANCE_COL),
-        stim_candidates=(_EVIDENCE_COL, "stimulus"),
-        response_candidates=(_RESPONSE_COL,),
+        performance_candidates=("correct_bool", "performance"),
+        stim_candidates=("ILD", "stimulus"),
+        response_candidates=("response", "Choice"),
     )
 
 
@@ -2700,113 +2791,158 @@ def plot_session_deepdive(
 def plot_categorical_performance_all(
     df,
     model_name: str,
-    ild_col: str = _EVIDENCE_COL,
-    choice_col: str = _RESPONSE_COL,
+    ild_col: str = "ILD",
+    choice_col: str = "response",
     pred_col: str = "p_pred",
     subj_col: str = "subject",
-    cond_col: str = _CONDITION_COL,
-    exp_col: str = _EXPERIMENT_COL,
+    cond_col: str = "condition",
+    exp_col: str = "experiment",
     views: Optional[dict] = None,
     X_cols: Optional[Sequence[str]] = None,
     ild_max: Optional[float] = None,
     background_style: str = "data",
-    n_bins: int = 9,
 ) -> plt.Figure:
-    """Overall psychometric P(left) vs evidence strength.
+    """Overall psychometric + by-condition + by-experiment panels.
 
-    The Nuo non-state view is a single pooled panel. Empirical means use the
-    modeled response column and the data are binned over the evidence axis
-    before pooling across subjects.
+    2AFC equivalent of plots.plot_categorical_performance_all.
+
+    Panels
+    ------
+    a) Overall      - P(right) vs ILD, all trials pooled
+    b) By condition - separate curves per rest / saline / drug
+                      (skipped if 'condition' column absent)
+    c) By experiment - separate curves per experiment batch
+
+    Parameters
+    ----------
+    df         : Polars or pandas DataFrame with Trial-level predictions.
+                 Must contain: ILD, response/Choice (0/1), p_pred, subject.
+                 The default model overlay is ``p_pred`` because this figure
+                 shows psychometrics, i.e. P(rightward choice), not accuracy.
+    model_name : String for figure suptitle.
+    ild_max    : Optional explicit normalisation scale. When omitted, the
+                 maximum absolute ILD in ``df[ild_col]`` is used.
+
+    Returns
+    -------
+    fig
     """
     if hasattr(df, "to_pandas"):
         df_pd = df.to_pandas()
     else:
         df_pd = df.copy()
-    df_pd, choice_col = _with_plot_choice_left(df_pd, choice_col)
+    ild_max = _resolve_ild_max(df_pd, ild_col, ild_max)
+    ild_ticks = (
+        sorted(pd.to_numeric(df_pd[ild_col], errors="coerce").dropna().unique()) if ild_col in df_pd.columns else []
+    )
 
-    summary = _binned_feature_summary(
+    has_cond = cond_col in df_pd.columns
+    has_exp = exp_col in df_pd.columns
+    n_panels = 1 + int(has_cond) + int(has_exp)
+
+    # Pre-compute smooth GLM sigmoid averaged over all subjects
+    _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
+
+    # Build arrays_store-compatible dict for _mean_glm_curve.
+    # Reorder axes so that state index == rank (0=Engaged, …) for consistency.
+    def _rank_ordered_as(v):
+        _order = sorted(v.state_rank_by_idx, key=lambda ki: v.state_rank_by_idx[ki])
+        return {
+            "emission_weights": v.emission_weights[_order],
+            "X_cols": v.feat_names,
+            "X": v.X,
+            "smoothed_probs": v.smoothed_probs[:, _order],
+            "lapse_rates": v.lapse_rates,
+        }
+
+    _as = {s: _rank_ordered_as(v) for s, v in views.items()} if views is not None else None
+    _smooth_all = _mean_glm_curve(_as, _all_subjects, X_cols, ild_max=ild_max) if _as is not None else None
+    _subject_curves_all = (
+        _subject_glm_curves(_as, _all_subjects, X_cols, ild_max=ild_max) if _as is not None and background_style == "model" else None
+    )
+
+    fig, axes = plt.subplots(1, n_panels, figsize=(4 * n_panels, 4), sharey=True)
+    axes = np.atleast_1d(axes)
+    ax_idx = 0
+
+    # a) Overall
+    _psych_panel(
+        axes[ax_idx],
         df_pd,
-        feature_col=ild_col,
+        ild_col=ild_col,
         choice_col=choice_col,
         pred_col=pred_col,
         subj_col=subj_col,
-        n_bins=n_bins,
-    )
-    if summary is None:
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, "No valid psychometric data", ha="center", va="center")
-        ax.axis("off")
-        return fig, None
-
-    subj_agg, _ = summary
-    agg = (
-        subj_agg.groupby("_x_bin", observed=True)
-        .agg(
-            x=("center", "median"),
-            md=("data_mean", "mean"),
-            sd=("data_mean", "std"),
-            nd=("data_mean", "count"),
-            mm=("model_mean", "mean"),
-        )
-        .reset_index(drop=True)
-        .sort_values("x")
-    )
-    x = agg["x"].to_numpy(dtype=float)
-    md = agg["md"].to_numpy(dtype=float)
-    sd = agg["sd"].fillna(0.0).to_numpy(dtype=float)
-    nd = agg["nd"].clip(lower=1).to_numpy(dtype=float)
-    mm = agg["mm"].to_numpy(dtype=float)
-    sem_d = sd / np.sqrt(nd)
-
-    fig, ax = plt.subplots(1, 1, figsize=(4, 4), sharey=True)
-    if background_style == "data":
-        for _, grp in subj_agg.groupby(subj_col, observed=True):
-            grp = grp.sort_values("center")
-            ax.plot(
-                grp["center"].to_numpy(dtype=float),
-                grp["data_mean"].to_numpy(dtype=float),
-                "-o",
-                color="#2b7bba",
-                alpha=0.15,
-                lw=1.1,
-                ms=4.0,
-                zorder=2,
-            )
-    elif background_style == "model":
-        for _, grp in subj_agg.groupby(subj_col, observed=True):
-            grp = grp.sort_values("center")
-            ax.plot(
-                grp["center"].to_numpy(dtype=float),
-                grp["model_mean"].to_numpy(dtype=float),
-                "-",
-                color="black",
-                alpha=0.12,
-                lw=1.2,
-                zorder=2,
-            )
-
-    ax.plot(x, mm, "-", color="black", lw=2.3, zorder=6, label="Model")
-    ax.errorbar(
-        x,
-        md,
-        yerr=sem_d,
-        fmt="o",
+        title="a) Overall psychometric",
+        xlabel="ILD (dB)",
+        ylabel="P(Right)",
         color="#2b7bba",
-        ecolor="#2b7bba",
-        elinewidth=1.5,
-        capsize=0,
-        ms=5.8,
-        zorder=5,
-        label="Data",
+        smooth_curve=_smooth_all,
+        background_style=background_style,
+        subject_curves=_subject_curves_all,
+        tick_ilds=ild_ticks,
     )
-    ax.axhline(0.5, color="tab:gray", ls="--", lw=1.6)
-    ax.axvline(0.0, color="tab:gray", ls="--", lw=1.6)
-    ax.set_ylim(0, 1)
-    ax.set_yticks([0, 0.5, 1])
-    ax.set_xlabel("Evidence strength")
-    ax.set_ylabel("P(Left)")
-    ax.set_title("Overall psychometric")
-    ax.legend(frameon=False, fontsize=8)
+    ax_idx += 1
+
+    # b) By condition
+    if has_cond:
+        conds = sorted(df_pd[cond_col].dropna().unique())
+        cond_colors = {"rest": "#444444", "saline": "#1f77b4", "drug": "#d62728"}
+        for cond in conds:
+            _cond_subjs = list(df_pd[df_pd[cond_col] == cond][subj_col].unique())
+            _smooth_cond = _mean_glm_curve(_as, _cond_subjs, X_cols, ild_max=ild_max) if _as is not None else None
+            _subject_curves_cond = (
+                _subject_glm_curves(_as, _cond_subjs, X_cols, ild_max=ild_max)
+                if _as is not None and background_style == "model"
+                else None
+            )
+            _psych_panel(
+                axes[ax_idx],
+                df_pd[df_pd[cond_col] == cond],
+                ild_col=ild_col,
+                choice_col=choice_col,
+                pred_col=pred_col,
+                subj_col=subj_col,
+                title=f"b) {cond}",
+                xlabel="ILD (dB)",
+                color=cond_colors.get(cond, "k"),
+                smooth_curve=_smooth_cond,
+                background_style=background_style,
+                subject_curves=_subject_curves_cond,
+                tick_ilds=ild_ticks,
+            )
+        ax_idx += 1
+
+    # c) By experiment
+    if has_exp:
+        exps = sorted(df_pd[exp_col].dropna().unique())
+        exp_palette = sns.color_palette("Set2", len(exps))
+        for ei, exp in enumerate(exps):
+            _exp_subjs = list(df_pd[df_pd[exp_col] == exp][subj_col].unique())
+            _smooth_exp = _mean_glm_curve(_as, _exp_subjs, X_cols, ild_max=ild_max) if _as is not None else None
+            _subject_curves_exp = (
+                _subject_glm_curves(_as, _exp_subjs, X_cols, ild_max=ild_max)
+                if _as is not None and background_style == "model"
+                else None
+            )
+            _psych_panel(
+                axes[ax_idx],
+                df_pd[df_pd[exp_col] == exp],
+                ild_col=ild_col,
+                choice_col=choice_col,
+                pred_col=pred_col,
+                subj_col=subj_col,
+                title=f"c) {exp}",
+                xlabel="ILD (dB)",
+                color=exp_palette[ei],
+                smooth_curve=_smooth_exp,
+                background_style=background_style,
+                subject_curves=_subject_curves_exp,
+                tick_ilds=ild_ticks,
+            )
+
+    for ax in axes:
+        ax.legend(frameon=False, fontsize=8)
     sns.despine(fig=fig)
     fig.suptitle(model_name, y=1.02)
     fig.tight_layout()
@@ -2817,8 +2953,8 @@ def plot_categorical_performance_all_by_state(
     df,
     views: dict,
     model_name: str,
-    ild_col: str = _EVIDENCE_COL,
-    choice_col: str = _RESPONSE_COL,
+    ild_col: str = "ILD",
+    choice_col: str = "response",
     pred_col: str = "p_pred",
     subj_col: str = "subject",
     X_cols: Optional[Sequence[str]] = None,
@@ -2831,11 +2967,12 @@ def plot_categorical_performance_all_by_state(
     overlay_only: bool = False,
     model_line_mode: str = "smooth",
     state_assignment_mode: str = "weighted",
-    n_bins: int = 9,
 ) -> plt.Figure:
     """Per-state psychometric grid (K panels, one per state).
 
-    Each state gets its own panel showing P(left) vs evidence strength; data (markers) and
+    2AFC equivalent of plots.plot_categorical_performance_by_state.
+
+    Each state gets its own panel showing P(right) vs ILD; data (markers) and
     model prediction (lines) are drawn in the state's colour.
 
     Parameters
@@ -2846,7 +2983,7 @@ def plot_categorical_performance_all_by_state(
     views  : {subj: SubjectFitView} as produced by build_views.
     model_name : string used as figure suptitle.
     ild_max : Optional explicit normalisation scale. When omitted, the
-              maximum absolute evidence value in ``df[ild_col]`` is used.
+              maximum absolute ILD in ``df[ild_col]`` is used.
 
     Returns
     -------
@@ -2875,7 +3012,7 @@ def plot_categorical_performance_all_by_state(
     df_pd["_state_k"] = _arr
     if state_assignment_mode == "weighted":
         df_pd = _attach_rank_posterior_cols(df_pd, views, subj_col=subj_col)
-        df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pL_state")
+        df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pR_state")
 
     # Resolve labels: {rank: label} merged across all subjects
     slbls: dict[int, str] = {}
@@ -2898,8 +3035,7 @@ def plot_categorical_performance_all_by_state(
 
     _as = {s: _rank_ordered_as(v) for s, v in views.items()}
 
-    ilds = sorted(df_pd[ild_col].dropna().unique())
-    panel_w = 3
+    panel_w = 4
 
     # ── K-panel grid ──────────────────────────────────────────────────────────
     _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
@@ -2944,7 +3080,7 @@ def plot_categorical_performance_all_by_state(
                 _df_state,
                 ild_col,
                 choice_col,
-                pred_col=f"_pL_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
+                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -2958,15 +3094,12 @@ def plot_categorical_performance_all_by_state(
                 show_data_smooth=show_data_smooth,
                 show_model_smooth=show_model_smooth,
                 model_line_mode=model_line_mode,
-                bin_points=True,
-                n_bins=n_bins,
             )
         _ax_overlay.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
         _ax_overlay.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
         _ax_overlay.set_ylim(0, 1)
         _ax_overlay.set_yticks([0, 0.5, 1])
-        _ax_overlay.set_xlabel("Evidence strength")
-        _ax_overlay.set_ylabel("p(left)")
+        _ax_overlay.set_xlabel("Stimulus ILD (dB)")
         _ax_overlay.set_title("")
         _ax_overlay.legend(frameon=False, fontsize=8)
 
@@ -2983,7 +3116,7 @@ def plot_categorical_performance_all_by_state(
                 _df_state,
                 ild_col,
                 choice_col,
-                pred_col=f"_pL_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
+                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -2996,20 +3129,18 @@ def plot_categorical_performance_all_by_state(
                 show_data_smooth=show_data_smooth,
                 show_model_smooth=show_model_smooth,
                 model_line_mode=model_line_mode,
-                bin_points=True,
-                n_bins=n_bins,
             )
             ax.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
             ax.set_ylim(0, 1)
             ax.set_yticks([0, 0.5, 1])
-            ax.set_xlabel("Evidence strength")
+            ax.set_xlabel("ILD (dB)")
             ax.set_title(lbl)
             if k == 0:
-                ax.set_ylabel("P(Left)")
+                ax.set_ylabel("P(Right)")
             else:
                 ax.set_ylabel("")
 
-    fig.suptitle(model_name, y=1.02)
+    # fig.suptitle(model_name, y=1.02)
     sns.despine(fig=fig)
     fig.tight_layout()
     return fig, None
@@ -3024,7 +3155,7 @@ def plot_regressor_psychometric_by_state(
     views: dict,
     model_name: str,
     feature_col: str = "at_choice",
-    choice_col: str = _RESPONSE_COL,
+    choice_col: str = "response",
     subj_col: str = "subject",
     X_cols: Optional[Sequence[str]] = None,
     feature_min: Optional[float] = None,
@@ -3042,10 +3173,10 @@ def plot_regressor_psychometric_by_state(
 ) -> plt.Figure:
     """Per-state partial-dependence plot for any emission regressor.
 
-    The x-axis is the chosen regressor (for example ``at_choice``). Empirical
-    points are pooled within quantile bins of that regressor, while the model
-    line sweeps the same regressor over a dense grid and marginalises over the
-    empirical distribution of the remaining features.
+    The x-axis is the chosen regressor (for example ``at_choice``) instead of
+    ILD. Empirical points are pooled within quantile bins of that regressor,
+    while the model line sweeps the same regressor over a dense grid and
+    marginalises over the empirical distribution of the remaining features.
     """
     if hasattr(df, "to_pandas"):
         df_pd = df.to_pandas().reset_index(drop=True)
@@ -3073,7 +3204,11 @@ def plot_regressor_psychometric_by_state(
     df_pd["_state_k"] = _arr
     if state_assignment_mode == "weighted":
         df_pd = _attach_rank_posterior_cols(df_pd, views, subj_col=subj_col)
-        df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pL_state")
+        df_pd = _attach_rank_state_model_cols(df_pd, views, subj_col=subj_col, base_col="pR_state")
+    _global_bin_edges, _global_bin_centers = _quantile_bin_spec(
+        df_pd[feature_col].to_numpy(dtype=float),
+        n_bins=n_bins,
+    )
 
     if feature_min is None:
         feature_min = float(np.nanmin(df_pd[feature_col].to_numpy(dtype=float)))
@@ -3157,8 +3292,7 @@ def plot_regressor_psychometric_by_state(
     _n_panels = K + int(_include_overlay)
     if overlay_only:
         _n_panels = 1
-    panel_w, panel_h = _legacy_square_panel_size(n_cols=2)
-    _figsize = (3, 3) if overlay_only else (panel_w * _n_panels, panel_h)
+    _figsize = (3, 3) if overlay_only else (4 * _n_panels, 4)
     fig, axes = plt.subplots(1, _n_panels, figsize=_figsize, sharey=True, dpi=figure_dpi)
     axes = np.atleast_1d(axes)
 
@@ -3178,7 +3312,7 @@ def plot_regressor_psychometric_by_state(
                 _df_state,
                 feature_col,
                 choice_col,
-                pred_col=f"_pL_state_rank_{k}" if state_assignment_mode == "weighted" else "p_pred",
+                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else "p_pred",
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -3187,6 +3321,8 @@ def plot_regressor_psychometric_by_state(
                 background_style=background_style,
                 subject_curves=_subject_curves_by_k.get(k),
                 n_bins=n_bins,
+                bin_edges=_global_bin_edges,
+                bin_centers=_global_bin_centers,
                 weight_col=_weight_col,
                 show_weighted_points=show_weighted_points,
                 show_data_smooth=show_data_smooth,
@@ -3194,7 +3330,7 @@ def plot_regressor_psychometric_by_state(
                 model_line_mode=model_line_mode,
             )
         _ax_overlay.set_xlabel(xlabel)
-        _ax_overlay.set_ylabel("p(left)")
+        _ax_overlay.set_ylabel(f"$p(\mathrm{{right}})$")
         _ax_overlay.set_title("")
         _ax_overlay.legend(frameon=False, fontsize=8)
 
@@ -3211,7 +3347,7 @@ def plot_regressor_psychometric_by_state(
                 _df_state,
                 feature_col,
                 choice_col,
-                pred_col=f"_pL_state_rank_{k}" if state_assignment_mode == "weighted" else "p_pred",
+                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else "p_pred",
                 subj_col=subj_col,
                 color=color,
                 label=lbl,
@@ -3219,6 +3355,8 @@ def plot_regressor_psychometric_by_state(
                 background_style=background_style,
                 subject_curves=_subject_curves_by_k.get(k),
                 n_bins=n_bins,
+                bin_edges=_global_bin_edges,
+                bin_centers=_global_bin_centers,
                 weight_col=_weight_col,
                 show_weighted_points=show_weighted_points,
                 show_data_smooth=show_data_smooth,
@@ -3226,13 +3364,13 @@ def plot_regressor_psychometric_by_state(
                 model_line_mode=model_line_mode,
             )
             ax.set_xlabel(xlabel)
-            ax.set_title(lbl)
+            # ax.set_title(lbl)
             if k == 0:
-                ax.set_ylabel("P(Left)")
+                ax.set_ylabel("P(Right)")
             else:
                 ax.set_ylabel("")
 
-    fig.suptitle(f"{model_name} — {_feature_label(feature_col)} psychometric", y=1.02)
+    # fig.suptitle(f"{model_name} — {_feature_label(feature_col)} psychometric", y=1.02)
     sns.despine(fig=fig)
     fig.tight_layout()
     return fig, None

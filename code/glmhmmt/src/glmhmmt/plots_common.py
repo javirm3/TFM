@@ -505,6 +505,7 @@ def _plot_change_triggered_mean(
         np.clip(engaged_mean + engaged_sem, 0.0, 1.0),
         color=engaged_color,
         alpha=0.2,
+        edgecolor="none",
     )
     ax.plot(x, disengaged_mean, color=disengaged_color, lw=2.0, label=f"P({disengaged_label})")
     ax.fill_between(
@@ -513,6 +514,7 @@ def _plot_change_triggered_mean(
         np.clip(disengaged_mean + disengaged_sem, 0.0, 1.0),
         color=disengaged_color,
         alpha=0.16,
+        edgecolor="none",
     )
     ax.axvline(0, color="black", linestyle="--", linewidth=1.0, alpha=0.65)
     tick_start = int(np.ceil(x[0] / 5.0) * 5)
@@ -870,13 +872,13 @@ def plot_change_triggered_posteriors_summary(
             disengaged_color=disengaged_color,
             title=f"{direction_title}  (n={len(engaged_subject_means)} subjects, {total_changes} changes)",
         )
-        ax.set_xlabel("Trials relative to confident state change")
+        ax.set_xlabel("Trials relative to state change")
 
     if len(directions) > 1:
         axes[0, 1].set_ylabel("")
-    axes[0, 0].set_xlabel("Trials relative to confident state change")
+    axes[0, 0].set_xlabel("Trials relative to state change")
     if len(directions) > 1:
-        axes[0, 1].set_xlabel("Trials relative to confident state change")
+        axes[0, 1].set_xlabel("Trials relative to state change")
     sns.despine(fig=fig)
     fig.tight_layout()
     return fig
@@ -957,44 +959,25 @@ def plot_change_triggered_posteriors_by_subject(
     return fig
 
 
-def plot_state_occupancy(
-    views: dict,
-    trial_df,
-    *,
-    session_col: str = "session",
-    sort_col: str | None = None,
-    switch_posterior_threshold: float | None = None,
-) -> plt.Figure:
-    if switch_posterior_threshold is not None:
-        switch_posterior_threshold = float(switch_posterior_threshold)
-        if not 0.0 <= switch_posterior_threshold <= 1.0:
-            raise ValueError("switch_posterior_threshold must be between 0 and 1.")
+def _grouped_state_occupancy_values(records: list[dict], labels: list[str]) -> list[np.ndarray]:
+    if not records:
+        return [np.array([], dtype=float) for _ in labels]
+    df = pd.DataFrame(records)
+    return [
+        df.loc[df["state_label"] == lbl, "occupancy"].to_numpy(dtype=float)
+        for lbl in labels
+    ]
 
-    subjects = list(views.keys())
-    if not subjects:
-        fig, ax = plt.subplots()
+
+def _plot_state_occupancy_distribution(
+    ax: plt.Axes,
+    grouped_vals: list[np.ndarray],
+    labels: list[str],
+    colors: list[str],
+) -> None:
+    if not any(np.asarray(vals, dtype=float).size for vals in grouped_vals):
         ax.text(0.5, 0.5, "No data", ha="center", va="center")
-        return fig
-
-    n_rows = len(subjects) + 1
-    fig, axes = plt.subplots(n_rows, 3, figsize=(14, 3.8 * n_rows), squeeze=False)
-
-    first_view = views[subjects[0]]
-    _, labels_all, colors_all = _state_labels_and_colors(first_view)
-    overall_records: list[dict] = []
-    session_records: list[dict] = []
-    switch_records: list[dict] = []
-
-    def _grouped_state_values(records: list[dict], labels: list[str]) -> list[np.ndarray]:
-        if not records:
-            return [np.array([], dtype=float) for _ in labels]
-        df = pd.DataFrame(records)
-        return [
-            df.loc[df["state_label"] == lbl, "occupancy"].to_numpy(dtype=float)
-            for lbl in labels
-        ]
-
-    def _plot_overall_distribution(ax, grouped_vals: list[np.ndarray], labels: list[str], colors: list[str]) -> None:
+    else:
         custom_boxplot(
             ax,
             grouped_vals,
@@ -1003,171 +986,298 @@ def plot_state_occupancy(
             median_colors=colors,
             showfliers=False,
         )
-        ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels,)
-        ax.set_ylim(0, 1)
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels)
+    ax.set_ylim(0, 1)
 
-    def _plot_session_violin(ax, grouped_vals: list[np.ndarray], labels: list[str], colors: list[str]) -> None:
-        valid = [
-            (pos, np.asarray(vals, dtype=float), color)
-            for pos, (vals, color) in enumerate(zip(grouped_vals, colors, strict=False))
-            if np.asarray(vals, dtype=float).size > 0
-        ]
-        if valid:
-            positions, values, violin_colors = zip(*valid, strict=False)
-            violin = ax.violinplot(
-                list(values),
-                positions=list(positions),
-                widths=0.5,
-                showmeans=False,
-                showmedians=True,
-                showextrema=False,
-            )
-            for body, color in zip(violin["bodies"], violin_colors, strict=False):
-                body.set_facecolor(color)
-                body.set_edgecolor(color)
-                body.set_alpha(0.25)
-                body.set_linewidth(1.0)
-            violin["cmedians"].set_color("#666666")
-            violin["cmedians"].set_linewidth(1.1)
-        ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels)
-        ax.set_ylim(0, 1)
 
-    def _count_switches(p_s: np.ndarray) -> int:
-        return int(len(_confident_change_event_indices(p_s, switch_posterior_threshold)))
-
-    def _plot_switch_hist(ax, changes_per_sess: list[int], title: str) -> None:
-        xlabel = "# state switches / session"
-        if not changes_per_sess:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center")
-            ax.set_title(title)
-            ax.set_xlabel(xlabel)
-            return
-        max_chg = max(changes_per_sess)
-        ax.hist(
-            changes_per_sess,
-            bins=np.arange(-0.5, max_chg + 1.5, 1.0),
-            color="#888888",
-            alpha=0.75,
-            edgecolor="white",
+def _plot_state_occupancy_session_violin(
+    ax: plt.Axes,
+    grouped_vals: list[np.ndarray],
+    labels: list[str],
+    colors: list[str],
+) -> None:
+    valid = [
+        (pos, np.asarray(vals, dtype=float), color)
+        for pos, (vals, color) in enumerate(zip(grouped_vals, colors, strict=False))
+        if np.asarray(vals, dtype=float).size > 0
+    ]
+    if valid:
+        positions, values, violin_colors = zip(*valid, strict=False)
+        violin = ax.violinplot(
+            list(values),
+            positions=list(positions),
+            widths=0.5,
+            showmeans=False,
+            showmedians=True,
+            showextrema=False,
         )
-        ax.set_xlim(-0.5, max_chg + 0.5)
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel("# sessions")
+        for body, color in zip(violin["bodies"], violin_colors, strict=False):
+            body.set_facecolor(color)
+            body.set_edgecolor(color)
+            body.set_alpha(0.25)
+            body.set_linewidth(1.0)
+        violin["cmedians"].set_color("#666666")
+        violin["cmedians"].set_linewidth(1.1)
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels)
+    ax.set_ylim(0, 1)
+
+
+def _plot_state_switch_hist(ax: plt.Axes, changes_per_sess: list[int], title: str) -> None:
+    xlabel = "# state switches / session"
+    if not changes_per_sess:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
         ax.set_title(title)
+        ax.set_xlabel(xlabel)
+        return
+    max_chg = max(changes_per_sess)
+    ax.hist(
+        changes_per_sess,
+        bins=np.arange(-0.5, max_chg + 1.5, 1.0),
+        color="#888888",
+        alpha=0.75,
+        edgecolor="white",
+    )
+    ax.set_xlim(-0.5, max_chg + 0.5)
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("# sessions")
+    ax.set_title(title)
 
-    def _subject_occupancy_summary(subj: str, view) -> dict | None:
-        df_sub = _sort_subject_trials(_subject_df(trial_df, subj), session_col, sort_col)
-        if df_sub is None or session_col not in df_sub.columns:
-            return None
 
-        P = np.asarray(view.smoothed_probs)
-        sess_arr = np.asarray(df_sub[session_col])
-        T = min(len(P), len(sess_arr))
-        if T == 0:
-            return None
+def _subject_state_occupancy_summary(
+    subj: str,
+    view,
+    trial_df,
+    *,
+    session_col: str,
+    sort_col: str | None,
+    switch_posterior_threshold: float | None,
+) -> dict | None:
+    df_sub = _sort_subject_trials(_subject_df(trial_df, subj), session_col, sort_col)
+    if df_sub is None or session_col not in df_sub.columns:
+        return None
 
-        P, sess_arr = P[:T], sess_arr[:T]
-        rank_order, labels, colors = _state_labels_and_colors(view)
-        overall = np.mean(P[:, rank_order], axis=0)
-        overall_rows = [
-            {
-                "subject": subj,
-                "state_idx": int(k),
-                "state_label": label,
-                "occupancy": float(occ),
-            }
-            for k, label, occ in zip(rank_order, labels, overall, strict=False)
-        ]
+    P = np.asarray(view.smoothed_probs)
+    sess_arr = np.asarray(df_sub[session_col])
+    T = min(len(P), len(sess_arr))
+    if T == 0:
+        return None
 
-        session_rows: list[dict] = []
-        switch_rows: list[dict] = []
-        changes_per_sess: list[int] = []
-        for sess in np.unique(sess_arr):
-            p_s = P[sess_arr == sess]
-            if len(p_s) == 0:
-                continue
-            n_changes = _count_switches(p_s)
-            changes_per_sess.append(n_changes)
-            switch_rows.append({"subject": subj, "session": sess, "switches": n_changes})
-            session_occ = np.mean(p_s[:, rank_order], axis=0)
-            for k, label, occ_s in zip(rank_order, labels, session_occ, strict=False):
-                session_rows.append(
-                    {
-                        "subject": subj,
-                        "session": sess,
-                        "state_idx": int(k),
-                        "state_label": label,
-                        "occupancy": float(occ_s),
-                    }
-                )
-
-        return {
-            "labels": labels,
-            "colors": colors,
-            "overall": overall,
-            "overall_rows": overall_rows,
-            "session_rows": session_rows,
-            "switch_rows": switch_rows,
-            "changes_per_sess": changes_per_sess,
+    P, sess_arr = P[:T], sess_arr[:T]
+    rank_order, labels, colors = _state_labels_and_colors(view)
+    overall = np.mean(P[:, rank_order], axis=0)
+    overall_rows = [
+        {
+            "subject": subj,
+            "state_idx": int(k),
+            "state_label": label,
+            "occupancy": float(occ),
         }
+        for k, label, occ in zip(rank_order, labels, overall, strict=False)
+    ]
+
+    session_rows: list[dict] = []
+    switch_rows: list[dict] = []
+    changes_per_sess: list[int] = []
+    for sess in np.unique(sess_arr):
+        p_s = P[sess_arr == sess]
+        if len(p_s) == 0:
+            continue
+        n_changes = int(len(_confident_change_event_indices(p_s, switch_posterior_threshold)))
+        changes_per_sess.append(n_changes)
+        switch_rows.append({"subject": subj, "session": sess, "switches": n_changes})
+        session_occ = np.mean(p_s[:, rank_order], axis=0)
+        for k, label, occ_s in zip(rank_order, labels, session_occ, strict=False):
+            session_rows.append(
+                {
+                    "subject": subj,
+                    "session": sess,
+                    "state_idx": int(k),
+                    "state_label": label,
+                    "occupancy": float(occ_s),
+                }
+            )
+
+    return {
+        "labels": labels,
+        "colors": colors,
+        "overall": overall,
+        "overall_rows": overall_rows,
+        "session_rows": session_rows,
+        "switch_rows": switch_rows,
+        "changes_per_sess": changes_per_sess,
+    }
+
+
+def _prepare_state_occupancy_summaries(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str,
+    sort_col: str | None,
+    switch_posterior_threshold: float | None,
+) -> dict:
+    if switch_posterior_threshold is not None:
+        switch_posterior_threshold = float(switch_posterior_threshold)
+        if not 0.0 <= switch_posterior_threshold <= 1.0:
+            raise ValueError("switch_posterior_threshold must be between 0 and 1.")
+
+    subjects = list(views.keys())
+    if not subjects:
+        return {"subjects": []}
+
+    _, labels_all, colors_all = _state_labels_and_colors(views[subjects[0]])
+    overall_records: list[dict] = []
+    session_records: list[dict] = []
+    switch_records: list[dict] = []
+    subject_summaries: dict[str, dict | None] = {}
+
+    for subj in subjects:
+        summary = _subject_state_occupancy_summary(
+            subj,
+            views[subj],
+            trial_df,
+            session_col=session_col,
+            sort_col=sort_col,
+            switch_posterior_threshold=switch_posterior_threshold,
+        )
+        subject_summaries[subj] = summary
+        if summary is None:
+            continue
+        overall_records.extend(summary["overall_rows"])
+        session_records.extend(summary["session_rows"])
+        switch_records.extend(summary["switch_rows"])
+
+    return {
+        "subjects": subjects,
+        "labels_all": labels_all,
+        "colors_all": colors_all,
+        "overall_records": overall_records,
+        "session_records": session_records,
+        "switch_records": switch_records,
+        "subject_summaries": subject_summaries,
+    }
+
+
+def plot_state_occupancy_overall_boxplot(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | None = None,
+    switch_posterior_threshold: float | None = None,
+) -> plt.Figure:
+    summary = _prepare_state_occupancy_summaries(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
+    )
+    if not summary["subjects"]:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    labels_all = summary["labels_all"]
+    colors_all = summary["colors_all"]
+    fig, ax = plt.subplots(figsize=(max(5.0, 1.8 * len(labels_all)), 4.2))
+    _plot_state_occupancy_distribution(
+        ax,
+        _grouped_state_occupancy_values(summary["overall_records"], labels_all),
+        labels_all,
+        colors_all,
+    )
+    ax.set_ylabel("Fractional occupancy")
+    ax.set_title("All selected subjects - overall occupancy")
+    fig.tight_layout()
+    sns.despine(fig=fig)
+    return fig
+
+
+def plot_state_occupancy(
+    views: dict,
+    trial_df,
+    *,
+    session_col: str = "session",
+    sort_col: str | None = None,
+    switch_posterior_threshold: float | None = None,
+) -> plt.Figure:
+    summary = _prepare_state_occupancy_summaries(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        switch_posterior_threshold=switch_posterior_threshold,
+    )
+    subjects = summary["subjects"]
+    if not subjects:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    n_rows = len(subjects) + 1
+    fig, axes = plt.subplots(n_rows, 3, figsize=(14, 3.8 * n_rows), squeeze=False)
 
     for i, subj in enumerate(subjects, start=1):
         ax_occ, ax_box, ax_chg = axes[i, 0], axes[i, 1], axes[i, 2]
-        summary = _subject_occupancy_summary(subj, views[subj])
-        if summary is None:
+        subj_summary = summary["subject_summaries"][subj]
+        if subj_summary is None:
             for ax in (ax_occ, ax_box, ax_chg):
                 ax.set_visible(False)
             continue
 
-        labels = summary["labels"]
-        colors = summary["colors"]
-        overall = summary["overall"]
-        overall_records.extend(summary["overall_rows"])
-        session_records.extend(summary["session_rows"])
-        switch_records.extend(summary["switch_rows"])
+        labels = subj_summary["labels"]
+        colors = subj_summary["colors"]
+        overall = subj_summary["overall"]
 
         ax_occ.bar(labels, overall, color=colors, alpha=0.85)
         ax_occ.set_ylim(0, 1)
         ax_occ.set_ylabel("Fractional occupancy")
         ax_occ.set_title(f"Subject {subj} - overall occupancy")
 
-        _plot_session_violin(
+        _plot_state_occupancy_session_violin(
             ax_box,
-            _grouped_state_values(summary["session_rows"], labels),
+            _grouped_state_occupancy_values(subj_summary["session_rows"], labels),
             labels,
             colors,
         )
         ax_box.set_ylabel("Session occupancy")
         ax_box.set_title(f"Subject {subj} - occupancy by session")
 
-        _plot_switch_hist(ax_chg, summary["changes_per_sess"], f"Subject {subj} - state switches")
+        _plot_state_switch_hist(
+            ax_chg,
+            subj_summary["changes_per_sess"],
+            f"Subject {subj} - state switches",
+        )
 
+    labels_all = summary["labels_all"]
+    colors_all = summary["colors_all"]
     ax_all_occ, ax_all_sess, ax_all_chg = axes[0, 0], axes[0, 1], axes[0, 2]
-    _plot_overall_distribution(
+    _plot_state_occupancy_distribution(
         ax_all_occ,
-        _grouped_state_values(overall_records, labels_all),
+        _grouped_state_occupancy_values(summary["overall_records"], labels_all),
         labels_all,
         colors_all,
     )
     ax_all_occ.set_ylabel("Fractional occupancy")
     ax_all_occ.set_title("All selected subjects - overall occupancy")
 
-    _plot_session_violin(
+    _plot_state_occupancy_session_violin(
         ax_all_sess,
-        _grouped_state_values(session_records, labels_all),
+        _grouped_state_occupancy_values(summary["session_records"], labels_all),
         labels_all,
         colors_all,
     )
     ax_all_sess.set_ylabel("Session occupancy")
     ax_all_sess.set_title("All selected sessions - occupancy by session")
 
-    _plot_switch_hist(
+    _plot_state_switch_hist(
         ax_all_chg,
-        [int(row["switches"]) for row in switch_records],
+        [int(row["switches"]) for row in summary["switch_records"]],
         "All selected sessions - state switches",
     )
 
@@ -1496,22 +1606,12 @@ def plot_session_deepdive(
             raise ValueError("switch_posterior_threshold must be between 0 and 1.")
 
     df_sub_all = _subject_df(trial_df, subj)
-    if _is_polars_df(df_sub_all):
-        df_sub_all = df_sub_all.with_row_index("_align_idx")
-        df_sub_all = _sort_subject_trials(df_sub_all, session_col, sort_col)
-        sess_row_indices = (
-            df_sub_all.filter(pl.col(session_col) == sess)["_align_idx"].to_numpy()
-        )
-        df_sess = df_sub_all.filter(pl.col(session_col) == sess).drop("_align_idx")
-    else:
-        df_sub_all = df_sub_all.reset_index(drop=True)
-        df_sub_all["_align_idx"] = np.arange(len(df_sub_all), dtype=int)
-        df_sub_all = _sort_subject_trials(df_sub_all, session_col, sort_col)
-        sess_row_indices = np.asarray(
-            df_sub_all.loc[df_sub_all[session_col] == sess, "_align_idx"],
-            dtype=int,
-        )
-        df_sess = df_sub_all[df_sub_all[session_col] == sess].drop(columns="_align_idx")
+    df_sub_all = df_sub_all.with_row_index("_align_idx")
+    df_sub_all = _sort_subject_trials(df_sub_all, session_col, sort_col)
+    sess_row_indices = (
+        df_sub_all.filter(pl.col(session_col) == sess)["_align_idx"].to_numpy()
+    )
+    df_sess = df_sub_all.filter(pl.col(session_col) == sess).drop("_align_idx")
 
     perf_col = _pick_col(df_sess.columns, performance_candidates)
     stim_col = _pick_col(df_sess.columns, stim_candidates)
@@ -1590,18 +1690,14 @@ def plot_session_deepdive(
         label=f"P({views[subj].state_name_by_idx.get(engaged_k, 'Engaged')})",
     )
     if change_idx.size:
-        change_label = "State change"
-        if switch_posterior_threshold is not None:
-            change_label = "Confident state change"
         ax1.scatter(
             x[change_idx],
             probs[change_idx, engaged_k],
             s=34,
             color="crimson",
-            edgecolors="white",
-            linewidths=0.8,
+            linewidths=0,
             zorder=6,
-            label=change_label,
+            label="State change",
         )
 
     for resp, color in choice_colors.items():
@@ -1622,9 +1718,7 @@ def plot_session_deepdive(
     ax1.set_ylim(0, 1)
     ax1.set_ylabel("State probability")
     title = f"Subject {subj}  —  session {sess}  ({T} trials, {n_changes} state changes)"
-    if switch_posterior_threshold is not None:
-        title += f"\nconfident MAP posterior ≥ {switch_posterior_threshold:.2f}"
-    ax1.set_title(title)
+    ax1.set_title(title, pad=25)
 
     ax1r = ax1.twinx()
     ax1r.plot(x, rolling_acc, color="black", lw=1.8, linestyle="-", alpha=0.7, label="Rolling accuracy (5 trials)")

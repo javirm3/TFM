@@ -49,6 +49,7 @@ from glmhmmt.plots_common import (
     plot_state_posterior_count_kde as _plot_state_posterior_count_kde_common,
     plot_session_trajectories as _plot_session_trajectories_common,
     plot_state_occupancy as _plot_state_occupancy_common,
+    plot_state_occupancy_overall_boxplot as _plot_state_occupancy_overall_boxplot_common,
     plot_state_dwell_times_by_subject as _plot_state_dwell_times_by_subject_common,
     plot_state_dwell_times_summary as _plot_state_dwell_times_summary_common,
     plot_state_dwell_times as _plot_state_dwell_times_common,
@@ -2251,6 +2252,207 @@ def plot_emission_weights_summary(
     return fig_multi
 
 
+def _prepare_emission_summary_arrays(
+    views: dict,
+    K: int,
+) -> tuple[np.ndarray | None, list[str], list[str], list[str]]:
+    valid_subjs = list(views.keys())
+    feat_names = next(iter(views.values())).feat_names if views else []
+    if not valid_subjs:
+        return None, [], [], []
+
+    all_w = []
+    display_labels = None
+    for subj in valid_subjs:
+        W_raw = -views[subj].emission_weights
+        rank_order = views[subj].state_idx_order
+        slbls = views[subj].state_name_by_idx
+        lbls = [slbls.get(k, f"S{k}") for k in rank_order]
+        W_plot, lbls = _reorder_two_afc_emission_states(W_raw[rank_order], lbls)
+        if display_labels is None:
+            display_labels = lbls
+        all_w.append(np.asarray(W_plot))
+
+    if not all_w:
+        return None, [], [], []
+
+    W_stack = np.stack(all_w, axis=0)
+    if W_stack.ndim == 3:
+        W_stack = W_stack[:, :, None, :]
+    fn = feat_names or (views[valid_subjs[0]].feat_names or [])
+    W_stack, fn = _reorder_two_afc_emission_features(W_stack, fn)
+    hue_order = display_labels or [f"State {k}" for k in range(K)]
+    state_colors = [_state_color(label, fallback_idx=i, K=K) for i, label in enumerate(hue_order)]
+    return W_stack, fn, hue_order, state_colors
+
+
+def plot_emission_weights_summary_lineplot(
+    views: dict,
+    K: int,
+) -> plt.Figure:
+    W_stack, feat_names, hue_order, state_colors = _prepare_emission_summary_arrays(views, K)
+    if W_stack is None:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    W_avg = W_stack.mean(axis=2)
+    records = []
+    for subj_idx in range(W_avg.shape[0]):
+        for state_idx, state_name in enumerate(hue_order):
+            for feat_idx, feat_name in enumerate(feat_names):
+                records.append(
+                    {
+                        "Subject": subj_idx,
+                        "State": state_name,
+                        "Feature": feat_name,
+                        "Weight": W_avg[subj_idx, state_idx, feat_idx],
+                    }
+                )
+    df = pd.DataFrame(records)
+    palette = {label: color for label, color in zip(hue_order, state_colors, strict=False)}
+    fig, ax = plt.subplots(figsize=(max(6.0, 1.6 * max(1, len(feat_names))), 4.2))
+    sns.lineplot(
+        data=df,
+        x="Feature",
+        y="Weight",
+        hue="State",
+        hue_order=hue_order,
+        palette=palette,
+        ax=ax,
+        markers=True,
+        marker="o",
+        markersize=8,
+        markeredgewidth=0,
+        alpha=0.85,
+        errorbar="se",
+        err_kws={"edgecolor": "none", "linewidth": 0},
+    )
+    ax.axhline(0, color="k", lw=0.8, ls="--")
+    ax.set_ylabel("Weight")
+    ax.set_xlabel("")
+    ax.set_title(f"Emission weights - line summary  (K={K})")
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles, labels, frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    sns.despine(fig=fig)
+    fig.tight_layout()
+    return fig
+
+
+def plot_emission_weights_summary_boxplot(
+    views: dict,
+    K: int,
+) -> plt.Figure:
+    from scipy.stats import ttest_rel
+    import itertools
+
+    W_stack, feat_names, hue_order, state_colors = _prepare_emission_summary_arrays(views, K)
+    if W_stack is None:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    W_avg = W_stack.mean(axis=2)
+    N, n_states, _, n_features = W_stack.shape
+    fig, ax = plt.subplots(figsize=(max(6.0, 1.6 * max(1, len(feat_names))), 4.2))
+
+    hue_width = 0.8 / max(1, n_states)
+    positions = []
+    grouped_weights = []
+    for feat_idx in range(n_features):
+        for state_idx in range(n_states):
+            positions.append(feat_idx + (state_idx - (n_states - 1) / 2) * hue_width)
+            grouped_weights.append(W_avg[:, state_idx, feat_idx])
+
+    box = ax.boxplot(
+        grouped_weights,
+        positions=positions,
+        widths=hue_width * 0.9,
+        patch_artist=True,
+        showfliers=False,
+        showcaps=False,
+        zorder=0,
+    )
+    for patch in box["boxes"]:
+        patch.set(facecolor="white", edgecolor="#666666", linewidth=1.1)
+    for elem in ("whiskers", "caps"):
+        for artist in box[elem]:
+            artist.set(color="#666666", linewidth=1.0)
+    for idx, median in enumerate(box["medians"]):
+        median.set(color=state_colors[idx % n_states], linewidth=3)
+
+    for feat_idx in range(n_features):
+        for subj_idx in range(N):
+            xs = []
+            ys = []
+            for state_idx in range(n_states):
+                xs.append(feat_idx + (state_idx - (n_states - 1) / 2) * hue_width)
+                ys.append(W_avg[subj_idx, state_idx, feat_idx])
+            ax.plot(xs, ys, color="#7A7A7A", alpha=0.125, lw=1.5, zorder=5)
+
+    ax.axhline(0, color="k", lw=0.8, ls="--")
+
+    def _star(pval: float) -> str:
+        if pval < 0.001:
+            return "***"
+        if pval < 0.01:
+            return "**"
+        if pval < 0.05:
+            return "*"
+        return "ns"
+
+    y_range = W_avg.max() - W_avg.min()
+    if y_range == 0:
+        y_range = 1
+
+    state_pairs = list(itertools.combinations(range(n_states), 2))
+    for feat_idx in range(n_features):
+        y_max = W_avg[:, :, feat_idx].max()
+        y_offset_step = y_range * 0.05
+        current_y_offset = y_max + y_offset_step
+        for p1, p2 in state_pairs:
+            try:
+                _stat, pval = ttest_rel(W_avg[:, p1, feat_idx], W_avg[:, p2, feat_idx])
+                star = _star(pval)
+            except Exception:
+                star = ""
+            if not star:
+                continue
+
+            offset_1 = (p1 - (n_states - 1) / 2) * hue_width
+            offset_2 = (p2 - (n_states - 1) / 2) * hue_width
+            x1 = feat_idx + offset_1
+            x2 = feat_idx + offset_2
+            ax.plot([x1, x1, x2, x2], [current_y_offset, current_y_offset, current_y_offset, current_y_offset], lw=1, c="k")
+            ax.text((x1 + x2) / 2, current_y_offset, star, ha="center", va="bottom", color="k")
+            current_y_offset += y_offset_step * 1.5
+
+    ax.set_xticks(range(n_features))
+    ax.set_xticklabels(_format_feature_labels(feat_names), rotation=0, ha="center")
+    ax.set_ylabel("Weight")
+    ax.set_xlabel("")
+    ax.set_title(f"Emission weights - box summary  (K={K})")
+
+    legend_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="",
+            markerfacecolor=state_colors[state_idx],
+            markeredgecolor="none",
+            markersize=7,
+            label=hue_order[state_idx],
+        )
+        for state_idx in range(n_states)
+    ]
+    ax.legend(legend_handles, hue_order[:n_states], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    sns.despine(fig=fig)
+    fig.tight_layout()
+    return fig
+
+
 def plot_emission_weights(
     views: dict,
     K: int,
@@ -2471,6 +2673,22 @@ def plot_state_occupancy(
     **kwargs,
 ) -> plt.Figure:
     return _plot_state_occupancy_common(
+        views,
+        trial_df,
+        session_col=session_col,
+        sort_col=sort_col,
+        **kwargs,
+    )
+
+
+def plot_state_occupancy_overall_boxplot(
+    views: dict,
+    trial_df,
+    session_col: str = "Session",
+    sort_col: str = "Trial",
+    **kwargs,
+) -> plt.Figure:
+    return _plot_state_occupancy_overall_boxplot_common(
         views,
         trial_df,
         session_col=session_col,

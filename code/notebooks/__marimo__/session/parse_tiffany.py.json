@@ -1,0 +1,114 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.22.5",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "e909da5476e95ebfafa8ed3f6aacbae2",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "deac2f8d2494b598db5220f4ba322ac0",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "6994d44f303069d4fa9d3f138a176c5b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='bkHC-0' random-id='6be29ac3-a060-85c2-5b13-217c005771b7'><marimo-table data-initial-value='[]' data-label='null' data-data='&quot;[{&#92;&quot;choices&#92;&quot;:1,&#92;&quot;stim&#92;&quot;:1,&#92;&quot;session&#92;&quot;:12,&#92;&quot;past_choices&#92;&quot;:&#92;&quot;[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;past_rewards&#92;&quot;:&#92;&quot;[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;trial&#92;&quot;:1,&#92;&quot;after_correct&#92;&quot;:0.0,&#92;&quot;delays&#92;&quot;:1.0,&#92;&quot;hit&#92;&quot;:1,&#92;&quot;repeat&#92;&quot;:null,&#92;&quot;repeat_choice_side&#92;&quot;:0,&#92;&quot;WM&#92;&quot;:1.0,&#92;&quot;RL&#92;&quot;:0.0,&#92;&quot;subject&#92;&quot;:&#92;&quot;C37&#92;&quot;,&#92;&quot;drug&#92;&quot;:&#92;&quot;NR2B&#92;&quot;},{&#92;&quot;choices&#92;&quot;:-1,&#92;&quot;stim&#92;&quot;:-1,&#92;&quot;session&#92;&quot;:12,&#92;&quot;past_choices&#92;&quot;:&#92;&quot;[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;past_rewards&#92;&quot;:&#92;&quot;[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;trial&#92;&quot;:2,&#92;&quot;after_correct&#92;&quot;:1.0,&#92;&quot;delays&#92;&quot;:3.0,&#92;&quot;hit&#92;&quot;:1,&#92;&quot;repeat&#92;&quot;:0.0,&#92;&quot;repeat_choice_side&#92;&quot;:0,&#92;&quot;WM&#92;&quot;:0.9304219036,&#92;&quot;RL&#92;&quot;:0.0695780964,&#92;&quot;subject&#92;&quot;:&#92;&quot;C37&#92;&quot;,&#92;&quot;drug&#92;&quot;:&#92;&quot;NR2B&#92;&quot;},{&#92;&quot;choices&#92;&quot;:1,&#92;&quot;stim&#92;&quot;:1,&#92;&quot;session&#92;&quot;:12,&#92;&quot;past_choices&#92;&quot;:&#92;&quot;[-1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;past_rewards&#92;&quot;:&#92;&quot;[1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;trial&#92;&quot;:3,&#92;&quot;after_correct&#92;&quot;:1.0,&#92;&quot;delays&#92;&quot;:0.1,&#92;&quot;hit&#92;&quot;:1,&#92;&quot;repeat&#92;&quot;:0.0,&#92;&quot;repeat_choice_side&#92;&quot;:0,&#92;&quot;WM&#92;&quot;:0.9088725521,&#92;&quot;RL&#92;&quot;:0.0911274479,&#92;&quot;subject&#92;&quot;:&#92;&quot;C37&#92;&quot;,&#92;&quot;drug&#92;&quot;:&#92;&quot;NR2B&#92;&quot;},{&#92;&quot;choices&#92;&quot;:1,&#92;&quot;stim&#92;&quot;:1,&#92;&quot;session&#92;&quot;:12,&#92;&quot;past_choices&#92;&quot;:&#92;&quot;[1.0, -1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;past_rewards&#92;&quot;:&#92;&quot;[1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;trial&#92;&quot;:4,&#92;&quot;after_correct&#92;&quot;:1.0,&#92;&quot;delays&#92;&quot;:0.1,&#92;&quot;hit&#92;&quot;:1,&#92;&quot;repeat&#92;&quot;:1.0,&#92;&quot;repeat_choice_side&#92;&quot;:2,&#92;&quot;WM&#92;&quot;:0.8793254185,&#92;&quot;RL&#92;&quot;:0.1206745815,&#92;&quot;subject&#92;&quot;:&#92;&quot;C37&#92;&quot;,&#92;&quot;drug&#92;&quot;:&#92;&quot;NR2B&#92;&quot;},{&#92;&quot;choices&#92;&quot;:-1,&#92;&quot;stim&#92;&quot;:-1,&#92;&quot;session&#92;&quot;:12,&#92;&quot;past_choices&#92;&quot;:&#92;&quot;[1.0, 1.0, -1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;past_rewards&#92;&quot;:&#92;&quot;[1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;trial&#92;&quot;:5,&#92;&quot;after_correct&#92;&quot;:1.0,&#92;&quot;delays&#92;&quot;:0.1,&#92;&quot;hit&#92;&quot;:1,&#92;&quot;repeat&#92;&quot;:0.0,&#92;&quot;repeat_choice_side&#92;&quot;:0,&#92;&quot;WM&#92;&quot;:0.8931203584,&#92;&quot;RL&#92;&quot;:0.1068796416,&#92;&quot;subject&#92;&quot;:&#92;&quot;C37&#92;&quot;,&#92;&quot;drug&#92;&quot;:&#92;&quot;NR2B&#92;&quot;},{&#92;&quot;choices&#92;&quot;:-1,&#92;&quot;stim&#92;&quot;:-1,&#92;&quot;session&#92;&quot;:12,&#92;&quot;past_choices&#92;&quot;:&#92;&quot;[-1.0, 1.0, 1.0, -1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;past_rewards&#92;&quot;:&#92;&quot;[1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;trial&#92;&quot;:6,&#92;&quot;after_correct&#92;&quot;:1.0,&#92;&quot;delays&#92;&quot;:0.1,&#92;&quot;hit&#92;&quot;:1,&#92;&quot;repeat&#92;&quot;:1.0,&#92;&quot;repeat_choice_side&#92;&quot;:1,&#92;&quot;WM&#92;&quot;:0.8611220531,&#92;&quot;RL&#92;&quot;:0.1388779469,&#92;&quot;subject&#92;&quot;:&#92;&quot;C37&#92;&quot;,&#92;&quot;drug&#92;&quot;:&#92;&quot;NR2B&#92;&quot;},{&#92;&quot;choices&#92;&quot;:1,&#92;&quot;stim&#92;&quot;:1,&#92;&quot;session&#92;&quot;:12,&#92;&quot;past_choices&#92;&quot;:&#92;&quot;[-1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;past_rewards&#92;&quot;:&#92;&quot;[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;trial&#92;&quot;:7,&#92;&quot;after_correct&#92;&quot;:1.0,&#92;&quot;delays&#92;&quot;:0.1,&#92;&quot;hit&#92;&quot;:1,&#92;&quot;repeat&#92;&quot;:0.0,&#92;&quot;repeat_choice_side&#92;&quot;:0,&#92;&quot;WM&#92;&quot;:0.8694045151,&#92;&quot;RL&#92;&quot;:0.1305954849,&#92;&quot;subject&#92;&quot;:&#92;&quot;C37&#92;&quot;,&#92;&quot;drug&#92;&quot;:&#92;&quot;NR2B&#92;&quot;},{&#92;&quot;choices&#92;&quot;:1,&#92;&quot;stim&#92;&quot;:1,&#92;&quot;session&#92;&quot;:12,&#92;&quot;past_choices&#92;&quot;:&#92;&quot;[1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;past_rewards&#92;&quot;:&#92;&quot;[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;trial&#92;&quot;:8,&#92;&quot;after_correct&#92;&quot;:1.0,&#92;&quot;delays&#92;&quot;:0.1,&#92;&quot;hit&#92;&quot;:1,&#92;&quot;repeat&#92;&quot;:1.0,&#92;&quot;repeat_choice_side&#92;&quot;:2,&#92;&quot;WM&#92;&quot;:0.7898855539,&#92;&quot;RL&#92;&quot;:0.2101144461,&#92;&quot;subject&#92;&quot;:&#92;&quot;C37&#92;&quot;,&#92;&quot;drug&#92;&quot;:&#92;&quot;NR2B&#92;&quot;},{&#92;&quot;choices&#92;&quot;:1,&#92;&quot;stim&#92;&quot;:1,&#92;&quot;session&#92;&quot;:12,&#92;&quot;past_choices&#92;&quot;:&#92;&quot;[1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;past_rewards&#92;&quot;:&#92;&quot;[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0]&#92;&quot;,&#92;&quot;trial&#92;&quot;:9,&#92;&quot;after_correct&#92;&quot;:1.0,&#92;&quot;delays&#92;&quot;:0.1,&#92;&quot;hit&#92;&quot;:1,&#92;&quot;repeat&#92;&quot;:1.0,&#92;&quot;repeat_choice_side&#92;&quot;:2,&#92;&quot;WM&#92;&quot;:0.6940124739,&#92;&quot;RL&#92;&quot;:0.3059875261,&#92;&quot;subject&#92;&quot;:&#92;&quot;C37&#92;&quot;,&#92;&quot;drug&#92;&quot;:&#92;&quot;NR2B&#92;&quot;},{&#92;&quot;choices&#92;&quot;:1,&#92;&quot;stim&#92;&quot;:1,&#92;&quot;session&#92;&quot;:12,&#92;&quot;past_choices&#92;&quot;:&#92;&quot;[1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 0.0]&#92;&quot;,&#92;&quot;past_rewards&#92;&quot;:&#92;&quot;[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0]&#92;&quot;,&#92;&quot;trial&#92;&quot;:10,&#92;&quot;after_correct&#92;&quot;:1.0,&#92;&quot;delays&#92;&quot;:0.1,&#92;&quot;hit&#92;&quot;:1,&#92;&quot;repeat&#92;&quot;:1.0,&#92;&quot;repeat_choice_side&#92;&quot;:2,&#92;&quot;WM&#92;&quot;:0.6208903194,&#92;&quot;RL&#92;&quot;:0.3791096806,&#92;&quot;subject&#92;&quot;:&#92;&quot;C37&#92;&quot;,&#92;&quot;drug&#92;&quot;:&#92;&quot;NR2B&#92;&quot;}]&quot;' data-total-rows='159535' data-total-columns='15' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='true' data-page-size='10' data-field-types='[[&quot;choices&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;stim&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;session&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;past_choices&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;past_rewards&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;trial&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;after_correct&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;delays&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;hit&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;repeat&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;repeat_choice_side&quot;,[&quot;integer&quot;,&quot;i64&quot;]],[&quot;WM&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;RL&quot;,[&quot;number&quot;,&quot;f64&quot;]],[&quot;subject&quot;,[&quot;string&quot;,&quot;str&quot;]],[&quot;drug&quot;,[&quot;string&quot;,&quot;str&quot;]]]' data-show-filters='true' data-show-download='true' data-show-column-summaries='true' data-show-data-types='true' data-show-page-size-selector='true' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "a022ebf509a742f282ce1e967ac2a593",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "73622b00f53cdf10e898c47597750b99",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "395f40fd208298b4e3c683f147d8e6b5",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "ca7cd661ab63dd642694b36046575113",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "83f7335731e4d8b123dfa96dad3fe5d7",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "eb55cfcc03fa8dc0d8ef04ebeda315e1",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "9682be4049d6bbb456b06239159d6489",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "f0a594796877ae6f3414f4e1522c5f19",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "2dbfa0cd4bd329c1dbe8e4bf1ffba311",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": null,
+      "outputs": [],
+      "console": []
+    }
+  ]
+}
