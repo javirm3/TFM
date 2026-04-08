@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.21.0"
+__generated_with = "0.21.1"
 app = marimo.App(width="full")
 
 
@@ -17,11 +17,15 @@ def _():
     from glmhmmt.tasks import get_adapter, get_task_options
     from glmhmmt.postprocess import build_trial_df
     from glmhmmt.views import build_views
+    from matplotlib.lines import Line2D
+    from glmhmmt.plots_common import custom_boxplot
 
     sns.set_style("white")
     return (
+        Line2D,
         build_trial_df,
         build_views,
+        custom_boxplot,
         get_adapter,
         get_task_options,
         mo,
@@ -460,7 +464,16 @@ def _():
 
 
 @app.cell
-def _(add_sig_bars, np, plt, results_plot, sns, ui_bic_baseline):
+def _(
+    Line2D,
+    add_sig_bars,
+    custom_boxplot,
+    np,
+    plt,
+    results_plot,
+    sns,
+    ui_bic_baseline,
+):
     from matplotlib.colors import to_rgb, to_hex
 
     _MODEL_STYLES = {
@@ -490,20 +503,41 @@ def _(add_sig_bars, np, plt, results_plot, sns, ui_bic_baseline):
 
     fig_cmp, (ax_ll, ax_bic) = plt.subplots(1, 2, figsize=(8, 4.8), constrained_layout=False)
 
+    def _grouped_custom_boxplot(ax, ycol: str) -> None:
+        if not hue_order or not K_order:
+            return
+
+        hue_width = 0.8 / len(hue_order)
+        grouped_values = []
+        positions = []
+        median_colors = []
+
+        for x_idx, k_val in enumerate(K_order):
+            for hue_idx, hue_label in enumerate(hue_order):
+                vals = raw[
+                    (raw["K"] == k_val)
+                    & (raw["model_label"] == hue_label)
+                ][ycol].dropna().to_numpy(dtype=float)
+                if len(vals) == 0:
+                    continue
+                positions.append(x_idx + (hue_idx - (len(hue_order) - 1) / 2) * hue_width)
+                grouped_values.append(vals)
+                median_colors.append(palette[hue_label])
+
+        if grouped_values:
+            custom_boxplot(
+                ax,
+                grouped_values,
+                positions=positions,
+                widths=hue_width * 0.9,
+                median_colors=median_colors,
+                showfliers=False,
+                showcaps=False,
+                zorder=1,
+            )
+
     for ax, ycol in [(ax_ll, "ll_per_trial"), (ax_bic, "bic_delta")]:
-        sns.boxplot(
-            data=raw,
-            x="K",
-            y=ycol,
-            hue="model_label",
-            order=K_order,
-            hue_order=hue_order,
-            palette=palette,
-            width=0.8,
-            showfliers=False,
-            boxprops={"alpha": 0.45},
-            ax=ax,
-        )
+        _grouped_custom_boxplot(ax, ycol)
 
         sns.stripplot(
             data=raw,
@@ -540,13 +574,11 @@ def _(add_sig_bars, np, plt, results_plot, sns, ui_bic_baseline):
     ax_bic.set_ylabel("ΔBIC vs baseline")
     ax_bic.set_title(f"ΔBIC vs {ui_bic_baseline.value} (lower = better)")
 
-    handles, labels = ax_ll.get_legend_handles_labels()
-    _legend_handles = []
-    _legend_labels = []
-    for _h, _l in zip(handles, labels):
-        if _l in hue_order and _l not in _legend_labels:
-            _legend_handles.append(_h)
-            _legend_labels.append(_l)
+    _legend_handles = [
+        Line2D([0], [0], marker="o", linestyle="", color=strip_palette[_label], label=_label, markersize=6)
+        for _label in hue_order
+    ]
+    _legend_labels = list(hue_order)
     if ax_ll.get_legend() is not None:
         ax_ll.get_legend().remove()
     if ax_bic.get_legend() is not None:
@@ -1633,6 +1665,8 @@ def _(
 
 @app.cell
 def _(
+    Line2D,
+    custom_boxplot,
     mo,
     np,
     pairwise_K,
@@ -1648,7 +1682,7 @@ def _(
     sns,
     ttest_rel,
 ):
-    from matplotlib.lines import Line2D
+
 
     mo.stop(
         pairwise_session_occupancy.is_empty(),
@@ -1791,21 +1825,17 @@ def _(
                     continue
                 _values = _rows[value_col].to_numpy(dtype=float)
                 _pos = _state_idx + _offsets[_model_idx]
-                _box = ax.boxplot(
+                custom_boxplot(
+                    ax,
                     _values,
                     positions=[_pos],
                     widths=_width,
-                    patch_artist=True,
+                    median_colors=_palette[_model],
                     showfliers=False,
+                    showcaps=True,
                     zorder=1,
+                    median_linewidth=2.2,
                 )
-                for _patch in _box["boxes"]:
-                    _patch.set(facecolor="white", edgecolor="#666666", linewidth=1.1)
-                for _elem in ("whiskers", "caps"):
-                    for _artist in _box[_elem]:
-                        _artist.set(color="#666666", linewidth=1.0)
-                for _median in _box["medians"]:
-                    _median.set(color=_palette[_model], linewidth=2.2)
 
                 if _model == pairwise_alias_a:
                     _paired_value_col = f"{value_col}_a"
@@ -1928,12 +1958,18 @@ def _(
 
 
 @app.cell
-def _(mo, model_aliases, ui_task):
+def _(mo):
     ui_viz_model = mo.ui.dropdown(
         options=["glm", "glmhmm", "glmhmmt"],
         value="glmhmm",
         label="Model kind",
     )
+    return (ui_viz_model,)
+
+
+@app.cell
+def _(mo, model_aliases, ui_task, ui_viz_model):
+
     ui_viz_alias = mo.ui.dropdown(
         options=model_aliases(ui_task.value, ui_viz_model.value),
         value=None,
@@ -1945,7 +1981,7 @@ def _(mo, model_aliases, ui_task):
         mo.md("### Emission weights from cached fits"),
         mo.hstack([ui_viz_model, ui_viz_alias, ui_viz_K]),
     ])
-    return ui_viz_K, ui_viz_alias, ui_viz_model
+    return ui_viz_K, ui_viz_alias
 
 
 @app.cell

@@ -8,9 +8,8 @@ import polars as pl
 
 from glmhmmt.cli.fit_common import (
     apply_valid_trial_mask,
-    build_balanced_session_holdout,
+    build_session_kfold_split,
     fit_best_restart,
-    format_balance_label_stats,
     normalize_cv_mode,
     score_split,
     stable_model_id,
@@ -212,10 +211,6 @@ def fit_subject_cv(
     progress_callback: ProgressCallback | None = None,
 ) -> dict:
     adapter, feature_df = _load_subject_feature_df(subject, task, tau)
-    labels = adapter.cv_balance_labels(feature_df)
-    if labels is None:
-        raise ValueError(f"Task {task!r} does not define CV balance labels.")
-
     frozen = normalize_frozen_emissions(frozen_emissions)
     repeats: list[dict[str, Any]] = []
     best_repeat_idx = -1
@@ -223,7 +218,8 @@ def fit_subject_cv(
     best_repeat_params = None
     best_repeat_lps = None
     best_repeat_model = None
-    for repeat_idx in range(cv_repeats):
+    n_folds = 5
+    for repeat_idx in range(n_folds):
         if progress_callback is not None:
             progress_callback(
                 {
@@ -231,24 +227,20 @@ def fit_subject_cv(
                     "subject": subject,
                     "K": K,
                     "cv_repeat_index": repeat_idx + 1,
-                    "cv_repeat_total": cv_repeats,
+                    "cv_repeat_total": n_folds,
                 }
             )
-        train_df, test_df, split_meta = build_balanced_session_holdout(
+        train_df, test_df, split_meta = build_session_kfold_split(
             feature_df,
-            labels,
             adapter.session_col,
-            seed=base_seed + repeat_idx,
+            fold_index=repeat_idx,
+            n_splits=n_folds,
+            seed=base_seed,
         )
         if verbose:
-            ild_stats = format_balance_label_stats(
-                split_meta["train_label_counts"],
-                split_meta["test_label_counts"],
-            )
             print(
-                f"[CV repeat {repeat_idx + 1}/{cv_repeats}] "
-                f"sessions train/test={split_meta['train_session_count']}/{split_meta['test_session_count']} "
-                f"balance_score={split_meta['balance_score']:.4f} | ILD train|test -> {ild_stats}"
+                f"[CV fold {repeat_idx + 1}/{n_folds}] "
+                f"sessions train/test={split_meta['train_session_count']}/{split_meta['test_session_count']}"
             )
         y_train, X_train, U_train, session_train, names = _prepare_arrays(
             adapter,
@@ -299,7 +291,7 @@ def fit_subject_cv(
                 "subject": subject,
                 "K": K,
                 "cv_repeat_index": repeat_idx + 1,
-                "cv_repeat_total": cv_repeats,
+                "cv_repeat_total": n_folds,
             },
         )
         train_metrics = score_split(model, best_params, y_train, inputs_train, session_train)
@@ -328,7 +320,7 @@ def fit_subject_cv(
                 "test_session_count": int(split_meta["test_session_count"]),
                 "train_label_counts_json": json.dumps(split_meta["train_label_counts"], sort_keys=True),
                 "test_label_counts_json": json.dumps(split_meta["test_label_counts"], sort_keys=True),
-                "balance_score": float(split_meta["balance_score"]),
+                "balance_score": None,
             }
         )
         if progress_callback is not None:
@@ -338,7 +330,7 @@ def fit_subject_cv(
                     "subject": subject,
                     "K": K,
                     "cv_repeat_index": repeat_idx + 1,
-                    "cv_repeat_total": cv_repeats,
+                    "cv_repeat_total": n_folds,
                     "test_ll_per_trial": float(test_metrics["ll_per_trial"]),
                     "test_acc": float(test_metrics["acc"]),
                 }
@@ -396,7 +388,7 @@ def fit_subject_cv(
         "U": np.asarray(U_full),
         "frozen_emissions": serialize_frozen_emissions(frozen),
         "cv_mode": "balanced_session_holdout",
-        "cv_repeats": cv_repeats,
+        "cv_repeats": n_folds,
     }
 
 

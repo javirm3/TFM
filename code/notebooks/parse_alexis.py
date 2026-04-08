@@ -177,7 +177,7 @@ def _(
         [c for c in ["subject", "Trial", "Side", "Drug", "Choice", "Hit", "Punish", "Session", "ILD", "Filename", "Experiment", "Task", "P" ,"p", "Condition", "AW", "WarmUp", "Date"]
          if c in drug_df.columns]
     )
-    drug_df = drug_df.with_columns(pl.col("ILD").replace({70: 20, -70 : -20 }))
+    # drug_df = drug_df.with_columns(pl.col("ILD").replace({70: 20, -70 : -20 }))
     output_path_drug = paths.DATA_PATH / "alexis_drug_combined.parquet"
     output_path_drug.parent.mkdir(parents=True, exist_ok=True)
     drug_df = drug_df.filter(pl.col("subject").is_in(subjects_to_keep))
@@ -192,40 +192,63 @@ def _(
 
     drug_df.write_parquet(output_path_drug)
     print(f"Saved to {output_path_drug}")
-    print(drug_df.group_by("subject").agg([pl.len().alias("n_trials")]).sort("n_trials"))
     drug_df
+    return (drug_df,)
+
+
+@app.cell
+def _(drug_df, pl):
+    print(drug_df.group_by("subject").agg([pl.len().alias("n_trials")]).sort("n_trials"))
+    print(drug_df.group_by(["subject", "Drug"]).agg(pl.len().alias("n_trials")).pivot(values="n_trials",index="subject",on="Drug",aggregate_function="first",).sort("subject"))
+
+    print(
+        drug_df.with_columns(
+        pl.when(pl.col("Drug") == 0)
+        .then(pl.lit("saline"))
+        .otherwise(pl.lit("drug"))
+        .alias("Drug")
+        ).group_by(["subject", "Drug"])
+        .agg(pl.n_unique("Session").alias("n_sessions"))
+        .pivot(
+            values="n_sessions",
+            index="subject",
+            on="Drug",
+            aggregate_function="first",
+        )
+        .sort("subject")
+    )
     return
 
 
 app._unparsable_cell(
     r"""
     dApply filter_behavior per subject per experiment; for 2AFC_6 tag each row with condition.
-        parts = []
-        for (exp,), df_group in combined_df.group_by(["Experiment"], maintain_order=True):
-       if exp not in ['2AFC_2', '2AFC_3', '2AFC_4', '2AFC_6']:
-           continue
-       subj_parts = []
-       for subj, df_subj in df_group.to_pandas().groupby('Subject', sort=False):
-           df_subj = df_subj.reset_index(drop=True)
-           df_subj = filter_behavior(df_subj, clean_start=True, drop_miss=True, filter_drug=False)
-           subj_parts.append(df_subj)
-       df_pd = pd.concat(subj_parts, ignore_index=True)
-       if exp == '2AFC_6':
-           # Default: rest (no drug, no saline)
-           df_pd['condition'] = 'rest'
-           # Identify paired sessions per subject (saline immediately followed by drug)
-           if 'Date' in df_pd.columns:
-               for subj, df_subj in df_pd.groupby('Subject'):
-                   df_paired = filter_drug_sessions(df_subj.copy())
-                   paired_dates = set(df_paired['Date'].unique())
-                   mask = (df_pd['Subject'] == subj) & df_pd['Date'].isin(paired_dates)
-                   df_pd.loc[mask & (df_pd['Drug'] == 0), 'condition'] = 'saline'
-                   df_pd.loc[mask & (df_pd['Drug'] == 1), 'condition'] = 'drug'
-       else:
-           df_pd['condition'] = 'rest'
-       parts.append(pl.from_pandas(df_pd))
-        combined_df_filtered = pl.concat(parts, how="diagonal")
-        combined_df_filtered
+       parts = []
+       for (exp,), df_group in combined_df.group_by(["Experiment"], maintain_order=True):
+      if exp not in ['2AFC_2', '2AFC_3', '2AFC_4', '2AFC_6']:
+          continue
+      subj_parts = []
+      for subj, df_subj in df_group.to_pandas().groupby('Subject', sort=False):
+          df_subj = df_subj.reset_index(drop=True)
+          df_subj = filter_behavior(df_subj, clean_start=True, drop_miss=True, filter_drug=False)
+          subj_parts.append(df_subj)
+      df_pd = pd.concat(subj_parts, ignore_index=True)
+      if exp == '2AFC_6':
+          # Default: rest (no drug, no saline)
+          df_pd['condition'] = 'rest'
+          # Identify paired sessions per subject (saline immediately followed by drug)
+          if 'Date' in df_pd.columns:
+              for subj, df_subj in df_pd.groupby('Subject'):
+                  df_paired = filter_drug_sessions(df_subj.copy())
+                  paired_dates = set(df_paired['Date'].unique())
+                  mask = (df_pd['Subject'] == subj) & df_pd['Date'].isin(paired_dates)
+                  df_pd.loc[mask & (df_pd['Drug'] == 0), 'condition'] = 'saline'
+                  df_pd.loc[mask & (df_pd['Drug'] == 1), 'condition'] = 'drug'
+      else:
+          df_pd['condition'] = 'rest'
+      parts.append(pl.from_pandas(df_pd))
+       combined_df_filtered = pl.concat(parts, how="diagonal")
+       combined_df_filtered
     """,
     name="_"
 )

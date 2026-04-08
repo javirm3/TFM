@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "a77dbd15988d3a2c167139e7c9871e48ec866c3b9556631a2bd74d0fc5b6747c"
     },
+    "marimo-pair": {
+      "source": "marimo-team/marimo-pair",
+      "sourceType": "github",
+      "computedHash": "08e727aff69eb3f3efb1bb525ec2df88642396eda9e84604d3f1266a8fc6a44d"
+    },
     "wasm-compatibility": {
       "source": "marimo-team/skills",
       "sourceType": "github",

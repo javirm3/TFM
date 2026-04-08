@@ -255,6 +255,52 @@ def build_balanced_session_holdout(
     }
 
 
+def build_session_kfold_split(
+    feature_df: pl.DataFrame,
+    session_col: str,
+    *,
+    fold_index: int,
+    n_splits: int = 5,
+    seed: int = 0,
+) -> tuple[pl.DataFrame, pl.DataFrame, dict[str, Any]]:
+    """Split sessions into k folds, training on k-1 folds and testing on one."""
+    df = feature_df
+    session_series = df.get_column(session_col).unique(maintain_order=True)
+    sessions = session_series.to_list()
+    n_sessions = len(sessions)
+    if n_sessions < int(n_splits):
+        raise ValueError(
+            f"{n_splits}-fold CV requires at least {n_splits} sessions with valid trials; "
+            f"found {n_sessions}."
+        )
+
+    rng = np.random.default_rng(seed)
+    shuffled_sessions = list(np.asarray(sessions, dtype=object)[rng.permutation(n_sessions)])
+    folds = [list(fold) for fold in np.array_split(np.asarray(shuffled_sessions, dtype=object), int(n_splits))]
+    if fold_index < 0 or fold_index >= len(folds):
+        raise ValueError(f"fold_index must be in [0, {len(folds) - 1}], got {fold_index}.")
+
+    test_sessions = [session.item() if isinstance(session, np.generic) else session for session in folds[fold_index]]
+    train_sessions = [
+        session.item() if isinstance(session, np.generic) else session
+        for idx, fold in enumerate(folds)
+        if idx != fold_index
+        for session in fold
+    ]
+    train_df = df.filter(pl.col(session_col).is_in(train_sessions))
+    test_df = df.filter(pl.col(session_col).is_in(test_sessions))
+
+    return train_df, test_df, {
+        "fold_index": int(fold_index + 1),
+        "n_splits": int(n_splits),
+        "train_session_count": int(len(train_sessions)),
+        "test_session_count": int(len(test_sessions)),
+        "train_label_counts": {},
+        "test_label_counts": {},
+        "balance_score": float("nan"),
+    }
+
+
 def format_balance_label_stats(
     train_label_counts: dict[str, int],
     test_label_counts: dict[str, int],

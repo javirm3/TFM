@@ -41,6 +41,7 @@ from pathlib import Path
 from scipy.stats import sem, ttest_1samp
 from typing import Dict, List, Optional, Sequence, Tuple
 from glmhmmt.plots_common import (
+    custom_boxplot,
     plot_state_accuracy as _plot_state_accuracy_common,
     plot_change_triggered_posteriors_by_subject as _plot_change_triggered_posteriors_by_subject_common,
     plot_change_triggered_posteriors_summary as _plot_change_triggered_posteriors_summary_common,
@@ -54,7 +55,7 @@ from glmhmmt.plots_common import (
 )
 from glmhmmt.model_plots import plot_transition_weights
 from glmhmmt.views import _LABEL_RANK, get_state_palette
-from ..nuo_auditory import _stim_bin_centers, _stim_param_weight_map
+from ..nuo_auditory import _stim_bin_centers, _stim_param_weight_map, EMISSION_REGRESSOR_LABELS
 
 _SESSION_COL = "session"
 _SORT_COL = "trial"
@@ -209,7 +210,7 @@ def plot_weights(
 
     ax.axhline(0, color="k", lw=0.8, ls="--")
     ax.set_xticks(x)
-    ax.set_xticklabels(feature_names, rotation=45, ha="right")
+    ax.set_xticklabels(_format_feature_labels(feature_names), rotation=0, ha="center")
     ax.set_ylabel("Weight")
     ax.set_title(title)
     ax.legend(frameon=False)
@@ -244,7 +245,7 @@ def plot_weights_per_contrast(
             ax.bar(x + offset, W[k, c], bar_w, label=labels[k], color=colors[k], alpha=0.85)
         ax.axhline(0, color="k", lw=0.8, ls="--")
         ax.set_xticks(x)
-        ax.set_xticklabels(feature_names, rotation=45, ha="right")
+        ax.set_xticklabels(_format_feature_labels(feature_names), rotation=0, ha="center")
         ax.set_title(cnames[c])
         sns.despine(ax=ax)
     axes[0].set_ylabel("Weight")
@@ -397,7 +398,7 @@ def plot_weights_boxplot(
                 current_y_offset += y_offset_step * 1.5
 
     ax_box.set_xticks(range(M))
-    ax_box.set_xticklabels(feature_names, rotation=45, ha="right")
+    ax_box.set_xticklabels(_format_feature_labels(feature_names), rotation=0, ha="center")
     ax_box.set_ylabel("Weight")
 
     legend_handles = [
@@ -538,20 +539,21 @@ def plot_occupancy_boxplot(
     colors = _state_colors(K)
 
     occs = np.array([p.mean(axis=0) for p in P_list])
-    df = pd.DataFrame(occs, columns=labels)
-    df_melt = df.melt(var_name="State", value_name="Occupancy")
-
     fig, ax = plt.subplots(figsize=figsize or (2 + 0.8 * K, 3.5))
-    sns.boxplot(
-        x="State",
-        y="Occupancy",
-        data=df_melt,
-        showfliers=False,
-        showcaps=False,
-        fill=False,
-        palette=dict(zip(labels, colors)),
-        ax=ax,
-    )
+    for idx, (label, color) in enumerate(zip(labels, colors, strict=False)):
+        custom_boxplot(
+            ax,
+            occs[:, idx],
+            positions=[idx],
+            widths=0.5,
+            median_colors=color,
+            box_edgecolor=color,
+            whisker_color=color,
+            showfliers=False,
+            showcaps=False,
+        )
+    ax.set_xticks(range(K))
+    ax.set_xticklabels(labels)
     ax.set_ylim(0, 1)
     ax.set_ylabel("Occupancy")
     ax.set_title(title)
@@ -1304,17 +1306,11 @@ def _mean_weighted_empirical_curve(
 
 
 def _feature_label(feature_name: str) -> str:
-    labels = {
-        "at_choice": "Action trace",
-        "at_error": "Error trace",
-        "at_correct": "Correct trace",
-        "reward_trace": "Reward trace",
-        "stim_vals": "Stimulus",
-        "stim_param": "Stimulus (param)",
-        "bias": "Bias",
-        "wsls": "WSLS",
-    }
-    return labels.get(feature_name, feature_name.replace("_", " ").title())
+    return EMISSION_REGRESSOR_LABELS.get(feature_name, feature_name.replace("_", " ").title())
+
+
+def _format_feature_labels(feature_names: Sequence[str]) -> list[str]:
+    return [_feature_label(name) for name in feature_names]
 
 
 def _binned_feature_summary(
@@ -2385,7 +2381,7 @@ def plot_state_dwell_times_by_subject(
     trial_df,
     session_col: str = "session",
     sort_col: str = "trial_idx",
-    max_dwell: int | None = 90,
+    max_dwell: int | None = None,
     ci_level: float = 0.68,
     **kwargs,
 ) -> plt.Figure:
@@ -2404,7 +2400,7 @@ def plot_state_dwell_times_summary(
     trial_df,
     session_col: str = "session",
     sort_col: str = "trial_idx",
-    max_dwell: int | None = 90,
+    max_dwell: int | None = None,
     ci_level: float = 0.68,
     **kwargs,
 ) -> plt.Figure:
@@ -2423,7 +2419,7 @@ def plot_state_dwell_times(
     trial_df,
     session_col: str = "session",
     sort_col: str = "trial_idx",
-    max_dwell: int | None = 90,
+    max_dwell: int | None = None,
     ci_level: float = 0.68,
     **kwargs,
 ) -> plt.Figure:

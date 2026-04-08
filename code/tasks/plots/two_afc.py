@@ -40,8 +40,9 @@ from matplotlib.lines import Line2D
 from pathlib import Path
 from scipy.stats import sem, ttest_1samp
 from typing import Dict, List, Optional, Sequence, Tuple
-from ..two_afc import _stim_param_weight_map
+from ..two_afc import _stim_param_weight_map, EMISSION_REGRESSOR_LABELS
 from glmhmmt.plots_common import (
+    custom_boxplot,
     plot_state_accuracy as _plot_state_accuracy_common,
     plot_change_triggered_posteriors_by_subject as _plot_change_triggered_posteriors_by_subject_common,
     plot_change_triggered_posteriors_summary as _plot_change_triggered_posteriors_summary_common,
@@ -149,6 +150,7 @@ def plot_weights(
     weights: np.ndarray,
     feature_names: Sequence[str],
     state_labels: Optional[Sequence[str]] = None,
+    state_colors: Optional[Sequence[str]] = None,
     title: str = "GLM-HMM weights",
     figsize: Optional[Tuple[float, float]] = None,
     ax: Optional[plt.Axes] = None,
@@ -174,7 +176,7 @@ def plot_weights(
         W = W[:, None, :]
     K, C_m1, M = W.shape
     labels = list(state_labels) if state_labels else _default_labels(K, C_m1 + 1)
-    colors = _state_colors(K)
+    colors = list(state_colors) if state_colors is not None else _state_colors(K)
     x = np.arange(M)
     width = 0.8 / K
 
@@ -190,7 +192,7 @@ def plot_weights(
 
     ax.axhline(0, color="k", lw=0.8, ls="--")
     ax.set_xticks(x)
-    ax.set_xticklabels(feature_names, rotation=45, ha="right")
+    ax.set_xticklabels(_format_feature_labels(feature_names), rotation=0, ha="center")
     ax.set_ylabel("Weight")
     ax.set_title(title)
     ax.legend(frameon=False)
@@ -225,7 +227,7 @@ def plot_weights_per_contrast(
             ax.bar(x + offset, W[k, c], bar_w, label=labels[k], color=colors[k], alpha=0.85)
         ax.axhline(0, color="k", lw=0.8, ls="--")
         ax.set_xticks(x)
-        ax.set_xticklabels(feature_names, rotation=45, ha="right")
+        ax.set_xticklabels(_format_feature_labels(feature_names), rotation=0, ha="center")
         ax.set_title(cnames[c])
         sns.despine(ax=ax)
     axes[0].set_ylabel("Weight")
@@ -238,6 +240,7 @@ def plot_weights_boxplot(
     all_weights: np.ndarray,
     feature_names: Sequence[str],
     state_labels: Optional[Sequence[str]] = None,
+    state_colors: Optional[Sequence[str]] = None,
     title: str = "GLM-HMM weights (across subjects)",
     figsize: Optional[Tuple[float, float]] = None,
 ) -> plt.Figure:
@@ -252,7 +255,7 @@ def plot_weights_boxplot(
     W_avg = W.mean(axis=2)
 
     labels = list(state_labels) if state_labels else _default_labels(K, C_m1 + 1)
-    colors = _state_colors(K)
+    colors = list(state_colors) if state_colors is not None else _state_colors(K)
     x = np.arange(M)
 
     # Convert to DataFrame for seaborn
@@ -275,7 +278,8 @@ def plot_weights_boxplot(
     fig, axes = plt.subplots(1, 2, figsize=figsize or (8, 4), sharex=True)
     ax_line, ax_box = axes
 
-    sns.lineplot( data=df, x="Feature", y="Weight", hue="State", palette=colors[:K], ax=ax_line, markers=True, marker="o", markersize=8, markeredgewidth=0, alpha=0.85, errorbar="se", legend=False,
+    palette = {labels[k]: colors[k] for k in range(K)}
+    sns.lineplot( data=df, x="Feature", y="Weight", hue="State", palette=palette, ax=ax_line, markers=True, marker="o", markersize=8, markeredgewidth=0, alpha=0.85, errorbar="se", legend=False,
                  err_kws={"edgecolor": "none", "linewidth": 0},)
     ax_line.axhline(0, color="k", lw=0.8, ls="--")
     ax_line.set_ylabel("Weight")
@@ -297,6 +301,7 @@ def plot_weights_boxplot(
         patch_artist=True,
         showfliers=False,
         showcaps=False,
+        zorder=0,
     )
 
     for patch in box["boxes"]:
@@ -314,20 +319,20 @@ def plot_weights_boxplot(
             for k in range(K):
                 xs.append(m + (k - (K - 1) / 2) * hue_width)
                 ys.append(W_avg[n, k, m])
-            ax_box.plot(xs, ys, color="#7A7A7A", alpha=0.18, lw=0.8, zorder=0)
+            ax_box.plot(xs, ys, color="#7A7A7A", alpha=0.125, lw=1.5, zorder=5)
 
-    for m in range(M):
-        for k in range(K):
-            x_pos = m + (k - (K - 1) / 2) * hue_width
-            ax_box.scatter(
-                np.full(N, x_pos),
-                W_avg[:, k, m],
-                color=colors[k],
-                alpha=0.6,
-                s=22,
-                zorder=3,
-                linewidths=0,
-            )
+    # for m in range(M):
+    #     for k in range(K):
+    #         x_pos = m + (k - (K - 1) / 2) * hue_width
+    #         ax_box.scatter(
+    #             np.full(N, x_pos),
+    #             W_avg[:, k, m],
+    #             color=colors[k],
+    #             alpha=0.6,
+    #             s=22,
+    #             zorder=3,
+    #             linewidths=0,
+    #         )
     ax_box.axhline(0, color="k", lw=0.8, ls="--")
 
     def get_star(pval):
@@ -376,7 +381,7 @@ def plot_weights_boxplot(
                 current_y_offset += y_offset_step * 1.5
 
     ax_box.set_xticks(range(M))
-    ax_box.set_xticklabels(feature_names, rotation=45, ha="right")
+    ax_box.set_xticklabels(_format_feature_labels(feature_names), rotation=0, ha="center")
     ax_box.set_ylabel("Weight")
 
     legend_handles = [
@@ -517,20 +522,21 @@ def plot_occupancy_boxplot(
     colors = _state_colors(K)
 
     occs = np.array([p.mean(axis=0) for p in P_list])
-    df = pd.DataFrame(occs, columns=labels)
-    df_melt = df.melt(var_name="State", value_name="Occupancy")
-
     fig, ax = plt.subplots(figsize=figsize or (2 + 0.8 * K, 3.5))
-    sns.boxplot(
-        x="State",
-        y="Occupancy",
-        data=df_melt,
-        showfliers=False,
-        showcaps=False,
-        fill=False,
-        palette=dict(zip(labels, colors)),
-        ax=ax,
-    )
+    for idx, (label, color) in enumerate(zip(labels, colors, strict=False)):
+        custom_boxplot(
+            ax,
+            occs[:, idx],
+            positions=[idx],
+            widths=0.5,
+            median_colors=color,
+            box_edgecolor=color,
+            whisker_color=color,
+            showfliers=False,
+            showcaps=False,
+        )
+    ax.set_xticks(range(K))
+    ax.set_xticklabels(labels)
     ax.set_ylim(0, 1)
     ax.set_ylabel("Occupancy")
     ax.set_title(title)
@@ -1308,17 +1314,58 @@ def _mean_weighted_empirical_curve(
 
 
 def _feature_label(feature_name: str) -> str:
-    labels = {
-        "at_choice": "Action trace",
-        "at_error": "Error trace",
-        "at_correct": "Correct trace",
-        "reward_trace": "Reward trace",
-        "stim_vals": "Stimulus",
-        "stim_param": "Stimulus (param)",
-        "bias": "Bias",
-        "wsls": "WSLS",
-    }
-    return labels.get(feature_name, feature_name.replace("_", " ").title())
+    return EMISSION_REGRESSOR_LABELS.get(feature_name, feature_name.replace("_", " ").title())
+
+
+def _format_feature_labels(feature_names: Sequence[str]) -> list[str]:
+    return [_feature_label(name) for name in feature_names]
+
+
+def _reorder_two_afc_emission_features(
+    weights: np.ndarray,
+    feature_names: Sequence[str],
+) -> tuple[np.ndarray, list[str]]:
+    """Put stimulus, |bias|, and action-trace features first for 2AFC emission plots."""
+    feat_names = list(feature_names)
+    if not feat_names:
+        return np.asarray(weights), feat_names
+
+    def _group(idx: int, name: str) -> tuple[int, int]:
+        lname = name.lower()
+        if lname.startswith("stim"):
+            return (0, idx)
+        if lname == "bias":
+            return (1, idx)
+        if lname.startswith("at_"):
+            return (2, idx)
+        return (3, idx)
+
+    order = [idx for idx, _ in sorted(enumerate(feat_names), key=lambda item: _group(item[0], item[1]))]
+    W = np.take(np.asarray(weights), order, axis=-1).copy()
+    ordered_names = [feat_names[idx] for idx in order]
+
+    for idx, name in enumerate(ordered_names):
+        if name.lower() == "bias":
+            W[..., idx] = np.abs(W[..., idx])
+
+    return W, ordered_names
+
+
+def _reorder_two_afc_emission_states(
+    weights: np.ndarray,
+    state_labels: Sequence[str],
+) -> tuple[np.ndarray, list[str]]:
+    """Move Disengaged to the front for 2AFC emission plot display order."""
+    labels = list(state_labels)
+    if not labels:
+        return np.asarray(weights), labels
+
+    disengaged = [idx for idx, label in enumerate(labels) if label.lower() == "disengaged"]
+    remaining = [idx for idx in range(len(labels)) if idx not in disengaged]
+    order = disengaged + remaining
+    W = np.take(np.asarray(weights), order, axis=0)
+    ordered_labels = [labels[idx] for idx in order]
+    return W, ordered_labels
 
 
 def _quantile_bin_spec(values: np.ndarray, n_bins: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -2138,13 +2185,15 @@ def plot_emission_weights_by_subject(
         ax = axes_s[idx // n_cols][idx % n_cols]
         W_raw = -views[subj].emission_weights  # flip sign: raw W = logit(Left); -W = logit(Right) (intuitive)
         slbls = views[subj].state_name_by_idx
-        # reorder by rank so color index 0 = Engaged = green, 1 = Disengaged = orange
         rank_order = views[subj].state_idx_order  # [Engaged_k, Disengaged_k, ...]
         W = W_raw[rank_order]
         lbls = [slbls.get(k, f"S{k}") for k in rank_order]
+        W, lbls = _reorder_two_afc_emission_states(W, lbls)
+        colors = [_state_color(label, fallback_idx=i, K=K) for i, label in enumerate(lbls)]
         fn_subj = views[subj].feat_names or feat_names
-        plot_weights(W, fn_subj, state_labels=lbls, title=f"Subject {subj}", ax=ax)
-        all_w.append(np.asarray(W))  # rank-reordered so position k=0 = Engaged across all subjects
+        W_plot, fn_plot = _reorder_two_afc_emission_features(W, fn_subj)
+        plot_weights(W_plot, fn_plot, state_labels=lbls, state_colors=colors, title=f"Subject {subj}", ax=ax)
+        all_w.append(np.asarray(W))
 
     for idx in range(len(valid_subjs), n_rows * n_cols):
         axes_s[idx // n_cols][idx % n_cols].set_visible(False)
@@ -2174,18 +2223,27 @@ def plot_emission_weights_summary(
         return fig
 
     all_w = []
+    display_labels = None
     for subj in valid_subjs:
         W_raw = -views[subj].emission_weights
         rank_order = views[subj].state_idx_order
-        all_w.append(np.asarray(W_raw[rank_order]))
+        slbls = views[subj].state_name_by_idx
+        lbls = [slbls.get(k, f"S{k}") for k in rank_order]
+        W_plot, lbls = _reorder_two_afc_emission_states(W_raw[rank_order], lbls)
+        if display_labels is None:
+            display_labels = lbls
+        all_w.append(np.asarray(W_plot))
 
     if len(all_w) > 1:
         W_stack = np.stack(all_w, axis=0)
         if W_stack.ndim == 3:
             W_stack = W_stack[:, :, None, :]
         fn = feat_names or (views[valid_subjs[0]].feat_names or [])
+        W_stack, fn = _reorder_two_afc_emission_features(W_stack, fn)
+        hue_order = display_labels or list(_hue_order[:K])
+        state_colors = [_state_color(label, fallback_idx=i, K=K) for i, label in enumerate(hue_order)]
         fig_multi = plot_weights_boxplot(
-            W_stack, fn, state_labels=_hue_order[:K], title=f"Emission weights - all subjects  (K={K})"
+            W_stack, fn, state_labels=hue_order, state_colors=state_colors, title=f"Emission weights - all subjects  (K={K})"
         )
     else:
         fig_multi = plot_emission_weights_by_subject(views=views, K=K)
@@ -2426,7 +2484,7 @@ def plot_state_dwell_times_by_subject(
     trial_df,
     session_col: str = "session",
     sort_col: str = "trial_idx",
-    max_dwell: int | None = 90,
+    max_dwell: int | None = None,
     ci_level: float = 0.68,
     **kwargs,
 ) -> plt.Figure:
@@ -2445,7 +2503,7 @@ def plot_state_dwell_times_summary(
     trial_df,
     session_col: str = "session",
     sort_col: str = "trial_idx",
-    max_dwell: int | None = 90,
+    max_dwell: int | None = None,
     ci_level: float = 0.68,
     **kwargs,
 ) -> plt.Figure:
@@ -2464,7 +2522,7 @@ def plot_state_dwell_times(
     trial_df,
     session_col: str = "session",
     sort_col: str = "trial_idx",
-    max_dwell: int | None = 90,
+    max_dwell: int | None = None,
     ci_level: float = 0.68,
     **kwargs,
 ) -> plt.Figure:

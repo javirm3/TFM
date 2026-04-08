@@ -45,6 +45,7 @@ _ALL_2AFC_TRANSITION_COLS: list[str] = [
     "prev_abs_stim",
     "prev_reward",
     "cumulative_reward",
+    "Drug",
 ]
 _AVAILABLE_2AFC_TRANSITION_COLS: list[str] = list(_ALL_2AFC_TRANSITION_COLS)
 _STIM_PARAM_COL = "stim_param"
@@ -58,6 +59,22 @@ _STIM_PARAM_SPEC = FittedWeightRegressorSpec(
     excluded_subjects=("325", "325.0"),
     sign=-1.0,
 )
+
+EMISSION_REGRESSOR_LABELS: dict[str, str] = {
+    "stim_vals": r"$\mathrm{Stimulus}$",
+    "stim_param": r"$\mathrm{Stimulus}_{\mathrm{param}}$",
+    "stim_strength": r"$\mathrm{Stimulus}_{\mathrm{strength}}$",
+    "bias": f"$\mid\mathrm{{bias}}\mid$",
+    "at_choice": r"$\mathrm{A}_t^{\mathrm{choice}}$",
+    "at_error": r"$\mathrm{A}_t^{\mathrm{error}}$",
+    "at_correct": r"$\mathrm{A}_t^{\mathrm{correct}}$",
+    "reward_trace": r"$\mathrm{Reward}_{\mathrm{trace}}$",
+    "prev_choice": r"$\mathrm{PrevChoice}$",
+    "prev_reward": r"$\mathrm{PrevReward}$",
+    "prev_abs_stim": r"$|\mathrm{PrevStim}|$",
+    "cumulative_reward": r"$\mathrm{CumReward}$",
+    "wsls": r"$\mathrm{WSLS}$",
+}
 
 
 def _sf_sort_key(name: str) -> tuple[int, str]:

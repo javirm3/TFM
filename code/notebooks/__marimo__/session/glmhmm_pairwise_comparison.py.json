@@ -8,139 +8,300 @@
     {
       "id": "Hbol",
       "code_hash": "9125d7e36f74e6e7596cdf887fd45a06",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "MJUe",
       "code_hash": "6c9ab3181a865b68754a4388c690d18c",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "vblA",
       "code_hash": "00cb60d6b538acd20a218eeefa74e012",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "bkHC",
       "code_hash": "391be782006c81bf82547201f79772d2",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "lEQa",
       "code_hash": "5b1062fdd478e1dad6bdbc5043d542bb",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "PKri",
       "code_hash": "ab04a5884caf0b7480b4e593e6035285",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "Xref",
       "code_hash": "ee44d92b28c39a0983cfa62f52e5782e",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"glmhmm-pairwise-comparison\">GLMHMM Pairwise Comparison</h2></span><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Dedicated notebook for comparing two GLMHMM fits, especially useful for frozen-vs-unfrozen variants.</span></span><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='MJUe-0' random-id='aea75cc7-a611-bedf-8e6f-e2ad704be8de'><marimo-dropdown data-initial-value='[&quot;2AFC&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Task&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;MCDR&quot;,&quot;MCDR Accuracy&quot;,&quot;Nuo auditory&quot;,&quot;2AFC&quot;,&quot;2AFC Drug&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='PKri-0' random-id='40cc12f4-e3dd-1bde-351f-8e4c78bce3e3'><marimo-dropdown data-initial-value='[&quot;2&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Shared K&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;2&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='lEQa-0' random-id='4efb970b-83aa-ad80-1227-5ebec3d764ec'><marimo-dropdown data-initial-value='[&quot;14a1b806&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Model A&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;14a1b806&quot;,&quot;2 states 2 cov&quot;,&quot;241f9a9b&quot;,&quot;3 covs 2 states frozen stim&quot;,&quot;3 covs 2 states frozen stim at&quot;,&quot;3 covs 2 states frozen stim_param at&quot;,&quot;3 covs 2 states param&quot;,&quot;3 covs 3 states cv&quot;,&quot;3 covs 4 states cv&quot;,&quot;3 states 2 cov&quot;,&quot;3covs_2states&quot;,&quot;5461d98e&quot;,&quot;9049f659&quot;,&quot;9e059fbf&quot;,&quot;efc17f0d&quot;,&quot;f75b8a44&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='lEQa-1' random-id='b7b97f81-fc6a-8d03-5a34-d929e5a60896'><marimo-dropdown data-initial-value='[&quot;2 states 2 cov&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Model B&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;14a1b806&quot;,&quot;2 states 2 cov&quot;,&quot;241f9a9b&quot;,&quot;3 covs 2 states frozen stim&quot;,&quot;3 covs 2 states frozen stim at&quot;,&quot;3 covs 2 states frozen stim_param at&quot;,&quot;3 covs 2 states param&quot;,&quot;3 covs 3 states cv&quot;,&quot;3 covs 4 states cv&quot;,&quot;3 states 2 cov&quot;,&quot;3covs_2states&quot;,&quot;5461d98e&quot;,&quot;9049f659&quot;,&quot;9e059fbf&quot;,&quot;efc17f0d&quot;,&quot;f75b8a44&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='bkHC-1' random-id='ca54b2ea-1af5-522f-4808-9b53e2a16402'><marimo-dropdown data-initial-value='[&quot;stim_vals (-w)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;State scoring regressor&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;stim_vals (-w)&quot;,&quot;stim_vals (|w|)&quot;,&quot;stim_param (-w)&quot;,&quot;stim_param (|w|)&quot;,&quot;at_choice (|w|)&quot;,&quot;wsls (|w|)&quot;,&quot;bias (|w|)&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element></div><div style='display: flex;flex: 1;flex-direction: row;justify-content: space-between;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='bkHC-0' random-id='7527eab7-c4fb-9386-db64-07f07321b770'><marimo-multiselect data-initial-value='[&quot;325&quot;,&quot;326&quot;,&quot;327&quot;,&quot;329&quot;,&quot;330&quot;,&quot;332&quot;,&quot;333&quot;,&quot;335&quot;,&quot;337&quot;,&quot;419&quot;,&quot;420&quot;,&quot;422&quot;,&quot;561&quot;,&quot;616&quot;,&quot;617&quot;,&quot;619&quot;,&quot;623&quot;,&quot;807&quot;,&quot;820&quot;,&quot;821&quot;,&quot;873&quot;,&quot;875&quot;,&quot;907&quot;,&quot;909&quot;,&quot;911&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Subjects&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;325&quot;,&quot;326&quot;,&quot;327&quot;,&quot;329&quot;,&quot;330&quot;,&quot;332&quot;,&quot;333&quot;,&quot;335&quot;,&quot;337&quot;,&quot;419&quot;,&quot;420&quot;,&quot;422&quot;,&quot;561&quot;,&quot;616&quot;,&quot;617&quot;,&quot;619&quot;,&quot;623&quot;,&quot;807&quot;,&quot;820&quot;,&quot;821&quot;,&quot;873&quot;,&quot;875&quot;,&quot;907&quot;,&quot;909&quot;,&quot;911&quot;]' data-full-width='false'></marimo-multiselect></marimo-ui-element></div></div>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "SFPL",
       "code_hash": "9c0a11ebd5a1b182edfc8f0921e831c4",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "BYtC",
       "code_hash": "f6d06200e794a288d1ccbb3b105d8332",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">No common cached subjects were found for these aliases and K.</span></span>"
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "RGSE",
       "code_hash": "70ccc2580c4df0bc4caf69345f4a57b7",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "Kclp",
       "code_hash": "2bbd8f9da5a64b6a0d54d501c11a8e06",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "emfo",
       "code_hash": "11e3dae7eb49bf888586822a383b0744",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "Hstk",
       "code_hash": "0a11aeb33166e714b6fac9ba16c4a9ee",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "nWHF",
       "code_hash": "e08afe27682b91f9d367f3f1529ad4f3",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "iLit",
       "code_hash": "cb03535fdab336b3e01d84a497e5a30e",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "ZHCJ",
       "code_hash": "9f80e89a8027c6d6213be27d4b54e568",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "ROlb",
       "code_hash": "18535f9fed39e970c3007a7ef8058744",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "qnkX",
       "code_hash": "433710260d3b7d06d559e18f97084bf5",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "TqIu",
       "code_hash": "54b71a2eec39c5f1ea5b542d5041a98e",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "Vxnm",
       "code_hash": "b19ce6b9dc8805f1c06b9a77545fc2eb",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "DnEU",
       "code_hash": "fe65baac7bf19dd3ec283423d4dd9a28",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     },
     {
       "id": "ulZA",
       "code_hash": "466baec99ec5b48f8372a483a5d61ee1",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
       "console": []
     },
     {
       "id": "ecfG",
       "code_hash": "6cc5b1791e911beca98ee4c1658656e3",
-      "outputs": [],
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
       "console": []
     }
   ]

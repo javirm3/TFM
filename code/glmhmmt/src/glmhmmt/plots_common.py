@@ -211,6 +211,126 @@ def _sort_subject_trials(df_sub, session_col: str, sort_col: str | Sequence[str]
     return df_sub.sort_values(sort_keys, kind="stable")
 
 
+def _resolve_boxplot_colors(colors, n_artists: int, name: str) -> list[str]:
+    if isinstance(colors, str) or np.isscalar(colors):
+        return [colors] * n_artists
+
+    resolved = list(colors)
+    if len(resolved) == 1 and n_artists > 1:
+        resolved *= n_artists
+    if len(resolved) != n_artists:
+        raise ValueError(f"{name} must have length {n_artists}, got {len(resolved)}.")
+    return resolved
+
+
+def custom_boxplot(
+    ax: plt.Axes,
+    values,
+    *,
+    positions,
+    widths,
+    median_colors,
+    box_facecolor: str = "white",
+    box_edgecolor: str = "#666666",
+    box_alpha: float = 1.0,
+    box_linewidth: float = 1.1,
+    whisker_color: str = "#666666",
+    whisker_linewidth: float = 1.0,
+    median_linewidth: float = 3.0,
+    line_values: np.ndarray | None = None,
+    line_color: str = "#B0B0B0",
+    line_alpha: float = 0.15,
+    line_linewidth: float = 1.25,
+    line_zorder: float = 2.0,
+    showfliers: bool = False,
+    showcaps: bool = False,
+    zorder: float = 0,
+    **kwargs,
+):
+    """Thin wrapper around ``ax.boxplot`` for the project's boxplot style."""
+    positions = list(np.atleast_1d(np.asarray(positions, dtype=float)))
+    resolved_median_colors = _resolve_boxplot_colors(
+        median_colors,
+        len(positions),
+        "median_colors",
+    )
+
+    if len(positions) == 1:
+        grouped_values = [np.asarray(values, dtype=float)]
+    else:
+        grouped_values = [np.asarray(vals, dtype=float) for vals in values]
+        if len(grouped_values) != len(positions):
+            raise ValueError(
+                f"values must have length {len(positions)}, got {len(grouped_values)}."
+            )
+
+    valid_triplets = [
+        (vals, pos, color)
+        for vals, pos, color in zip(grouped_values, positions, resolved_median_colors, strict=False)
+        if vals.size > 0
+    ]
+
+    if valid_triplets:
+        valid_values, valid_positions, valid_median_colors = zip(*valid_triplets, strict=False)
+        box = ax.boxplot(
+            list(valid_values),
+            positions=list(valid_positions),
+            widths=widths,
+            patch_artist=True,
+            showfliers=showfliers,
+            showcaps=showcaps,
+            zorder=zorder,
+            **kwargs,
+        )
+
+        for patch in box["boxes"]:
+            patch.set(
+                facecolor=box_facecolor,
+                edgecolor=box_edgecolor,
+                alpha=box_alpha,
+                linewidth=box_linewidth,
+            )
+
+        for elem in ("whiskers", "caps"):
+            for artist in box[elem]:
+                artist.set(color=whisker_color, linewidth=whisker_linewidth)
+
+        for median, color in zip(box["medians"], valid_median_colors, strict=False):
+            median.set(color=color, linewidth=median_linewidth)
+    else:
+        box = {"boxes": [], "whiskers": [], "caps": [], "medians": []}
+
+    if line_values is not None:
+        line_values = np.asarray(line_values, dtype=float)
+        if line_values.ndim == 1:
+            line_values = line_values[None, :]
+        line_positions = np.asarray(positions, dtype=float)
+        if line_values.shape[1] != len(line_positions):
+            raise ValueError(
+                "line_values must have one column per box position. "
+                f"Expected {len(line_positions)}, got {line_values.shape[1]}."
+            )
+
+        for ys in line_values:
+            valid_idx = np.flatnonzero(np.isfinite(ys))
+            if valid_idx.size < 2:
+                continue
+            split_points = np.where(np.diff(valid_idx) > 1)[0] + 1
+            for segment in np.split(valid_idx, split_points):
+                if segment.size < 2:
+                    continue
+                ax.plot(
+                    line_positions[segment],
+                    ys[segment],
+                    color=line_color,
+                    alpha=line_alpha,
+                    lw=line_linewidth,
+                    zorder=line_zorder,
+                )
+
+    return box
+
+
 def _confident_change_event_indices(
     p_s: np.ndarray,
     posterior_threshold: float | None = None,
@@ -500,46 +620,25 @@ def plot_state_accuracy(
     )
 
     fig, ax = plt.subplots(figsize=(4, 4))
-    rng = np.random.default_rng(42)
-    for li, lbl in enumerate(x_labels):
-        rows = df_acc[df_acc["label"] == lbl]["acc"].dropna().values
-        if len(rows) == 0:
-            continue
-        color = cmap.get(lbl, "k")
-        box = ax.boxplot(
-            rows,
-            positions=[li],
-            widths=0.5,
-            patch_artist=True,
-            showfliers=False,
-            zorder=1,
-        )
-        for patch in box["boxes"]:
-            patch.set(facecolor=color, alpha=0.25, edgecolor=color, linewidth=1.2)
-        for elem in ["whiskers", "caps", "medians"]:
-            for artist in box[elem]:
-                artist.set(color=color, linewidth=1.2)
-        jitter = rng.uniform(-0.12, 0.12, size=len(rows))
-        ax.scatter(
-            np.full(len(rows), li) + jitter,
-            rows,
-            color=color,
-            alpha=0.65,
-            s=28,
-            zorder=3,
-        )
-        sem = rows.std(ddof=1) / np.sqrt(len(rows)) if len(rows) > 1 else 0.0
-        ax.errorbar(
-            li,
-            rows.mean(),
-            yerr=sem,
-            fmt="o",
-            color=color,
-            ms=7,
-            capsize=4,
-            lw=1.8,
-            zorder=4,
-        )
+    grouped_acc = [
+        df_acc[df_acc["label"] == lbl]["acc"].dropna().to_numpy(dtype=float)
+        for lbl in x_labels
+    ]
+    subject_lines = (
+        df_acc.pivot_table(index="subject", columns="label", values="acc", aggfunc="first")
+        .reindex(columns=x_labels)
+        .to_numpy(dtype=float)
+    )
+    custom_boxplot(
+        ax,
+        grouped_acc,
+        positions=np.arange(len(x_labels)),
+        widths=0.5,
+        median_colors=[cmap.get(lbl, "k") for lbl in x_labels],
+        line_values=subject_lines,
+        showfliers=False,
+        zorder=1,
+    )
 
     ax.axhline(chance_level, color="black", linestyle="--", linewidth=0.9, alpha=0.5)
     ax.set_xticks(range(len(x_labels)))
@@ -872,44 +971,67 @@ def plot_state_occupancy(
             raise ValueError("switch_posterior_threshold must be between 0 and 1.")
 
     subjects = list(views.keys())
+    if not subjects:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
     n_rows = len(subjects) + 1
     fig, axes = plt.subplots(n_rows, 3, figsize=(14, 3.8 * n_rows), squeeze=False)
-    rng = np.random.default_rng(42)
 
     first_view = views[subjects[0]]
-    rank_order_all, labels_all, colors_all = _state_labels_and_colors(first_view)
+    _, labels_all, colors_all = _state_labels_and_colors(first_view)
     overall_records: list[dict] = []
     session_records: list[dict] = []
     switch_records: list[dict] = []
 
-    def _styled_boxplot(ax, grouped_vals: list[np.ndarray], labels: list[str], colors: list[str]) -> None:
-        for pos, (vals, color) in enumerate(zip(grouped_vals, colors, strict=False)):
-            vals = np.asarray(vals, dtype=float)
-            if vals.size == 0:
-                continue
-            box = ax.boxplot(
-                vals,
-                positions=[pos],
-                widths=0.5,
-                patch_artist=True,
-                showfliers=False,
-            )
-            for patch in box["boxes"]:
-                patch.set(facecolor=color, alpha=0.25, edgecolor=color, linewidth=1.2)
-            for elem in ["whiskers", "caps", "medians"]:
-                for artist in box[elem]:
-                    artist.set(color=color, linewidth=1.2)
-            jitter = rng.uniform(-0.12, 0.12, size=vals.size)
-            ax.scatter(
-                np.full(vals.size, pos) + jitter,
-                vals,
-                color=color,
-                alpha=0.6,
-                s=24,
-                zorder=3,
-            )
+    def _grouped_state_values(records: list[dict], labels: list[str]) -> list[np.ndarray]:
+        if not records:
+            return [np.array([], dtype=float) for _ in labels]
+        df = pd.DataFrame(records)
+        return [
+            df.loc[df["state_label"] == lbl, "occupancy"].to_numpy(dtype=float)
+            for lbl in labels
+        ]
+
+    def _plot_overall_distribution(ax, grouped_vals: list[np.ndarray], labels: list[str], colors: list[str]) -> None:
+        custom_boxplot(
+            ax,
+            grouped_vals,
+            positions=np.arange(len(labels)),
+            widths=0.5,
+            median_colors=colors,
+            showfliers=False,
+        )
         ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=15, ha="right")
+        ax.set_xticklabels(labels,)
+        ax.set_ylim(0, 1)
+
+    def _plot_session_violin(ax, grouped_vals: list[np.ndarray], labels: list[str], colors: list[str]) -> None:
+        valid = [
+            (pos, np.asarray(vals, dtype=float), color)
+            for pos, (vals, color) in enumerate(zip(grouped_vals, colors, strict=False))
+            if np.asarray(vals, dtype=float).size > 0
+        ]
+        if valid:
+            positions, values, violin_colors = zip(*valid, strict=False)
+            violin = ax.violinplot(
+                list(values),
+                positions=list(positions),
+                widths=0.5,
+                showmeans=False,
+                showmedians=True,
+                showextrema=False,
+            )
+            for body, color in zip(violin["bodies"], violin_colors, strict=False):
+                body.set_facecolor(color)
+                body.set_edgecolor(color)
+                body.set_alpha(0.25)
+                body.set_linewidth(1.0)
+            violin["cmedians"].set_color("#666666")
+            violin["cmedians"].set_linewidth(1.1)
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels)
         ax.set_ylim(0, 1)
 
     def _count_switches(p_s: np.ndarray) -> int:
@@ -917,8 +1039,6 @@ def plot_state_occupancy(
 
     def _plot_switch_hist(ax, changes_per_sess: list[int], title: str) -> None:
         xlabel = "# state switches / session"
-        if switch_posterior_threshold is not None:
-            xlabel = f"# confident state switches / session\nposterior ≥ {switch_posterior_threshold:.2f}"
         if not changes_per_sess:
             ax.text(0.5, 0.5, "No data", ha="center", va="center")
             ax.set_title(title)
@@ -939,98 +1059,106 @@ def plot_state_occupancy(
         ax.set_ylabel("# sessions")
         ax.set_title(title)
 
-    for i, subj in enumerate(subjects, start=1):
-        ax_occ, ax_box, ax_chg = axes[i, 0], axes[i, 1], axes[i, 2]
-        P = np.asarray(views[subj].smoothed_probs)
-        df_sub = _subject_df(trial_df, subj)
-        if _is_polars_df(df_sub):
-            if sort_col is not None and sort_col in df_sub.columns:
-                df_sub = df_sub.sort([session_col, sort_col])
-        else:
-            if sort_col is not None and sort_col in df_sub.columns:
-                df_sub = df_sub.sort_values([session_col, sort_col], kind="stable")
+    def _subject_occupancy_summary(subj: str, view) -> dict | None:
+        df_sub = _sort_subject_trials(_subject_df(trial_df, subj), session_col, sort_col)
+        if df_sub is None or session_col not in df_sub.columns:
+            return None
+
+        P = np.asarray(view.smoothed_probs)
         sess_arr = np.asarray(df_sub[session_col])
         T = min(len(P), len(sess_arr))
-        P, sess_arr = P[:T], sess_arr[:T]
         if T == 0:
-            for ax in (ax_occ, ax_box, ax_chg):
-                ax.set_visible(False)
-            continue
+            return None
 
-        rank_order, labels, colors = _state_labels_and_colors(views[subj])
-        occ = [float(np.mean(P[:, k])) for k in rank_order]
-        for pos, k in enumerate(rank_order):
-            overall_records.append(
-                {
-                    "subject": subj,
-                    "state_idx": int(k),
-                    "state_label": labels[pos],
-                    "occupancy": occ[pos],
-                }
-            )
-        ax_occ.bar(labels, occ, color=colors, alpha=0.85)
-        ax_occ.set_ylim(0, 1)
-        ax_occ.set_ylabel("Fractional occupancy")
-        ax_occ.set_title(f"Subject {subj} - overall occupancy")
+        P, sess_arr = P[:T], sess_arr[:T]
+        rank_order, labels, colors = _state_labels_and_colors(view)
+        overall = np.mean(P[:, rank_order], axis=0)
+        overall_rows = [
+            {
+                "subject": subj,
+                "state_idx": int(k),
+                "state_label": label,
+                "occupancy": float(occ),
+            }
+            for k, label, occ in zip(rank_order, labels, overall, strict=False)
+        ]
 
-        sess_occ = {int(k): [] for k in rank_order}
-        changes_per_sess = []
-        for s in np.unique(sess_arr):
-            p_s = P[sess_arr == s]
+        session_rows: list[dict] = []
+        switch_rows: list[dict] = []
+        changes_per_sess: list[int] = []
+        for sess in np.unique(sess_arr):
+            p_s = P[sess_arr == sess]
             if len(p_s) == 0:
                 continue
             n_changes = _count_switches(p_s)
             changes_per_sess.append(n_changes)
-            switch_records.append({"subject": subj, "session": s, "switches": n_changes})
-            for pos, k in enumerate(rank_order):
-                occ_s = float(np.mean(p_s[:, k]))
-                sess_occ[int(k)].append(occ_s)
-                session_records.append(
+            switch_rows.append({"subject": subj, "session": sess, "switches": n_changes})
+            session_occ = np.mean(p_s[:, rank_order], axis=0)
+            for k, label, occ_s in zip(rank_order, labels, session_occ, strict=False):
+                session_rows.append(
                     {
                         "subject": subj,
-                        "session": s,
+                        "session": sess,
                         "state_idx": int(k),
-                        "state_label": labels[pos],
-                        "occupancy": occ_s,
+                        "state_label": label,
+                        "occupancy": float(occ_s),
                     }
                 )
 
-        _styled_boxplot(
+        return {
+            "labels": labels,
+            "colors": colors,
+            "overall": overall,
+            "overall_rows": overall_rows,
+            "session_rows": session_rows,
+            "switch_rows": switch_rows,
+            "changes_per_sess": changes_per_sess,
+        }
+
+    for i, subj in enumerate(subjects, start=1):
+        ax_occ, ax_box, ax_chg = axes[i, 0], axes[i, 1], axes[i, 2]
+        summary = _subject_occupancy_summary(subj, views[subj])
+        if summary is None:
+            for ax in (ax_occ, ax_box, ax_chg):
+                ax.set_visible(False)
+            continue
+
+        labels = summary["labels"]
+        colors = summary["colors"]
+        overall = summary["overall"]
+        overall_records.extend(summary["overall_rows"])
+        session_records.extend(summary["session_rows"])
+        switch_records.extend(summary["switch_rows"])
+
+        ax_occ.bar(labels, overall, color=colors, alpha=0.85)
+        ax_occ.set_ylim(0, 1)
+        ax_occ.set_ylabel("Fractional occupancy")
+        ax_occ.set_title(f"Subject {subj} - overall occupancy")
+
+        _plot_session_violin(
             ax_box,
-            [np.asarray(sess_occ[int(k)], dtype=float) for k in rank_order],
+            _grouped_state_values(summary["session_rows"], labels),
             labels,
             colors,
         )
         ax_box.set_ylabel("Session occupancy")
         ax_box.set_title(f"Subject {subj} - occupancy by session")
 
-        _plot_switch_hist(ax_chg, changes_per_sess, f"Subject {subj} - state switches")
+        _plot_switch_hist(ax_chg, summary["changes_per_sess"], f"Subject {subj} - state switches")
 
     ax_all_occ, ax_all_sess, ax_all_chg = axes[0, 0], axes[0, 1], axes[0, 2]
-    _styled_boxplot(
+    _plot_overall_distribution(
         ax_all_occ,
-        [
-            np.asarray(
-                [row["occupancy"] for row in overall_records if row["state_label"] == lbl],
-                dtype=float,
-            )
-            for lbl in labels_all
-        ],
+        _grouped_state_values(overall_records, labels_all),
         labels_all,
         colors_all,
     )
     ax_all_occ.set_ylabel("Fractional occupancy")
     ax_all_occ.set_title("All selected subjects - overall occupancy")
 
-    _styled_boxplot(
+    _plot_session_violin(
         ax_all_sess,
-        [
-            np.asarray(
-                [row["occupancy"] for row in session_records if row["state_label"] == lbl],
-                dtype=float,
-            )
-            for lbl in labels_all
-        ],
+        _grouped_state_values(session_records, labels_all),
         labels_all,
         colors_all,
     )
@@ -1203,7 +1331,7 @@ def plot_state_dwell_times_by_subject(
     *,
     session_col: str = "session",
     sort_col: str | Sequence[str] | None = None,
-    max_dwell: int | None = 90,
+    max_dwell: int | None = None,
     ci_level: float = 0.68,
 ) -> plt.Figure:
     subject_entries, max_states, y_max, resolved_max_dwell = _prepare_state_dwell_entries(
@@ -1253,7 +1381,7 @@ def plot_state_dwell_times_summary(
     *,
     session_col: str = "session",
     sort_col: str | Sequence[str] | None = None,
-    max_dwell: int | None = 90,
+    max_dwell: int | None = None,
     ci_level: float = 0.68,
 ) -> plt.Figure:
     subject_entries, max_states, y_max, resolved_max_dwell = _prepare_state_dwell_entries(
@@ -1328,7 +1456,7 @@ def plot_state_dwell_times(
     *,
     session_col: str = "session",
     sort_col: str | Sequence[str] | None = None,
-    max_dwell: int | None = 90,
+    max_dwell: int | None = None,
     ci_level: float = 0.68,
 ) -> plt.Figure:
     return plot_state_dwell_times_by_subject(

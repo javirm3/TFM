@@ -57,7 +57,6 @@ def _():
         mo,
         np,
         paths,
-        pd,
         pl,
         plt,
         resolve_selected_model_id,
@@ -293,99 +292,6 @@ def _(
 
 
 @app.cell
-def _(OUT, mo, model_cfg, pd, pl, plt, save_plot, sns):
-    import json
-    mo.stop(model_cfg.cv_mode == "none", mo.md(""))
-
-    repeat_files = sorted(OUT.glob("*_cv_repeats.parquet"))
-    mo.stop(not repeat_files, mo.md("No CV repeat diagnostics found yet."))
-
-    repeats_df = pl.concat([pl.read_parquet(path) for path in repeat_files], how="diagonal_relaxed")
-
-    repeats_pd = repeats_df.to_pandas()
-
-    count_rows = []
-    for _row in repeats_pd.to_dict(orient="records"):
-        print(_row)
-        for split_name, counts_key in (
-            ("train", "train_label_counts_json"),
-            ("test", "test_label_counts_json"),
-        ):
-            counts = json.loads(_row.get(counts_key) or "{}")
-            for ild, count in counts.items():
-                count_rows.append(
-                    {
-                        "subject": _row["subject"],
-                        "repeat_index": int(_row["repeat_index"]),
-                        "subject_repeat": f"{_row['subject']} r{int(_row['repeat_index'])}",
-                        "split": split_name,
-                        "ild": float(ild),
-                        "count": int(count),
-                    }
-                )
-
-    count_pd = pd.DataFrame(count_rows)
-    if not count_pd.empty:
-        count_pd = count_pd.sort_values(["ild", "subject", "repeat_index"])
-
-    fig, axes = plt.subplots(3, 1, figsize=(max(10, 0.55 * max(len(repeats_pd), 1)), 12))
-
-    sns.lineplot(
-        data=repeats_pd,
-        x="repeat_index",
-        y="test_ll_per_trial",
-        hue="subject",
-        marker="o",
-        ax=axes[0],
-    )
-    axes[0].set_title("CV Test Log-Likelihood by Repeat")
-    axes[0].set_xlabel("Repeat")
-    axes[0].set_ylabel("Test LL / trial")
-
-    for ax_idx, split_name in enumerate(["train", "test"], start=1):
-        split_pd = count_pd[count_pd["split"] == split_name]
-        if split_pd.empty:
-            axes[ax_idx].set_visible(False)
-            continue
-        pivot = (
-            split_pd.pivot_table(
-                index="ild",
-                columns="subject_repeat",
-                values="count",
-                fill_value=0,
-            )
-            .sort_index()
-        )
-        sns.heatmap(pivot, cmap="Blues", cbar=True, ax=axes[ax_idx])
-        axes[ax_idx].set_title(f"Signed ILD Counts in {split_name.capitalize()} Split")
-        axes[ax_idx].set_xlabel("Subject / Repeat")
-        axes[ax_idx].set_ylabel("Signed ILD")
-
-    fig.tight_layout()
-    mo.vstack(
-        [
-            fig,
-            save_plot(
-                fig,
-                "cv repeat diagnostics",
-                stem="cv_repeat_diagnostics",
-            ),
-        ],
-        align="center",
-    )
-    # summary_cols = [
-    #     "subject",
-    #     "repeat_index",
-    #     "balance_score",
-    #     "train_session_count",
-    #     "test_session_count",
-    #     "test_ll_per_trial",
-    #     "test_acc",
-    # ]
-    return
-
-
-@app.cell
 def _(
     adapter,
     df_all,
@@ -410,7 +316,7 @@ def _(
 
     selected = [s for s in model_cfg.subjects if s in arrays_store]
     _ = names
-    return K, OUT, arrays_store, selected
+    return K, arrays_store, selected
 
 
 @app.cell
@@ -483,7 +389,7 @@ def _(K, mo, paths, plots, save_plot, selected, views):
     _subject_figs, _summary_figs = plots.plot_emission_weights(views=_views_sel, K=K)
 
     mo.vstack([
-               # _subject_figs,
+               _subject_figs,
                 save_plot(_subject_figs, f"Emission Weights",
                                     stem=f"emissions_summary",),
                _summary_figs,
@@ -1146,7 +1052,7 @@ def _(mo):
 
     THRESH_ui = mo.ui.anywidget(
         TangleSlider(
-            amount=0.9,
+            amount=0.5,
             min_value=0.0,
             max_value=1,
             step=0.01,
@@ -1214,17 +1120,17 @@ def _(df_all, mo):
     ui_subjects_traj = mo.ui.multiselect(
         options=sorted(df_all["subject"].unique().to_list(), key=str),
         label="Subjects (session trajectories & occupancy)",
+        value = ""
     )
     mo.vstack([mo.md("### Session trajectory & occupancy"), ui_subjects_traj])
     return (ui_subjects_traj,)
 
 
 @app.cell
-def _(mo, plots, trial_df, ui_subjects_traj, views):
-    selected_traj = [s for s in ui_subjects_traj.value if s in views]
-    mo.stop(not selected_traj, mo.md("Select subjects above to view session trajectories."))
+def _(mo, plots, selected, trial_df, views):
+    mo.stop(not selected, mo.md("Select subjects above to view session trajectories."))
     _fig_traj = plots.plot_session_trajectories(
-        views={s: views[s] for s in selected_traj},
+        views={s: views[s] for s in selected},
         trial_df=trial_df,
         session_col="session",
         sort_col="trial_idx",
@@ -1246,11 +1152,10 @@ def _(mo):
 
 
 @app.cell
-def _(THRESH_ui, mo, plots, save_plot, trial_df, ui_subjects_traj, views):
-    selected_occ = [s for s in ui_subjects_traj.value if s in views]
-    mo.stop(not selected_occ, mo.md("Select subjects above."))
+def _(THRESH_ui, mo, plots, save_plot, selected, trial_df, views):
+    mo.stop(not selected, mo.md("Select subjects above."))
     _fig_occ = plots.plot_state_occupancy(
-        views={s: views[s] for s in selected_occ},
+        views={s: views[s] for s in selected},
         trial_df=trial_df,
         session_col="session",
         sort_col="trial_idx",
@@ -1264,7 +1169,7 @@ def _(THRESH_ui, mo, plots, save_plot, trial_df, ui_subjects_traj, views):
             stem="state_occupancy",
         ),
         mo.md(
-            f"changes between confident MAP assignments with posterior ≥ {THRESH_ui.amount:.2f}."
+            f"changes between confident MAP assignments with posterior ≥ {THRESH_ui}."
         ),
     ], align="center")
     return
@@ -1329,6 +1234,12 @@ def _(mo, selected):
         label="Subject",
     )
     return (ui_session_subj,)
+
+
+@app.cell
+def _(ui_session_subj):
+    ui_session_subj.value
+    return
 
 
 @app.cell

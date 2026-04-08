@@ -75,6 +75,20 @@ _AT_CHOICE_SPEC = FittedWeightRegressorSpec(
     source_features=tuple(_CHOICE_LAG_COLS),
 )
 
+EMISSION_REGRESSOR_LABELS: dict[str, str] = {
+    "stim_vals": r"$\mathrm{Stimulus}$",
+    "stim_param": r"$\mathrm{Stimulus}_{\mathrm{param}}$",
+    "bias": r"$\mathrm{Bias}$",
+    "at_choice": r"$\mathrm{AT}_{\mathrm{choice}}$",
+    "at_error": r"$\mathrm{AT}_{\mathrm{error}}$",
+    "at_correct": r"$\mathrm{AT}_{\mathrm{correct}}$",
+    "reward_trace": r"$\mathrm{Reward}_{\mathrm{trace}}$",
+    "prev_choice": r"$\mathrm{PrevChoice}$",
+    "prev_reward": r"$\mathrm{PrevReward}$",
+    "prev_abs_stim": r"$|\mathrm{PrevStim}|$",
+    "cumulative_reward": r"$\mathrm{CumReward}$",
+}
+
 
 def _validated_half_life(tau: float) -> float:
     """Return a positive half-life for Polars EWMA features."""

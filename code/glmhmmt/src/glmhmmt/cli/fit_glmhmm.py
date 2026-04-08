@@ -10,9 +10,8 @@ import polars as pl
 
 from glmhmmt.cli.fit_common import (
     apply_valid_trial_mask,
-    build_balanced_session_holdout,
+    build_session_kfold_split,
     fit_best_restart,
-    format_balance_label_stats,
     normalize_cv_mode,
     score_split,
     stable_model_id,
@@ -205,10 +204,6 @@ def fit_subject_cv(
     condition_filter: str = "all",
 ) -> dict:
     adapter, feature_df = _load_subject_feature_df(subject, task, tau, condition_filter=condition_filter)
-    labels = adapter.cv_balance_labels(feature_df)
-    if labels is None:
-        raise ValueError(f"Task {task!r} does not define CV balance labels.")
-
     frozen = normalize_frozen_emissions(frozen_emissions)
     repeats: list[dict[str, Any]] = []
     best_repeat_idx = -1
@@ -217,7 +212,8 @@ def fit_subject_cv(
     best_repeat_lps = None
     best_repeat_model = None
     best_repeat_names = None
-    for repeat_idx in range(cv_repeats):
+    n_folds = 5
+    for repeat_idx in range(n_folds):
         if progress_callback is not None:
             progress_callback(
                 {
@@ -225,24 +221,20 @@ def fit_subject_cv(
                     "subject": subject,
                     "K": K,
                     "cv_repeat_index": repeat_idx + 1,
-                    "cv_repeat_total": cv_repeats,
+                    "cv_repeat_total": n_folds,
                 }
             )
-        train_df, test_df, split_meta = build_balanced_session_holdout(
+        train_df, test_df, split_meta = build_session_kfold_split(
             feature_df,
-            labels,
             adapter.session_col,
-            seed=base_seed + repeat_idx,
+            fold_index=repeat_idx,
+            n_splits=n_folds,
+            seed=base_seed,
         )
         if verbose:
-            ild_stats = format_balance_label_stats(
-                split_meta["train_label_counts"],
-                split_meta["test_label_counts"],
-            )
             print(
-                f"[CV repeat {repeat_idx + 1}/{cv_repeats}] "
-                f"sessions train/test={split_meta['train_session_count']}/{split_meta['test_session_count']} "
-                f"balance_score={split_meta['balance_score']:.4f} | ILD train|test -> {ild_stats}"
+                f"[CV fold {repeat_idx + 1}/{n_folds}] "
+                f"sessions train/test={split_meta['train_session_count']}/{split_meta['test_session_count']}"
             )
 
         y_train, X_train, session_train, names = _prepare_arrays(
@@ -286,7 +278,7 @@ def fit_subject_cv(
                 "subject": subject,
                 "K": K,
                 "cv_repeat_index": repeat_idx + 1,
-                "cv_repeat_total": cv_repeats,
+                "cv_repeat_total": n_folds,
             },
         )
         train_metrics = score_split(model, best_params, y_train, X_train, session_train)
@@ -316,7 +308,7 @@ def fit_subject_cv(
                 "test_session_count": int(split_meta["test_session_count"]),
                 "train_label_counts_json": json.dumps(split_meta["train_label_counts"], sort_keys=True),
                 "test_label_counts_json": json.dumps(split_meta["test_label_counts"], sort_keys=True),
-                "balance_score": float(split_meta["balance_score"]),
+                "balance_score": None,
             }
         )
         if progress_callback is not None:
@@ -326,7 +318,7 @@ def fit_subject_cv(
                     "subject": subject,
                     "K": K,
                     "cv_repeat_index": repeat_idx + 1,
-                    "cv_repeat_total": cv_repeats,
+                    "cv_repeat_total": n_folds,
                     "test_ll_per_trial": float(test_metrics["ll_per_trial"]),
                     "test_acc": float(test_metrics["acc"]),
                 }
@@ -381,7 +373,7 @@ def fit_subject_cv(
         "X": np.asarray(X_full),
         "frozen_emissions": serialize_frozen_emissions(frozen),
         "cv_mode": "balanced_session_holdout",
-        "cv_repeats": cv_repeats,
+        "cv_repeats": n_folds,
     }
 
 
@@ -635,6 +627,12 @@ if __name__ == "__main__":
     parser.add_argument("--tau", type=float, default=50.0, help="Half-life for exponential action traces.")
     parser.add_argument("--task", type=str, default="MCDR", help="Task to fit: 'MCDR', '2AFC', or 'nuo_auditory'.")
     parser.add_argument(
+        "--emission_cols",
+        nargs="+",
+        default=None,
+        help="Emission regressors to use. If omitted, uses the task defaults.",
+    )
+    parser.add_argument(
         "--cv_mode",
         type=str,
         default="none",
@@ -647,6 +645,13 @@ if __name__ == "__main__":
         default=None,
         help='JSON object mapping state indices to {feature: fixed_value}, e.g. \'{"0":{"SL":0.0}}\'.',
     )
+    parser.add_argument(
+        "--condition_filter",
+        type=str,
+        default="all",
+        choices=["all", "saline", "drug"],
+        help="Condition subset for 2AFC_DRUG. Ignored for other tasks.",
+    )
     args = parser.parse_args()
     configure_paths_from_args(args, include_alexis_dir=True)
     frozen_emissions = json.loads(args.frozen_emissions) if args.frozen_emissions else None
@@ -658,8 +663,10 @@ if __name__ == "__main__":
         base_seed=args.seed,
         out_dir=Path(args.out_dir) if args.out_dir else None,
         tau=args.tau,
+        emission_cols=args.emission_cols,
         task=args.task,
         cv_mode=args.cv_mode,
         cv_repeats=args.cv_repeats,
         frozen_emissions=frozen_emissions,
+        condition_filter=args.condition_filter,
     )
