@@ -79,9 +79,9 @@ options = get_task_options()
 | `build_feature_df(df_sub, tau=50.0)` | Build the task-owned dataframe containing raw behavioural columns and derived regressors. |
 | `load_subject(df_sub, tau=50.0, emission_cols=None, transition_cols=None)` | Return `(y, X, U, names)` for one subject slice. |
 | `build_design_matrices(feature_df, emission_cols=None, transition_cols=None)` | Build `(y, X, U, names)` from an already prepared feature dataframe. |
-| `default_emission_cols()` | Default ordered emission regressor names. |
+| `default_emission_cols(df=None)` | Default ordered emission regressor names, optionally including dynamic task-owned columns inferred from `df`. |
 | `default_transition_cols()` | Default ordered transition regressor names. |
-| `available_emission_cols()` | Selectable emission regressors. Defaults to the emission defaults. |
+| `available_emission_cols(df=None)` | Selectable emission regressors. Defaults to the emission defaults and can include dynamic task-owned columns from `df`. |
 | `available_transition_cols()` | Selectable transition regressors. Defaults to the transition defaults. |
 | `resolve_design_names(...)` | Resolve `X_cols` and `U_cols` without rebuilding arrays. |
 

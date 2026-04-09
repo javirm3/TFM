@@ -33,7 +33,7 @@ def _choice_lag_names() -> list[str]:
 _STIM_BIN_COLS = _stim_bin_names()
 _CHOICE_LAG_COLS = _choice_lag_names()
 
-_NUO_AUDITORY_EMISSION_COLS: list[str] = [
+EMISSION_COLS: list[str] = [
     "bias",
     "stim_vals",
     "stim_param",
@@ -47,7 +47,7 @@ _NUO_AUDITORY_EMISSION_COLS: list[str] = [
     "prev_abs_stim",
 ]
 
-_NUO_AUDITORY_TRANSITION_COLS: list[str] = [
+TRANSITION_COLS: list[str] = [
     "at_choice",
     "at_correct",
     "at_error",
@@ -78,10 +78,10 @@ _AT_CHOICE_SPEC = FittedWeightRegressorSpec(
 EMISSION_REGRESSOR_LABELS: dict[str, str] = {
     "stim_vals": r"$\mathrm{Stimulus}$",
     "stim_param": r"$\mathrm{Stimulus}_{\mathrm{param}}$",
-    "bias": r"$\mathrm{Bias}$",
-    "at_choice": r"$\mathrm{AT}_{\mathrm{choice}}$",
-    "at_error": r"$\mathrm{AT}_{\mathrm{error}}$",
-    "at_correct": r"$\mathrm{AT}_{\mathrm{correct}}$",
+    "bias": r"$\mid\mathrm{bias}\mid$",
+    "at_choice": r"$\mathrm{A}_t^{\mathrm{choice}}$",
+    "at_error": r"$\mathrm{A}_t^{\mathrm{error}}$",
+    "at_correct": r"$\mathrm{A}_t^{\mathrm{correct}}$",
     "reward_trace": r"$\mathrm{Reward}_{\mathrm{trace}}$",
     "prev_choice": r"$\mathrm{PrevChoice}$",
     "prev_reward": r"$\mathrm{PrevReward}$",
@@ -298,18 +298,18 @@ class NuoAuditoryAdapter(TaskAdapter):
         transition_cols: List[str] | None = None,
     ) -> Tuple[Any, Any, Any, Dict]:
         """Return ``(y, X, U, names)`` for one subject."""
-        ecols = emission_cols if emission_cols is not None else self.default_emission_cols()
+        ecols = emission_cols if emission_cols is not None else self.default_emission_cols(feature_df)
         ucols = transition_cols if transition_cols is not None else self.default_transition_cols()
-        allowed_ecols = set(self.available_emission_cols()) | set(self.available_extra_emission_cols(feature_df))
+        allowed_ecols = set(self.available_emission_cols(feature_df))
         bad_e = [c for c in ecols if c not in allowed_ecols]
-        bad_u = [c for c in ucols if c not in _NUO_AUDITORY_TRANSITION_COLS]
+        bad_u = [c for c in ucols if c not in TRANSITION_COLS]
         if bad_e:
             raise ValueError(
                 f"Unknown emission_cols: {bad_e}. Available: {sorted(allowed_ecols)}"
             )
         if bad_u:
             raise ValueError(
-                f"Unknown transition_cols: {bad_u}. Available: {_NUO_AUDITORY_TRANSITION_COLS}"
+                f"Unknown transition_cols: {bad_u}. Available: {TRANSITION_COLS}"
             )
 
         y = jnp.asarray(feature_df["response"].to_numpy().astype(np.int32))
@@ -318,22 +318,13 @@ class NuoAuditoryAdapter(TaskAdapter):
         names = {"X_cols": list(ecols), "U_cols": list(ucols)}
         return y, X, U, names
 
-    def default_emission_cols(self) -> List[str]:
-        return list(_NUO_AUDITORY_EMISSION_COLS)
+    def _dynamic_emission_cols(self, df: pl.DataFrame | None) -> list[str]:
+        if df is None:
+            return []
 
-    def default_transition_cols(self) -> List[str]:
-        return list(_NUO_AUDITORY_TRANSITION_COLS)
-
-    def available_emission_cols(self) -> List[str]:
-        return list(_NUO_AUDITORY_EMISSION_COLS)
-
-    def available_transition_cols(self) -> List[str]:
-        return list(_NUO_AUDITORY_TRANSITION_COLS)
-
-    def available_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
-        extras: list[str] = [c for c in list(_STIM_BIN_COLS) + list(_CHOICE_LAG_COLS) if c in df.columns]
-        if extras:
-            return extras
+        dynamic_cols = [c for c in list(_STIM_BIN_COLS) + list(_CHOICE_LAG_COLS) if c in df.columns]
+        if dynamic_cols:
+            return dynamic_cols
 
         raw_has_stim = "total_evidence_strength" in df.columns
         raw_has_choice = "last_choice" in df.columns or "response" in df.columns
@@ -344,8 +335,17 @@ class NuoAuditoryAdapter(TaskAdapter):
             inferred.extend(_CHOICE_LAG_COLS)
         return inferred
 
-    def default_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
-        return self.available_extra_emission_cols(df)
+    def default_emission_cols(self, df: pl.DataFrame | None = None) -> List[str]:
+        return list(EMISSION_COLS) + self._dynamic_emission_cols(df)
+
+    def default_transition_cols(self) -> List[str]:
+        return list(TRANSITION_COLS)
+
+    def available_emission_cols(self, df: pl.DataFrame | None = None) -> List[str]:
+        return list(EMISSION_COLS) + self._dynamic_emission_cols(df)
+
+    def available_transition_cols(self) -> List[str]:
+        return list(TRANSITION_COLS)
 
     def resolve_design_names(
         self,
@@ -353,19 +353,18 @@ class NuoAuditoryAdapter(TaskAdapter):
         transition_cols: List[str] | None = None,
         df=None,
     ) -> Dict[str, List[str]]:
-        ecols = list(emission_cols) if emission_cols is not None else self.default_emission_cols()
+        ecols = list(emission_cols) if emission_cols is not None else self.default_emission_cols(df)
         ucols = list(transition_cols) if transition_cols is not None else self.default_transition_cols()
-        extra_cols = self.available_extra_emission_cols(df) if df is not None else []
-        allowed_ecols = set(self.available_emission_cols()) | set(extra_cols)
+        allowed_ecols = set(self.available_emission_cols(df))
         bad_e = [c for c in ecols if c not in allowed_ecols]
-        bad_u = [c for c in ucols if c not in _NUO_AUDITORY_TRANSITION_COLS]
+        bad_u = [c for c in ucols if c not in TRANSITION_COLS]
         if bad_e:
             raise ValueError(
                 f"Unknown emission_cols: {bad_e}. Available: {sorted(allowed_ecols)}"
             )
         if bad_u:
             raise ValueError(
-                f"Unknown transition_cols: {bad_u}. Available: {_NUO_AUDITORY_TRANSITION_COLS}"
+                f"Unknown transition_cols: {bad_u}. Available: {TRANSITION_COLS}"
             )
         return {"X_cols": list(ecols), "U_cols": list(ucols)}
 

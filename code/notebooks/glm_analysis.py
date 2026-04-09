@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.22.0"
+__generated_with = "0.22.5"
 app = marimo.App(width="medium")
 
 
@@ -89,7 +89,7 @@ def _(get_adapter, model_cfg, paths, pl):
 
 
 @app.cell
-def _(ModelManagerWidget, mo, wrap_anywidget):
+def _(ModelManagerWidget, wrap_anywidget):
     mm_widget = ModelManagerWidget(
         model_type="glm",
         task="MCDR",
@@ -497,7 +497,6 @@ def _(
     adapter,
     build_editor_payload,
     editor_views,
-    mo,
     np,
     ui_editor_side,
     ui_editor_state,

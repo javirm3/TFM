@@ -21,7 +21,7 @@ from glmhmmt.tasks import TaskAdapter, _register
 _KEEP_EXPERIMENTS = ["2AFC_2", "2AFC_3", "2AFC_4", "2AFC_6"]
 _SF_COL_PREFIX = "sf_"
 _STIM_ABS_COL_PREFIX = "stim_"
-_ALL_2AFC_EMISSION_COLS: list[str] = [
+EMISSION_COLS: list[str] = [
     "bias",
     "stim_vals",
     "stim_param",
@@ -36,8 +36,7 @@ _ALL_2AFC_EMISSION_COLS: list[str] = [
     "cumulative_reward",
     "prev_abs_stim",
 ]
-_AVAILABLE_2AFC_EMISSION_COLS: list[str] = list(_ALL_2AFC_EMISSION_COLS)
-_ALL_2AFC_TRANSITION_COLS: list[str] = [
+TRANSITION_COLS: list[str] = [
     "at_choice",
     "at_correct",
     "at_error",
@@ -46,7 +45,6 @@ _ALL_2AFC_TRANSITION_COLS: list[str] = [
     "prev_reward",
     "cumulative_reward",
 ]
-_AVAILABLE_2AFC_TRANSITION_COLS: list[str] = list(_ALL_2AFC_TRANSITION_COLS)
 _STIM_PARAM_COL = "stim_param"
 _STIM_PARAM_SPEC = FittedWeightRegressorSpec(
     target_name="stim_param",
@@ -257,7 +255,7 @@ class TwoAFCAdapter(TaskAdapter):
         feature_df: pl.DataFrame,
         emission_cols: List[str] | None,
     ) -> list[str]:
-        requested = emission_cols if emission_cols is not None else self.default_emission_cols()
+        requested = emission_cols if emission_cols is not None else self.default_emission_cols(feature_df)
         resolved: list[str] = []
         dynamic_sf_cols = sorted(
             [c for c in feature_df.columns if c.startswith(_SF_COL_PREFIX)],
@@ -283,8 +281,10 @@ class TwoAFCAdapter(TaskAdapter):
         transition_cols: List[str] | None = None,
     ) -> Tuple[Any, Any, Any, Dict]:
         """Return ``(y, X, U, names)`` for the 2AFC task."""
-        requested_emission_cols = emission_cols if emission_cols is not None else self.default_emission_cols()
-        include_stim_strength = "stim_strength" in requested_emission_cols
+        requested_emission_cols = emission_cols if emission_cols is not None else self.default_emission_cols(df_sub)
+        include_stim_strength = "stim_strength" in requested_emission_cols or any(
+            col.startswith(_SF_COL_PREFIX) for col in requested_emission_cols
+        )
         feature_df = self._build_feature_df(
             df_sub,
             tau=tau,
@@ -305,16 +305,14 @@ class TwoAFCAdapter(TaskAdapter):
         """Return ``(y, X, U, names)`` for the 2AFC task."""
         ecols = self._resolved_emission_cols(feature_df, emission_cols)
         ucols = transition_cols if transition_cols is not None else self.default_transition_cols()
-        allowed_ecols = set(self.available_emission_cols()) | {
-            c for c in feature_df.columns if c.startswith(_SF_COL_PREFIX)
-        } | set(_stim_abs_cols(feature_df.columns))
+        allowed_ecols = set(self.available_emission_cols(feature_df))
         bad_e = [c for c in ecols if c not in allowed_ecols]
-        bad_u = [c for c in ucols if c not in _AVAILABLE_2AFC_TRANSITION_COLS]
+        bad_u = [c for c in ucols if c not in TRANSITION_COLS]
         if bad_e:
             raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {sorted(allowed_ecols)}")
         if bad_u:
             raise ValueError(
-                f"Unknown transition_cols: {bad_u}. Available: {_AVAILABLE_2AFC_TRANSITION_COLS}"
+                f"Unknown transition_cols: {bad_u}. Available: {TRANSITION_COLS}"
             )
 
         y = jnp.asarray(feature_df["Choice"].to_numpy().astype(np.int32))
@@ -334,19 +332,26 @@ class TwoAFCAdapter(TaskAdapter):
 
     # ── column defaults ─────────────────────────────────────────────────────
 
-    def default_emission_cols(self) -> List[str]:
+    def default_emission_cols(self, df: pl.DataFrame | None = None) -> List[str]:
         # Exclude stim_strength (multi-column) and stim_param (alternate stimulus
-        # encoding) by default; include sf_ cols at runtime.
-        return [c for c in _ALL_2AFC_EMISSION_COLS if c not in {"stim_strength", _STIM_PARAM_COL}]
+        # encoding) by default; include precomputed sf_ cols at runtime.
+        default_cols = [c for c in EMISSION_COLS if c not in {"stim_strength", _STIM_PARAM_COL}]
+        if df is not None:
+            default_cols.extend(self.sf_cols(df))
+        return list(dict.fromkeys(default_cols))
 
     def default_transition_cols(self) -> List[str]:
-        return list(_ALL_2AFC_TRANSITION_COLS)
+        return list(TRANSITION_COLS)
 
-    def available_emission_cols(self) -> List[str]:
-        return list(_AVAILABLE_2AFC_EMISSION_COLS)
+    def available_emission_cols(self, df: pl.DataFrame | None = None) -> List[str]:
+        available_cols = list(EMISSION_COLS)
+        if df is not None:
+            available_cols.extend(self.sf_cols(df))
+            available_cols.extend(self.stim_abs_cols(df))
+        return list(dict.fromkeys(available_cols))
 
     def available_transition_cols(self) -> List[str]:
-        return list(_AVAILABLE_2AFC_TRANSITION_COLS)
+        return list(TRANSITION_COLS)
 
     def resolve_design_names(
         self,
@@ -354,12 +359,8 @@ class TwoAFCAdapter(TaskAdapter):
         transition_cols: List[str] | None = None,
         df: pl.DataFrame | None = None,
     ) -> Dict[str, List[str]]:
-        requested_ecols = list(emission_cols) if emission_cols is not None else self.default_emission_cols()
+        requested_ecols = list(emission_cols) if emission_cols is not None else self.default_emission_cols(df)
         requested_ucols = list(transition_cols) if transition_cols is not None else self.default_transition_cols()
-
-        extra_cols: list[str] = []
-        if df is not None:
-            extra_cols = self.available_extra_emission_cols(df)
 
         resolved_ecols: list[str] = []
         for col in requested_ecols:
@@ -374,14 +375,14 @@ class TwoAFCAdapter(TaskAdapter):
             else:
                 resolved_ecols.append(col)
 
-        allowed_ecols = set(self.available_emission_cols()) | set(extra_cols)
+        allowed_ecols = set(self.available_emission_cols(df))
         bad_e = [c for c in resolved_ecols if c not in allowed_ecols]
-        bad_u = [c for c in requested_ucols if c not in _AVAILABLE_2AFC_TRANSITION_COLS]
+        bad_u = [c for c in requested_ucols if c not in TRANSITION_COLS]
         if bad_e:
             raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {sorted(allowed_ecols)}")
         if bad_u:
             raise ValueError(
-                f"Unknown transition_cols: {bad_u}. Available: {_AVAILABLE_2AFC_TRANSITION_COLS}"
+                f"Unknown transition_cols: {bad_u}. Available: {TRANSITION_COLS}"
             )
         return {"X_cols": list(resolved_ecols), "U_cols": list(requested_ucols)}
 
@@ -392,12 +393,6 @@ class TwoAFCAdapter(TaskAdapter):
     def stim_abs_cols(self, df: pl.DataFrame) -> List[str]:
         """Return signed one-hot columns for absolute ILD magnitudes."""
         return _infer_stim_abs_cols_from_df(df)
-
-    def available_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
-        return list(dict.fromkeys(self.sf_cols(df) + self.stim_abs_cols(df)))
-
-    def default_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
-        return self.sf_cols(df)
 
     @property
     def choice_labels(self) -> list[str]:

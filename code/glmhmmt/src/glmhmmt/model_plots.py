@@ -10,7 +10,7 @@ from scipy.special import softmax as _softmax
 from matplotlib import cm, colors
 from typing import Tuple
 from glmhmmt.runtime import load_app_config
-from glmhmmt.views import get_state_palette as _get_config_state_palette
+from glmhmmt.views import _LABEL_RANK, get_state_palette as _get_config_state_palette
 from glmhmmt.plots_common import (
     plot_state_accuracy as _plot_state_accuracy_common,
     plot_change_triggered_posteriors_by_subject as _plot_change_triggered_posteriors_by_subject_common,
@@ -734,18 +734,6 @@ _AG_GROUPS = [
     ("$A_{incoh}$", [("A_L", 1), ("A_R", 0)]),
 ]
 
-
-# NOTE: _LABEL_RANK and _STATE_HEX are also defined in views.py (the canonical
-# source of truth).  These local definitions are kept for backward compatibility
-# with existing call sites inside this module.  Both definitions must stay in sync.
-_LABEL_RANK = {
-    "Engaged": 0,
-    "Disengaged": 1,
-    "Disengaged L": 1,
-    "Disengaged R": 2,
-    "Disengaged C": 3,
-    **{f"Disengaged {i}": i for i in range(1, 10)},
-}
 
 # ── canonical state colours from config (rank-indexed) ───────────────────────
 _STATE_HEX: list[str] = _get_config_state_palette()

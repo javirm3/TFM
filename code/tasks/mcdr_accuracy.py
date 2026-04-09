@@ -10,7 +10,7 @@ import polars as pl
 
 from glmhmmt.tasks import TaskAdapter, _register
 
-_ALL_EMISSION_COLS: list[str] = [
+EMISSION_COLS: list[str] = [
     "bias",
     "onset",
     "delay",
@@ -29,7 +29,7 @@ _ALL_EMISSION_COLS: list[str] = [
     "A_minus",
 ]
 
-_ALL_TRANSITION_COLS: list[str] = ["A_plus", "A_minus"]
+TRANSITION_COLS: list[str] = ["A_plus", "A_minus"]
 
 
 @_register(["mcdr_accuracy", "mcdr-accuracy"])
@@ -118,14 +118,14 @@ class MCDRAccuracyAdapter(TaskAdapter):
         emission_cols: List[str] | None = None,
         transition_cols: List[str] | None = None,
     ) -> Tuple[Any, Any, Any, Dict]:
-        ecols = emission_cols if emission_cols is not None else list(_ALL_EMISSION_COLS)
-        ucols = transition_cols if transition_cols is not None else list(_ALL_TRANSITION_COLS)
-        bad_e = [c for c in ecols if c not in _ALL_EMISSION_COLS]
-        bad_u = [c for c in ucols if c not in _ALL_TRANSITION_COLS]
+        ecols = emission_cols if emission_cols is not None else list(EMISSION_COLS)
+        ucols = transition_cols if transition_cols is not None else list(TRANSITION_COLS)
+        bad_e = [c for c in ecols if c not in EMISSION_COLS]
+        bad_u = [c for c in ucols if c not in TRANSITION_COLS]
         if bad_e:
-            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {_ALL_EMISSION_COLS}")
+            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {EMISSION_COLS}")
         if bad_u:
-            raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {_ALL_TRANSITION_COLS}")
+            raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {TRANSITION_COLS}")
 
         # Encode trials so the explicit softmax row corresponds to "Correct":
         # y = 0 for correct, y = 1 for error/reference.
@@ -135,11 +135,12 @@ class MCDRAccuracyAdapter(TaskAdapter):
         names = {"X_cols": list(ecols), "U_cols": list(ucols)}
         return y, X, U, names
 
-    def default_emission_cols(self) -> List[str]:
-        return list(_ALL_EMISSION_COLS)
+    def default_emission_cols(self, df=None) -> List[str]:
+        del df
+        return list(EMISSION_COLS)
 
     def default_transition_cols(self) -> List[str]:
-        return list(_ALL_TRANSITION_COLS)
+        return list(TRANSITION_COLS)
 
     def resolve_design_names(
         self,
@@ -147,14 +148,14 @@ class MCDRAccuracyAdapter(TaskAdapter):
         transition_cols: List[str] | None = None,
         df=None,
     ) -> Dict[str, List[str]]:
-        ecols = list(emission_cols) if emission_cols is not None else list(_ALL_EMISSION_COLS)
-        ucols = list(transition_cols) if transition_cols is not None else list(_ALL_TRANSITION_COLS)
-        bad_e = [c for c in ecols if c not in _ALL_EMISSION_COLS]
-        bad_u = [c for c in ucols if c not in _ALL_TRANSITION_COLS]
+        ecols = list(emission_cols) if emission_cols is not None else list(EMISSION_COLS)
+        ucols = list(transition_cols) if transition_cols is not None else list(TRANSITION_COLS)
+        bad_e = [c for c in ecols if c not in EMISSION_COLS]
+        bad_u = [c for c in ucols if c not in TRANSITION_COLS]
         if bad_e:
-            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {_ALL_EMISSION_COLS}")
+            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {EMISSION_COLS}")
         if bad_u:
-            raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {_ALL_TRANSITION_COLS}")
+            raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {TRANSITION_COLS}")
         return {"X_cols": ecols, "U_cols": ucols}
 
     @property

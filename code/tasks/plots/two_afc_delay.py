@@ -61,6 +61,9 @@ from glmhmmt.views import _LABEL_RANK, get_state_palette
 # ── state colour palette ──────────────────────────────────────────────────────
 sns.set_style("ticks")
 
+_SESSION_COL = "session"
+_SORT_COL = "trial_idx"
+
 def _state_colors(K: int) -> List[str]:
     return get_state_palette(K)[:K]
 
@@ -2625,8 +2628,8 @@ def plot_state_accuracy(
     views: dict,
     trial_df,
     thresh: float = 0.5,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     performance_col: str = "correct_bool",
     stim_col: str = "ILD",
     **kwargs,
@@ -2644,8 +2647,8 @@ def plot_state_accuracy(
 def plot_session_trajectories(
     views: dict,
     trial_df,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     **kwargs,
 ) -> plt.Figure:
     return _plot_session_trajectories_common(
@@ -2671,8 +2674,8 @@ def plot_state_posterior_count_kde(
 def plot_change_triggered_posteriors_summary(
     views: dict,
     trial_df,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     switch_posterior_threshold: float | None = None,
     window: int = 15,
     **kwargs,
@@ -2690,8 +2693,8 @@ def plot_change_triggered_posteriors_summary(
 def plot_change_triggered_posteriors_by_subject(
     views: dict,
     trial_df,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     switch_posterior_threshold: float | None = None,
     window: int = 15,
     **kwargs,
@@ -2709,8 +2712,8 @@ def plot_change_triggered_posteriors_by_subject(
 def plot_state_occupancy(
     views: dict,
     trial_df,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     **kwargs,
 ) -> plt.Figure:
     return _plot_state_occupancy_common(
@@ -2725,8 +2728,8 @@ def plot_state_occupancy(
 def plot_state_occupancy_overall_boxplot(
     views: dict,
     trial_df,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     **kwargs,
 ) -> plt.Figure:
     return _plot_state_occupancy_overall_boxplot_common(
@@ -2741,8 +2744,8 @@ def plot_state_occupancy_overall_boxplot(
 def plot_state_dwell_times_by_subject(
     views: dict,
     trial_df,
-    session_col: str = "session",
-    sort_col: str = "trial_idx",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     max_dwell: int | None = None,
     ci_level: float = 0.68,
     **kwargs,
@@ -2760,8 +2763,8 @@ def plot_state_dwell_times_by_subject(
 def plot_state_dwell_times_summary(
     views: dict,
     trial_df,
-    session_col: str = "session",
-    sort_col: str = "trial_idx",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     max_dwell: int | None = None,
     ci_level: float = 0.68,
     **kwargs,
@@ -2779,8 +2782,8 @@ def plot_state_dwell_times_summary(
 def plot_state_dwell_times(
     views: dict,
     trial_df,
-    session_col: str = "session",
-    sort_col: str = "trial_idx",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     max_dwell: int | None = None,
     ci_level: float = 0.68,
     **kwargs,
@@ -2805,8 +2808,8 @@ def plot_session_deepdive(
     trial_df,
     subj: str,
     sess,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
+    session_col: str = _SESSION_COL,
+    sort_col: str = _SORT_COL,
     switch_posterior_threshold: float | None = None,
     **kwargs,
 ) -> plt.Figure:

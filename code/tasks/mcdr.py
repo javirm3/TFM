@@ -10,7 +10,7 @@ import polars as pl
 
 from glmhmmt.tasks import TaskAdapter, _register
 
-_ALL_EMISSION_COLS: list[str] = [
+EMISSION_COLS: list[str] = [
     "bias",
     "biasL", "biasC", "biasR", "onsetL", "onsetC", "onsetR", "delay",
     "SL", "SC", "SR",
@@ -25,7 +25,7 @@ _ALL_EMISSION_COLS: list[str] = [
     "stim4L", "stim4C", "stim4R",
 ]
 
-_ALL_TRANSITION_COLS: list[str] = ["A_plus", "A_minus", "A_L", "A_C", "A_R"]
+TRANSITION_COLS: list[str] = ["A_plus", "A_minus", "A_L", "A_C", "A_R"]
 
 
 @_register(["mcdr"])
@@ -175,14 +175,14 @@ class MCDRAdapter(TaskAdapter):
         transition_cols: List[str] | None = None,
     ) -> Tuple[Any, Any, Any, Dict]:
         """Return ``(y, X, U, names)`` from the MCDR feature dataframe."""
-        ecols = emission_cols if emission_cols is not None else list(_ALL_EMISSION_COLS)
-        ucols = transition_cols if transition_cols is not None else list(_ALL_TRANSITION_COLS)
-        bad_e = [c for c in ecols if c not in _ALL_EMISSION_COLS]
-        bad_u = [c for c in ucols if c not in _ALL_TRANSITION_COLS]
+        ecols = emission_cols if emission_cols is not None else list(EMISSION_COLS)
+        ucols = transition_cols if transition_cols is not None else list(TRANSITION_COLS)
+        bad_e = [c for c in ecols if c not in EMISSION_COLS]
+        bad_u = [c for c in ucols if c not in TRANSITION_COLS]
         if bad_e:
-            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {_ALL_EMISSION_COLS}")
+            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {EMISSION_COLS}")
         if bad_u:
-            raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {_ALL_TRANSITION_COLS}")
+            raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {TRANSITION_COLS}")
 
         y = jnp.asarray(feature_df["response"].to_numpy().astype(np.int32))
         X = jnp.asarray(feature_df.select(ecols).to_numpy().astype(np.float32)) if ecols else jnp.empty((len(y), 0), dtype=jnp.float32)
@@ -192,11 +192,12 @@ class MCDRAdapter(TaskAdapter):
 
     # ── column defaults ─────────────────────────────────────────────────────
 
-    def default_emission_cols(self) -> List[str]:
-        return list(_ALL_EMISSION_COLS)
+    def default_emission_cols(self, df=None) -> List[str]:
+        del df
+        return list(EMISSION_COLS)
 
     def default_transition_cols(self) -> List[str]:
-        return list(_ALL_TRANSITION_COLS)
+        return list(TRANSITION_COLS)
 
     def resolve_design_names(
         self,
@@ -204,14 +205,14 @@ class MCDRAdapter(TaskAdapter):
         transition_cols: List[str] | None = None,
         df=None,
     ) -> Dict[str, List[str]]:
-        ecols = list(emission_cols) if emission_cols is not None else list(_ALL_EMISSION_COLS)
-        ucols = list(transition_cols) if transition_cols is not None else list(_ALL_TRANSITION_COLS)
-        bad_e = [c for c in ecols if c not in _ALL_EMISSION_COLS]
-        bad_u = [c for c in ucols if c not in _ALL_TRANSITION_COLS]
+        ecols = list(emission_cols) if emission_cols is not None else list(EMISSION_COLS)
+        ucols = list(transition_cols) if transition_cols is not None else list(TRANSITION_COLS)
+        bad_e = [c for c in ecols if c not in EMISSION_COLS]
+        bad_u = [c for c in ucols if c not in TRANSITION_COLS]
         if bad_e:
-            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {_ALL_EMISSION_COLS}")
+            raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {EMISSION_COLS}")
         if bad_u:
-            raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {_ALL_TRANSITION_COLS}")
+            raise ValueError(f"Unknown transition_cols: {bad_u}. Available: {TRANSITION_COLS}")
         return {"X_cols": ecols, "U_cols": ucols}
 
     @property

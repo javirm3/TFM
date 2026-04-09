@@ -87,16 +87,20 @@ class TaskAdapter(ABC):
     # ── column defaults  ────────────────────────────────────────────────────
 
     @abstractmethod
-    def default_emission_cols(self) -> List[str]:
-        """Ordered list of emission regressor names for UI initialisation."""
+    def default_emission_cols(self, df: Any = None) -> List[str]:
+        """Ordered list of default emission regressors.
+
+        Adapters may inspect ``df`` to include dynamic task-owned columns such
+        as one-hot stimulus bins or frame-level regressors.
+        """
 
     @abstractmethod
     def default_transition_cols(self) -> List[str]:
         """Ordered list of transition regressor names for UI initialisation."""
 
-    def available_emission_cols(self) -> List[str]:
+    def available_emission_cols(self, df: Any = None) -> List[str]:
         """Ordered list of selectable emission regressors."""
-        return self.default_emission_cols()
+        return self.default_emission_cols(df)
 
     def available_transition_cols(self) -> List[str]:
         """Ordered list of selectable transition regressors."""
@@ -114,14 +118,19 @@ class TaskAdapter(ABC):
         need fallback ``X_cols`` / ``U_cols`` for older fit artifacts.
         Adapters with dynamic expansion can override it.
         """
-        x_cols = list(emission_cols) if emission_cols is not None else list(self.default_emission_cols())
+        x_cols = (
+            list(emission_cols)
+            if emission_cols is not None
+            else list(self.default_emission_cols(df))
+        )
         u_cols = list(transition_cols) if transition_cols is not None else list(self.default_transition_cols())
 
-        bad_e = [c for c in x_cols if c not in self.available_emission_cols()]
+        available_ecols = self.available_emission_cols(df)
+        bad_e = [c for c in x_cols if c not in available_ecols]
         bad_u = [c for c in u_cols if c not in self.available_transition_cols()]
         if bad_e:
             raise ValueError(
-                f"Unknown emission_cols: {bad_e}. Available: {self.available_emission_cols()}"
+                f"Unknown emission_cols: {bad_e}. Available: {available_ecols}"
             )
         if bad_u:
             raise ValueError(
@@ -132,14 +141,6 @@ class TaskAdapter(ABC):
     def sf_cols(self, df: Any) -> List[str]:
         """Optional dynamic stimulus-frame columns for binary tasks."""
         return []
-
-    def available_extra_emission_cols(self, df: Any) -> List[str]:
-        """Optional dynamic emission columns shown in selectors."""
-        return self.sf_cols(df)
-
-    def default_extra_emission_cols(self, df: Any) -> List[str]:
-        """Optional dynamic emission columns preselected by default."""
-        return self.sf_cols(df)
 
     def cv_balance_labels(self, feature_df: Any):
         """Return per-trial labels used for CV balancing, or ``None`` if unsupported."""

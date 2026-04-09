@@ -521,12 +521,18 @@ def main(
     cv_repeats = int(cv_repeats) if cv_mode != "none" else 0
     frozen_spec = serialize_frozen_emissions(frozen_emissions)
     condition_filter = _normalize_condition_filter(task, condition_filter)
+    df = None
+    if emission_cols is None or subjects is None:
+        df = pl.read_parquet(get_data_dir() / adapter.data_file)
+        df = adapter.subject_filter(df)
+        df = _filter_condition_df(df, task, condition_filter)
+    resolved_emission_cols = emission_cols or adapter.default_emission_cols(df)
     if out_dir is None:
         model_id = generate_model_id(
             task=task,
             K=K_list[0],
             tau=tau,
-            emission_cols=emission_cols or adapter.default_emission_cols(),
+            emission_cols=resolved_emission_cols,
             frozen_emissions=frozen_spec,
             cv_mode=cv_mode,
             cv_repeats=cv_repeats,
@@ -541,7 +547,7 @@ def main(
                 "task": task,
                 "tau": tau,
                 "subjects": subjects,
-                "emission_cols": emission_cols or adapter.default_emission_cols(),
+                "emission_cols": resolved_emission_cols,
                 "frozen_emissions": frozen_spec,
                 "K_list": K_list,
                 "model_id": out_dir.name,
@@ -553,9 +559,10 @@ def main(
             indent=4,
         )
     if subjects is None:
-        df = pl.read_parquet(get_data_dir() / adapter.data_file)
-        df = adapter.subject_filter(df)
-        df = _filter_condition_df(df, task, condition_filter)
+        if df is None:
+            df = pl.read_parquet(get_data_dir() / adapter.data_file)
+            df = adapter.subject_filter(df)
+            df = _filter_condition_df(df, task, condition_filter)
         subjects = df["subject"].unique().sort().to_list()
 
     for subj_idx, subj in enumerate(subjects, start=1):

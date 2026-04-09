@@ -12,7 +12,7 @@ import pandas as pd
 from glmhmmt.cli.alexis_functions import get_action_trace
 from glmhmmt.tasks import TaskAdapter, _register
 
-_ALL_2AFC_DELAY_EMISSION_COLS: list[str] = [
+EMISSION_COLS: list[str] = [
     "bias",
     "stim",
     "delay",
@@ -30,8 +30,7 @@ _ALL_2AFC_DELAY_EMISSION_COLS: list[str] = [
     "repeat",
     "repeat_choice_side",
 ]
-_AVAILABLE_2AFC_DELAY_EMISSION_COLS: list[str] = list(_ALL_2AFC_DELAY_EMISSION_COLS)
-_ALL_2AFC_DELAY_TRANSITION_COLS: list[str] = [
+TRANSITION_COLS: list[str] = [
     "at_choice",
     "at_correct",
     "at_error",
@@ -41,7 +40,6 @@ _ALL_2AFC_DELAY_TRANSITION_COLS: list[str] = [
     "cumulative_reward",
     "delay",
 ]
-_AVAILABLE_2AFC_DELAY_TRANSITION_COLS: list[str] = list(_ALL_2AFC_DELAY_TRANSITION_COLS)
 
 EMISSION_REGRESSOR_LABELS: dict[str, str] = {
     "stim": r"$\mathrm{Stimulus}$",
@@ -187,8 +185,7 @@ class TwoAFCDelayAdapter(TaskAdapter):
         feature_df: pl.DataFrame,
         emission_cols: List[str] | None,
     ) -> list[str]:
-        del feature_df
-        requested = emission_cols if emission_cols is not None else self.default_emission_cols()
+        requested = emission_cols if emission_cols is not None else self.default_emission_cols(feature_df)
         return list(requested)
 
     def load_subject(
@@ -213,14 +210,14 @@ class TwoAFCDelayAdapter(TaskAdapter):
     ) -> Tuple[Any, Any, Any, Dict]:
         ecols = self._resolved_emission_cols(feature_df, emission_cols)
         ucols = transition_cols if transition_cols is not None else self.default_transition_cols()
-        allowed_ecols = set(self.available_emission_cols())
+        allowed_ecols = set(self.available_emission_cols(feature_df))
         bad_e = [c for c in ecols if c not in allowed_ecols]
-        bad_u = [c for c in ucols if c not in _AVAILABLE_2AFC_DELAY_TRANSITION_COLS]
+        bad_u = [c for c in ucols if c not in TRANSITION_COLS]
         if bad_e:
             raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {sorted(allowed_ecols)}")
         if bad_u:
             raise ValueError(
-                f"Unknown transition_cols: {bad_u}. Available: {_AVAILABLE_2AFC_DELAY_TRANSITION_COLS}"
+                f"Unknown transition_cols: {bad_u}. Available: {TRANSITION_COLS}"
             )
 
         y_np = feature_df["choice_bin"].to_numpy().astype(np.int32)
@@ -246,17 +243,19 @@ class TwoAFCDelayAdapter(TaskAdapter):
             return None
         return feature_df["stim"].cast(pl.Float64)
 
-    def default_emission_cols(self) -> List[str]:
-        return list(_ALL_2AFC_DELAY_EMISSION_COLS)
+    def default_emission_cols(self, df: pl.DataFrame | None = None) -> List[str]:
+        del df
+        return list(EMISSION_COLS)
 
     def default_transition_cols(self) -> List[str]:
-        return list(_ALL_2AFC_DELAY_TRANSITION_COLS)
+        return list(TRANSITION_COLS)
 
-    def available_emission_cols(self) -> List[str]:
-        return list(_AVAILABLE_2AFC_DELAY_EMISSION_COLS)
+    def available_emission_cols(self, df: pl.DataFrame | None = None) -> List[str]:
+        del df
+        return list(EMISSION_COLS)
 
     def available_transition_cols(self) -> List[str]:
-        return list(_AVAILABLE_2AFC_DELAY_TRANSITION_COLS)
+        return list(TRANSITION_COLS)
 
     def resolve_design_names(
         self,
@@ -264,27 +263,18 @@ class TwoAFCDelayAdapter(TaskAdapter):
         transition_cols: List[str] | None = None,
         df: pl.DataFrame | None = None,
     ) -> Dict[str, List[str]]:
-        requested_ecols = list(emission_cols) if emission_cols is not None else self.default_emission_cols()
+        requested_ecols = list(emission_cols) if emission_cols is not None else self.default_emission_cols(df)
         requested_ucols = list(transition_cols) if transition_cols is not None else self.default_transition_cols()
-        del df
-        allowed_ecols = set(self.available_emission_cols())
+        allowed_ecols = set(self.available_emission_cols(df))
         bad_e = [c for c in requested_ecols if c not in allowed_ecols]
-        bad_u = [c for c in requested_ucols if c not in _AVAILABLE_2AFC_DELAY_TRANSITION_COLS]
+        bad_u = [c for c in requested_ucols if c not in TRANSITION_COLS]
         if bad_e:
             raise ValueError(f"Unknown emission_cols: {bad_e}. Available: {sorted(allowed_ecols)}")
         if bad_u:
             raise ValueError(
-                f"Unknown transition_cols: {bad_u}. Available: {_AVAILABLE_2AFC_DELAY_TRANSITION_COLS}"
+                f"Unknown transition_cols: {bad_u}. Available: {TRANSITION_COLS}"
             )
         return {"X_cols": list(requested_ecols), "U_cols": list(requested_ucols)}
-
-    def available_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
-        del df
-        return []
-
-    def default_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
-        del df
-        return []
 
     @property
     def choice_labels(self) -> list[str]:

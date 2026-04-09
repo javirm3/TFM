@@ -405,12 +405,8 @@ class ModelManagerWidget(anywidget.AnyWidget):
             self.lapse     = False
             self.lapse_max = 0.2
             is_2afc = adapter.num_classes == 2
-            available_ecols = (
-                adapter.available_emission_cols() + adapter.available_extra_emission_cols(df_all)
-            )
-            default_ecols = (
-                adapter.default_emission_cols() + adapter.default_extra_emission_cols(df_all)
-            )
+            available_ecols = adapter.available_emission_cols(df_all)
+            default_ecols = adapter.default_emission_cols(df_all)
             self.emission_cols_options = available_ecols
             self.emission_cols = default_ecols[:10] if self.model_type == "glm" else default_ecols
             self.transition_cols_options = adapter.available_transition_cols()
@@ -669,12 +665,8 @@ class ModelManagerWidget(anywidget.AnyWidget):
             if not self.subjects:
                 self.subjects = subjects
 
-            available_ecols = (
-                adapter.available_emission_cols() + adapter.available_extra_emission_cols(df_all)
-            )
-            default_ecols = (
-                adapter.default_emission_cols() + adapter.default_extra_emission_cols(df_all)
-            )
+            available_ecols = adapter.available_emission_cols(df_all)
+            default_ecols = adapter.default_emission_cols(df_all)
             self.emission_cols_options = available_ecols
             if not self.emission_cols:
                 self.emission_cols = default_ecols[:10] if self.model_type == "glm" else default_ecols

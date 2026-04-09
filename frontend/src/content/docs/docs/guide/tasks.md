@@ -30,7 +30,7 @@ Each adapter should define:
 - `build_feature_df(df_sub, tau)`
 - `load_subject(df_sub, tau, emission_cols, transition_cols)`
 - `build_design_matrices(feature_df, emission_cols, transition_cols)`
-- `default_emission_cols()`
+- `default_emission_cols(df=None)`
 - `default_transition_cols()`
 - `behavioral_cols`
 - `get_correct_class(df)`
@@ -79,7 +79,7 @@ class MyTaskAdapter(TaskAdapter):
     def build_design_matrices(self, feature_df, emission_cols=None, transition_cols=None):
         ...
 
-    def default_emission_cols(self):
+    def default_emission_cols(self, df=None):
         return [...]
 
     def default_transition_cols(self):

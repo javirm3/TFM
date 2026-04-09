@@ -11,7 +11,9 @@ except NameError:
 
 CODE_DIR  = ROOT / "code"
 RESULTS = CODE_DIR / "results"
-CONFIG = CODE_DIR / "config.toml"
+# Project-local runtime overrides live under the package root; defaults are
+# loaded from `src/glmhmmt/resources/default_config.toml`.
+CONFIG = CODE_DIR / "glmhmmt" / "config.toml"
 DATA_PATH = ROOT / "data"
 FITTING_DIR = CODE_DIR / "fitting"
 PARAMS_DIR = ROOT / "params"
