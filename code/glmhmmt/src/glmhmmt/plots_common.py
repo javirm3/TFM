@@ -222,6 +222,42 @@ def _resolve_boxplot_colors(colors, n_artists: int, name: str) -> list[str]:
         raise ValueError(f"{name} must have length {n_artists}, got {len(resolved)}.")
     return resolved
 
+def fig_size(n_cols=1, ratio=None):
+    """
+    Get figure size for A4 page with n_cols columns and specified ratio (width/height).
+    :param n_cols: Number of columns (0 for full page)
+    :param ratio: Width/height ratio (None for default)
+    :return: tuple (width, height) in inches
+    """
+
+    sns.set_style('ticks')
+    sns.set_context('notebook')
+
+    if ratio is None:
+        default_figsize = np.array(plt.rcParams['figure.figsize'])
+        default_ratio = default_figsize[0] / default_figsize[1]
+        ratio = default_ratio  # 4:3
+
+    # All measurements are in inches
+    A4_size = np.array((8.27, 11.69))  # A4 measurements
+    margins = 2  # On both dimension
+    size = A4_size - margins  # Effective size after margins removal (2 per dimension)
+    width = size[0]
+    height = size[1]
+
+    # Full page (minus margins)
+    if n_cols == 0:
+        # Full A4 minus margins
+        figsize = (width, height)
+        if ratio == 1:  # Square
+            figsize = (size[0], size[0])
+        return figsize
+
+    else:
+        fig_width = width / n_cols
+        fig_height = fig_width / ratio
+        figsize = (fig_width, fig_height)
+        return figsize
 
 def custom_boxplot(
     ax: plt.Axes,
@@ -1595,11 +1631,19 @@ def plot_session_deepdive(
     trace_u_candidates: Sequence[str] = ("A_plus", "A_minus"),
     choice_colors: dict[int, str] | None = None,
     choice_labels: dict[int, str] | None = None,
+    engaged_window: int = 20,
+    engaged_trace_mode: str = "rolling",
 ) -> plt.Figure:
     try:
         sess = int(sess)
     except (TypeError, ValueError):
         pass
+    engaged_window = int(engaged_window)
+    if engaged_window < 1:
+        raise ValueError("engaged_window must be >= 1.")
+    engaged_trace_mode = str(engaged_trace_mode).strip().lower()
+    if engaged_trace_mode not in {"rolling", "raw"}:
+        raise ValueError("engaged_trace_mode must be 'rolling' or 'raw'.")
     if switch_posterior_threshold is not None:
         switch_posterior_threshold = float(switch_posterior_threshold)
         if not 0.0 <= switch_posterior_threshold <= 1.0:
@@ -1655,6 +1699,27 @@ def plot_session_deepdive(
 
     rank_order, _labels, colors = _state_labels_and_colors(views[subj])
     engaged_k = views[subj].engaged_k()
+    probs_roll = np.empty_like(probs, dtype=float)
+    probs_cumsum = np.cumsum(probs, axis=0, dtype=float)
+    for ti in range(T):
+        start = max(0, ti - engaged_window + 1)
+        totals = probs_cumsum[ti] - (probs_cumsum[start - 1] if start > 0 else 0.0)
+        probs_roll[ti] = totals / float(ti - start + 1)
+    engaged_prob = probs[:, engaged_k]
+    engaged_roll = np.empty(T, dtype=float)
+    engaged_cumsum = np.cumsum(engaged_prob, dtype=float)
+    for ti in range(T):
+        start = max(0, ti - engaged_window + 1)
+        total = engaged_cumsum[ti] - (engaged_cumsum[start - 1] if start > 0 else 0.0)
+        engaged_roll[ti] = total / float(ti - start + 1)
+    probs_display = probs_roll if engaged_trace_mode == "rolling" else probs
+    engaged_trace = engaged_roll if engaged_trace_mode == "rolling" else engaged_prob
+    engaged_label = views[subj].state_name_by_idx.get(engaged_k, "Engaged")
+    engaged_trace_label = (
+        f"P({engaged_label}) rolling ({engaged_window} trials)"
+        if engaged_trace_mode == "rolling"
+        else f"P({engaged_label}) raw"
+    )
 
     n_rows = 2 if trace_sources else 1
     height_ratios = [2, 1.5] if trace_sources else [1]
@@ -1674,25 +1739,32 @@ def plot_session_deepdive(
         ax1.fill_between(
             x,
             bottom,
-            bottom + probs[:, k],
+            bottom + probs_display[:, k],
             alpha=0.7,
             color=color,
             label=views[subj].state_name_by_idx.get(k, f"State {k}"),
         )
-        bottom += probs[:, k]
+        bottom += probs_display[:, k]
 
     palette = get_state_palette(views[subj].K)
+    ax1.fill_between(
+        x,
+        0.0,
+        engaged_trace,
+        color=palette[0],
+        alpha=0.18,
+    )
     ax1.plot(
         x,
-        probs[:, engaged_k],
+        engaged_trace,
         color=palette[0],
         lw=2,
-        label=f"P({views[subj].state_name_by_idx.get(engaged_k, 'Engaged')})",
+        label=engaged_trace_label,
     )
     if change_idx.size:
         ax1.scatter(
             x[change_idx],
-            probs[change_idx, engaged_k],
+            engaged_trace[change_idx],
             s=34,
             color="crimson",
             linewidths=0,
@@ -1721,7 +1793,7 @@ def plot_session_deepdive(
     ax1.set_title(title, pad=25)
 
     ax1r = ax1.twinx()
-    ax1r.plot(x, rolling_acc, color="black", lw=1.8, linestyle="-", alpha=0.7, label="Rolling accuracy (5 trials)")
+    ax1r.plot(x, rolling_acc, color="black", lw=1.8, linestyle="-", alpha=0.7, label=f"Rolling accuracy ({window} trials)")
     ax1r.axhline(100.0 / float(views[subj].num_classes), color="grey", lw=0.9, linestyle="--", alpha=0.5)
     ax1r.set_ylim(0, 105)
     ax1r.set_ylabel("Accuracy (%)", color="black")

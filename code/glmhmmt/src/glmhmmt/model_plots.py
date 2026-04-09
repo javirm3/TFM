@@ -1693,6 +1693,7 @@ def plot_session_deepdive(
         performance_candidates=(perf_col, "correct_bool", "performance"),
         stim_candidates=(stimd_col, "stimulus", "ILD"),
         response_candidates=(resp_col, "response", "Choice"),
+        **kwargs,
     )
 
 

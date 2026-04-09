@@ -6,20 +6,17 @@ from typing import Any, Dict, List, Tuple
 
 import jax.numpy as jnp
 import numpy as np
-import pandas as pd
 import polars as pl
+import pandas as pd
 
 from glmhmmt.cli.alexis_functions import get_action_trace
 from glmhmmt.tasks import TaskAdapter, _register
 
-_STIM_ABS_COL_PREFIX = "stim_"
-_STIM_PARAM_COL = "stim_param"
-
 _ALL_2AFC_DELAY_EMISSION_COLS: list[str] = [
     "bias",
-    "stim_vals",
-    "stim_param",
+    "stim",
     "delay",
+    "stim_x_delay",
     "at_choice",
     "at_error",
     "at_correct",
@@ -32,8 +29,6 @@ _ALL_2AFC_DELAY_EMISSION_COLS: list[str] = [
     "after_correct",
     "repeat",
     "repeat_choice_side",
-    "WM",
-    "RL",
 ]
 _AVAILABLE_2AFC_DELAY_EMISSION_COLS: list[str] = list(_ALL_2AFC_DELAY_EMISSION_COLS)
 _ALL_2AFC_DELAY_TRANSITION_COLS: list[str] = [
@@ -49,9 +44,9 @@ _ALL_2AFC_DELAY_TRANSITION_COLS: list[str] = [
 _AVAILABLE_2AFC_DELAY_TRANSITION_COLS: list[str] = list(_ALL_2AFC_DELAY_TRANSITION_COLS)
 
 EMISSION_REGRESSOR_LABELS: dict[str, str] = {
-    "stim_vals": r"$\mathrm{Stimulus}$",
-    "stim_param": r"$\mathrm{Stimulus}_{\mathrm{param}}$",
+    "stim": r"$\mathrm{Stimulus}$",
     "delay": r"$\mathrm{Delay}$",
+    "stim_x_delay": r"$\mathrm{Stimulus}\times\mathrm{Delay}$",
     "bias": r"$\mid\mathrm{bias}\mid$",
     "at_choice": r"$\mathrm{A}_t^{\mathrm{choice}}$",
     "at_error": r"$\mathrm{A}_t^{\mathrm{error}}$",
@@ -70,55 +65,23 @@ EMISSION_REGRESSOR_LABELS: dict[str, str] = {
 }
 
 
-def _stim_abs_sort_key(name: str) -> tuple[int, str]:
-    suffix = name.removeprefix(_STIM_ABS_COL_PREFIX)
-    return (int(suffix), name) if suffix.isdigit() else (10**9, name)
-
-
-def _stim_abs_cols(columns: list[str]) -> list[str]:
-    return sorted(
-        [
-            col
-            for col in columns
-            if col.startswith(_STIM_ABS_COL_PREFIX)
-            and col.removeprefix(_STIM_ABS_COL_PREFIX).isdigit()
-        ],
-        key=_stim_abs_sort_key,
-    )
-
-
-def _infer_stim_abs_cols_from_df(df: pl.DataFrame | pd.DataFrame) -> list[str]:
-    columns = list(df.columns)
-    existing = _stim_abs_cols(columns)
-    if existing:
-        return existing
-    stim_col = "stim" if "stim" in columns else "stimulus" if "stimulus" in columns else None
-    if stim_col is None:
-        return []
-    stim_series = df[stim_col].drop_nulls() if isinstance(df, pl.DataFrame) else df[stim_col].dropna()
-    stim_abs_levels = sorted({int(abs(v)) for v in stim_series.to_list()})
-    return [f"{_STIM_ABS_COL_PREFIX}{stim_abs}" for stim_abs in stim_abs_levels]
-
-
 def _stim_param_weight_map() -> dict[int, float]:
-    """Return a simple sign-preserving one-hot stimulus map for Tiffany 2AFC."""
+    """Compatibility shim for copied 2AFC plotting code."""
     return {0: 0.0, 1: 1.0}
 
 
-def _build_stim_param(part: pd.DataFrame, stim_abs_levels: list[int]) -> np.ndarray:
-    weight_map = _stim_param_weight_map()
-    stim = part["stim"].astype(float).to_numpy()
-    values = np.zeros(len(part), dtype=np.float32)
-    for stim_abs in stim_abs_levels:
-        if stim_abs == 0:
-            continue
-        mask = np.abs(stim) == stim_abs
-        values[mask] = np.sign(stim[mask]) * float(weight_map.get(stim_abs, 0.0))
-    return values
-
-
 def _choice_to_binary(series: pd.Series) -> np.ndarray:
-    return (series.astype(float).to_numpy() > 0).astype(np.int32)
+    return series.astype(np.int32).to_numpy()
+
+
+def _signed_to_binary(series: pd.Series) -> pd.Series:
+    vals = pd.to_numeric(series, errors="coerce")
+    unique = set(vals.dropna().unique().tolist())
+    if unique.issubset({0, 1, 0.0, 1.0}):
+        return vals.astype(np.float32)
+    if unique.issubset({-1, 1, -1.0, 1.0}):
+        return (vals > 0).astype(np.float32)
+    return vals.astype(np.float32)
 
 
 @_register(["two_afc_delay", "2afc_delay", "2AFC_delay"])
@@ -133,16 +96,15 @@ class TwoAFCDelayAdapter(TaskAdapter):
     session_col: str = "session"
 
     _SCORING_OPTIONS: dict = {
-        "stim_vals (-w)": [("stim_vals", "neg")],
-        "stim_vals (|w|)": [("stim_vals", "abs")],
-        "stim_param (-w)": [("stim_param", "neg")],
-        "stim_param (|w|)": [("stim_param", "abs")],
+        "stim (w)": [("stim", "pos")],
+        "stim (|w|)": [("stim", "abs")],
         "delay (|w|)": [("delay", "abs")],
+        "stim_x_delay (|w|)": [("stim_x_delay", "abs")],
         "at_choice (|w|)": [("at_choice", "abs")],
         "wsls (|w|)": [("wsls", "abs")],
         "bias (|w|)": [("bias", "abs")],
     }
-    scoring_key: str = "stim_vals (-w)"
+    scoring_key: str = "stim (w)"
 
     def subject_filter(self, df: pl.DataFrame) -> pl.DataFrame:
         return df
@@ -159,32 +121,19 @@ class TwoAFCDelayAdapter(TaskAdapter):
         if df_pd.empty:
             return pl.from_pandas(df_pd)
 
-        stim_scale = float(df_pd["stim"].abs().max() or 0.0)
-        if stim_scale <= 0:
-            stim_scale = 1.0
-
-        stim_abs_levels = sorted({int(abs(v)) for v in df_pd["stim"].dropna().astype(int).tolist()})
         parts: list[pd.DataFrame] = []
         for _, df_session in df_pd.groupby("session", sort=False):
             part = df_session.copy().reset_index(drop=True)
             part["bias"] = 1.0
-            part["stim_vals"] = (part["stim"].astype(float) / stim_scale).astype(np.float32)
-            for stim_abs in stim_abs_levels:
-                if stim_abs == 0:
-                    stim_col = np.where(part["stim"] == 0, 1.0, 0.0).astype(np.float32)
-                else:
-                    stim_col = np.select(
-                        [part["stim"] == stim_abs, part["stim"] == -stim_abs],
-                        [1.0, -1.0],
-                        default=0.0,
-                    ).astype(np.float32)
-                part[f"{_STIM_ABS_COL_PREFIX}{stim_abs}"] = stim_col
-            part[_STIM_PARAM_COL] = _build_stim_param(part, stim_abs_levels)
-            part["delay"] = part["delays"].astype(np.float32)
+            part["stim_signed"] = pd.to_numeric(part["stim"], errors="coerce").astype(np.float32)
+            part["stim"] = part["stim_signed"].astype(np.float32)
+            part["choice_signed"] = pd.to_numeric(part["choices"], errors="coerce").astype(np.float32)
+            part["choice_bin"] = _signed_to_binary(part["choices"]).astype(np.float32)
+            part["delay_raw"] = part["delays"].astype(np.float32)
 
             trace_input = pd.DataFrame(
                 {
-                    "Choice": _choice_to_binary(part["choices"]),
+                    "Choice": _choice_to_binary(part["choice_bin"]),
                     "Hit": part["hit"].astype(float).to_numpy(),
                     "Punish": (1.0 - part["hit"].astype(float)).to_numpy(),
                 }
@@ -195,7 +144,7 @@ class TwoAFCDelayAdapter(TaskAdapter):
             part["at_correct"] = np.asarray(at_correct, dtype=np.float32)
             part["reward_trace"] = np.asarray(reward_trace, dtype=np.float32)
 
-            prev_choice = part["choices"].shift(1).fillna(0).astype(np.float32)
+            prev_choice = part["choice_signed"].shift(1).fillna(0).astype(np.float32)
             prev_reward = part["hit"].shift(1).fillna(0).astype(np.float32)
             part["prev_choice"] = prev_choice
             part["prev_reward"] = prev_reward
@@ -205,21 +154,30 @@ class TwoAFCDelayAdapter(TaskAdapter):
             if max_cumulative_reward > 0:
                 cumulative_reward = cumulative_reward / max_cumulative_reward
             part["cumulative_reward"] = cumulative_reward.astype(np.float32)
-            part["prev_abs_stim"] = (part["stim"].abs().shift(1).fillna(0) / stim_scale).astype(np.float32)
+            part["prev_abs_stim"] = part["stim"].abs().shift(1).fillna(0).astype(np.float32)
+            prev_choice_signed = prev_choice.to_numpy().astype(np.float32)
             signed_prev_reward = np.where(prev_reward.to_numpy() > 0, 1.0, -1.0).astype(np.float32)
-            part["wsls"] = (prev_choice.to_numpy() * signed_prev_reward).astype(np.float32)
+            part["wsls"] = (prev_choice_signed * signed_prev_reward).astype(np.float32)
 
             part["after_correct"] = part["after_correct"].fillna(0).astype(np.float32)
             part["repeat"] = part["repeat"].fillna(0).astype(np.float32)
             part["repeat_choice_side"] = part["repeat_choice_side"].fillna(0).astype(np.float32)
             part["WM"] = part["WM"].fillna(0).astype(np.float32)
             part["RL"] = part["RL"].fillna(0).astype(np.float32)
-
-            # Keep a signed evidence axis compatible with the copied 2AFC plots.
             part["ILD"] = part["stim"].astype(np.float32)
             parts.append(part)
 
-        return pl.from_pandas(pd.concat(parts, ignore_index=True))
+        feature_df = pd.concat(parts, ignore_index=True)
+        delay_raw = pd.to_numeric(feature_df["delay_raw"], errors="coerce").astype(np.float32)
+        delay_mean = float(np.nanmean(delay_raw.to_numpy())) if len(delay_raw) else 0.0
+        delay_std = float(np.nanstd(delay_raw.to_numpy())) if len(delay_raw) else 0.0
+        if delay_std > 0:
+            delay_z = ((delay_raw - delay_mean) / delay_std).astype(np.float32)
+        else:
+            delay_z = pd.Series(np.zeros(len(feature_df), dtype=np.float32), index=feature_df.index)
+        feature_df["delay"] = delay_z
+        feature_df["stim_x_delay"] = (feature_df["stim"].astype(np.float32) * feature_df["delay"].astype(np.float32))
+        return pl.from_pandas(feature_df)
 
     def build_feature_df(self, df_sub: pl.DataFrame, tau: float = 50.0) -> pl.DataFrame:
         return self._build_feature_df(df_sub, tau=tau)
@@ -229,11 +187,9 @@ class TwoAFCDelayAdapter(TaskAdapter):
         feature_df: pl.DataFrame,
         emission_cols: List[str] | None,
     ) -> list[str]:
+        del feature_df
         requested = emission_cols if emission_cols is not None else self.default_emission_cols()
-        resolved: list[str] = []
-        for col in requested:
-            resolved.append(col)
-        return resolved
+        return list(requested)
 
     def load_subject(
         self,
@@ -257,7 +213,7 @@ class TwoAFCDelayAdapter(TaskAdapter):
     ) -> Tuple[Any, Any, Any, Dict]:
         ecols = self._resolved_emission_cols(feature_df, emission_cols)
         ucols = transition_cols if transition_cols is not None else self.default_transition_cols()
-        allowed_ecols = set(self.available_emission_cols()) | set(_stim_abs_cols(feature_df.columns))
+        allowed_ecols = set(self.available_emission_cols())
         bad_e = [c for c in ecols if c not in allowed_ecols]
         bad_u = [c for c in ucols if c not in _AVAILABLE_2AFC_DELAY_TRANSITION_COLS]
         if bad_e:
@@ -267,7 +223,7 @@ class TwoAFCDelayAdapter(TaskAdapter):
                 f"Unknown transition_cols: {bad_u}. Available: {_AVAILABLE_2AFC_DELAY_TRANSITION_COLS}"
             )
 
-        y_np = (feature_df["choices"].to_numpy().astype(np.float32) > 0).astype(np.int32)
+        y_np = feature_df["choice_bin"].to_numpy().astype(np.int32)
         y = jnp.asarray(y_np)
         X = (
             jnp.asarray(feature_df.select(ecols).to_numpy().astype(np.float32))
@@ -291,7 +247,7 @@ class TwoAFCDelayAdapter(TaskAdapter):
         return feature_df["stim"].cast(pl.Float64)
 
     def default_emission_cols(self) -> List[str]:
-        return [c for c in _ALL_2AFC_DELAY_EMISSION_COLS if c != _STIM_PARAM_COL]
+        return list(_ALL_2AFC_DELAY_EMISSION_COLS)
 
     def default_transition_cols(self) -> List[str]:
         return list(_ALL_2AFC_DELAY_TRANSITION_COLS)
@@ -310,12 +266,8 @@ class TwoAFCDelayAdapter(TaskAdapter):
     ) -> Dict[str, List[str]]:
         requested_ecols = list(emission_cols) if emission_cols is not None else self.default_emission_cols()
         requested_ucols = list(transition_cols) if transition_cols is not None else self.default_transition_cols()
-
-        extra_cols: list[str] = []
-        if df is not None:
-            extra_cols = self.available_extra_emission_cols(df)
-
-        allowed_ecols = set(self.available_emission_cols()) | set(extra_cols)
+        del df
+        allowed_ecols = set(self.available_emission_cols())
         bad_e = [c for c in requested_ecols if c not in allowed_ecols]
         bad_u = [c for c in requested_ucols if c not in _AVAILABLE_2AFC_DELAY_TRANSITION_COLS]
         if bad_e:
@@ -326,13 +278,12 @@ class TwoAFCDelayAdapter(TaskAdapter):
             )
         return {"X_cols": list(requested_ecols), "U_cols": list(requested_ucols)}
 
-    def stim_abs_cols(self, df: pl.DataFrame) -> List[str]:
-        return _infer_stim_abs_cols_from_df(df)
-
     def available_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
-        return list(dict.fromkeys(self.stim_abs_cols(df)))
+        del df
+        return []
 
     def default_extra_emission_cols(self, df: pl.DataFrame) -> List[str]:
+        del df
         return []
 
     @property
@@ -354,7 +305,6 @@ class TwoAFCDelayAdapter(TaskAdapter):
 
     @property
     def behavioral_cols(self) -> dict:
-        """Provisional Tiffany column mapping; confirm if you want different fields."""
         return {
             "trial_idx": "trial",
             "trial": "trial",
@@ -377,8 +327,8 @@ class TwoAFCDelayAdapter(TaskAdapter):
         subjects: list,
     ) -> tuple:
         pairs = self._SCORING_OPTIONS.get(
-            getattr(self, "scoring_key", "stim_vals (-w)"),
-            self._SCORING_OPTIONS["stim_vals (-w)"],
+            getattr(self, "scoring_key", "stim (w)"),
+            self._SCORING_OPTIONS["stim (w)"],
         )
 
         def _score_states(W_np: np.ndarray, feat_names: list[str], *, stim: str = "stim_vals") -> np.ndarray:
@@ -428,7 +378,7 @@ class TwoAFCDelayAdapter(TaskAdapter):
             W = np.asarray(W)
             name2fi = {n: i for i, n in enumerate(feat)}
 
-            selected_stim = "stim_param" if getattr(self, "scoring_key", "").startswith("stim_param") else "stim_vals"
+            selected_stim = "stim"
             state_scores = _score_states(W, feat, stim=selected_stim)
 
             engaged_k = int(np.argmax(state_scores))

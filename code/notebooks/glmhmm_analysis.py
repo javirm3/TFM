@@ -14,6 +14,7 @@ def _():
         apply_state_tweak_to_view,
         build_editor_payload,
         make_plot_saver,
+        wrap_anywidget,
 
         model_cfg as ModelCfg,
     )
@@ -63,6 +64,7 @@ def _():
         resolve_selected_model_id,
         select_subject_behavior_df,
         sns,
+        wrap_anywidget,
     )
 
 
@@ -94,14 +96,14 @@ def _(get_adapter, model_cfg, paths, pl):
 
 
 @app.cell
-def _(ModelManagerWidget, mo):
+def _(ModelManagerWidget, wrap_anywidget):
     mm_widget = ModelManagerWidget(
         model_type="glmhmm",
         task="2AFC",
         K=2,
         tau=50,
     )
-    ui_model_manager = mo.ui.anywidget(mm_widget)
+    ui_model_manager = wrap_anywidget(mm_widget)
     return mm_widget, ui_model_manager
 
 
@@ -387,19 +389,18 @@ def _(K, mo, paths, plots, save_plot, selected, views):
         save_path=_save_path,
     )
 
-    _fig_emission_line = plots.plot_emission_weights_summary_lineplot(views=_views_sel, K=K)
-    _fig_emission_box = plots.plot_emission_weights_summary_boxplot(views=_views_sel, K=K)
+    _subject_figs, _summary_figs = plots.plot_emission_weights(views=_views_sel, K=K)
 
     mo.vstack([
-        mo.hstack([_fig_emission_line, _fig_emission_box], gap="15"),
-        mo.hstack(
-            [
-                save_plot(_fig_emission_line, "Emission Weights lineplot", stem="emissions_lineplot"),
-                save_plot(_fig_emission_box, "Emission Weights boxplot", stem="emissions_boxplot"),
-            ],
-            gap="15",
-        ),
-    ], align="center")
+               # _subject_figs,
+                # save_plot(_subject_figs, f"Emission Weights",
+                #                     stem=f"emissions_summary", location = (0,1)),
+               _summary_figs,
+               mo.hstack([save_plot(_summary_figs, f"Emission Weights lineplot",
+                                    stem=f"emissions_lineplot", location=(0,0)), 
+                          save_plot(_summary_figs, f"Emission Weights boxplot",
+                                    stem=f"emissions_boxplot",location=(0,1)),
+             ], gap = "15"), ], align="center")
     return
 
 
@@ -766,6 +767,7 @@ def _(
     ui_editor_side,
     ui_editor_state,
     ui_editor_subject,
+    wrap_anywidget,
 ):
     _subj = ui_editor_subject.value
     _view = editor_views[_subj]
@@ -792,7 +794,7 @@ def _(
         display_reference_class_idx=_display_reference_class_idx,
     )
 
-    coef_editor = mo.ui.anywidget(
+    coef_editor = wrap_anywidget(
         CoefficientEditorWidget(
             title="Coefficient editor",
             subtitle=_payload["subtitle"],
@@ -1049,10 +1051,10 @@ def _(
 
 
 @app.cell
-def _(mo):
+def _(wrap_anywidget):
     from wigglystuff import TangleSlider
 
-    THRESH_ui = mo.ui.anywidget(
+    THRESH_ui = wrap_anywidget(
         TangleSlider(
             amount=0.5,
             min_value=0.0,
@@ -1125,7 +1127,7 @@ def _(df_all, mo):
         value = ""
     )
     mo.vstack([mo.md("### Session trajectory & occupancy"), ui_subjects_traj])
-    return (ui_subjects_traj,)
+    return
 
 
 @app.cell
@@ -1163,20 +1165,13 @@ def _(THRESH_ui, mo, plots, save_plot, selected, trial_df, views):
         sort_col="trial_idx",
         switch_posterior_threshold=THRESH_ui.amount,
     )
-    _fig_occ_overall = plots.plot_state_occupancy_overall_boxplot(
-        views={s: views[s] for s in selected},
-        trial_df=trial_df,
-        session_col="session",
-        sort_col="trial_idx",
-        switch_posterior_threshold=THRESH_ui.amount,
-    )
     mo.vstack([
         _fig_occ,
-        _fig_occ_overall,
         save_plot(
-            _fig_occ_overall,
+            _fig_occ,
             "fractional occupancy overview",
-            stem="state_occupancy_overall",
+            stem="state_occupancy",
+            location=(0, 0),
         ),
         mo.md(
             f"changes between confident MAP assignments with posterior ≥ {THRESH_ui}."
@@ -1194,12 +1189,10 @@ def _(mo):
 
 
 @app.cell
-def _(THRESH_ui, mo, plots, save_plot, trial_df, ui_subjects_traj, views):
-    selected_change = [s for s in ui_subjects_traj.value if s in views]
-    mo.stop(not selected_change, mo.md("Select subjects above."))
-    _views_sel = {s: views[s] for s in selected_change}
+def _(THRESH_ui, mo, plots, save_plot, selected, trial_df, views):
+    mo.stop(not selected, mo.md("Select subjects above."))
     _fig_change_summary = plots.plot_change_triggered_posteriors_summary(
-        views=_views_sel,
+        views=views,
         trial_df=trial_df,
         session_col="session",
         sort_col="trial_idx",
@@ -1207,7 +1200,7 @@ def _(THRESH_ui, mo, plots, save_plot, trial_df, ui_subjects_traj, views):
         window=25
     )
     _fig_change_by_subject = plots.plot_change_triggered_posteriors_by_subject(
-        views=_views_sel,
+        views=views,
         trial_df=trial_df,
         session_col="session",
         sort_col="trial_idx",
@@ -1263,7 +1256,22 @@ def _(mo, pl, trial_df, ui_session_subj, views):
         value=str(_sess_opts[0]),
         label="Session",
     )
-    return (ui_session_id,)
+    _win_opts = [1, 5, 10, 20, 50]
+    ui_engaged_window = mo.ui.dropdown(
+        options=[str(w) for w in _win_opts],
+        value="20",
+        label="P(engaged) window",
+    )
+    ui_engaged_trace_mode = mo.ui.radio(
+        options={
+            "Rolling": "rolling",
+            "Raw": "raw",
+        },
+        value="Rolling",
+        inline=False,
+        label="P(engaged) trace",
+    )
+    return ui_engaged_trace_mode, ui_engaged_window, ui_session_id
 
 
 @app.cell(hide_code=True)
@@ -1281,6 +1289,8 @@ def _(
     plots,
     save_plot,
     trial_df,
+    ui_engaged_trace_mode,
+    ui_engaged_window,
     ui_session_id,
     ui_session_subj,
     views,
@@ -1300,9 +1310,11 @@ def _(
         session_col="session",
         sort_col="trial",
         switch_posterior_threshold=THRESH_ui.amount,
+        engaged_window=int(ui_engaged_window.value),
+        engaged_trace_mode=ui_engaged_trace_mode.value,
     )
     mo.vstack([
-        mo.hstack([ui_session_subj, ui_session_id]),
+        mo.hstack([ui_session_subj, ui_session_id, ui_engaged_window, ui_engaged_trace_mode]),
         _fig,
         save_plot(
             _fig,

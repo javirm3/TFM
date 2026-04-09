@@ -2044,7 +2044,7 @@ def _regressor_state_panel(
 
 
 def prepare_predictions_df(df_pred):
-    """Prepare a 2-AFC Trial-level predictions DataFrame for plotting.
+    """Prepare a 2AFC-delay trial predictions DataFrame for accuracy plots.
 
     Accepts a polars or pandas DataFrame that already contains the per-Trial
     model predictions (``pL``, ``pR``) produced by the fit script.
@@ -2060,8 +2060,9 @@ def prepare_predictions_df(df_pred):
     Added / ensured output columns
     ------------------------------
     correct_bool    : bool  - Trial accuracy
-    p_pred          : float - model P(right)  → psychometric x-axis
-    p_model_correct : float - model P(correct Side)
+    p_pred          : float - retained for notebook compatibility
+    p_model_correct : float - model P(correct class)
+    delay           : float - delay axis used by task-owned plots
     stimulus / Side : int   - canonical aliases for correct side
     response / Choice : int - canonical aliases for animal choice
 
@@ -2082,22 +2083,36 @@ def prepare_predictions_df(df_pred):
         if "stimulus" not in df.columns:
             if "Side" in df.columns:
                 df = df.with_columns(pl.col("Side").cast(pl.Int64).alias("stimulus"))
+            elif "stim" in df.columns:
+                df = df.with_columns(pl.col("stim").cast(pl.Float64).alias("stimulus"))
             else:
                 raise ValueError("No 'Side' or 'stimulus' column found.")
         if "Side" not in df.columns:
             df = df.with_columns(pl.col("stimulus").cast(pl.Int64).alias("Side"))
+        _stim_unique = set(df["stimulus"].drop_nulls().unique().to_list())
+        if _stim_unique.issubset({-1, 1, -1.0, 1.0}):
+            df = df.with_columns((pl.col("stimulus") > 0).cast(pl.Int64).alias("stimulus"))
+            df = df.with_columns(pl.col("stimulus").alias("Side"))
 
         if "response" not in df.columns:
             if "Choice" in df.columns:
                 df = df.with_columns(pl.col("Choice").cast(pl.Int64).alias("response"))
+            elif "choices" in df.columns:
+                df = df.with_columns(pl.col("choices").cast(pl.Float64).alias("response"))
             else:
                 raise ValueError("No 'Choice' or 'response' column found.")
         if "Choice" not in df.columns:
             df = df.with_columns(pl.col("response").cast(pl.Int64).alias("Choice"))
+        _resp_unique = set(df["response"].drop_nulls().unique().to_list())
+        if _resp_unique.issubset({-1, 1, -1.0, 1.0}):
+            df = df.with_columns((pl.col("response") > 0).cast(pl.Int64).alias("response"))
+            df = df.with_columns(pl.col("response").alias("Choice"))
 
         if "correct_bool" not in df.columns:
             if "Hit" in df.columns:
                 df = df.with_columns(pl.col("Hit").cast(pl.Boolean).alias("correct_bool"))
+            elif "hit" in df.columns:
+                df = df.with_columns(pl.col("hit").cast(pl.Boolean).alias("correct_bool"))
             elif "performance" in df.columns:
                 df = df.with_columns(pl.col("performance").cast(pl.Boolean).alias("correct_bool"))
             else:
@@ -2110,6 +2125,12 @@ def prepare_predictions_df(df_pred):
             pl.col("pR").alias("p_pred"),
             pl.when(pl.col("stimulus") == 0).then(pl.col("pL")).otherwise(pl.col("pR")).alias("p_model_correct"),
         )
+        if "delays" in df.columns:
+            df = df.with_columns(pl.col("delays").cast(pl.Float64).alias("delay"))
+        elif "delay_raw" in df.columns:
+            df = df.with_columns(pl.col("delay_raw").cast(pl.Float64).alias("delay"))
+        elif "delay" in df.columns:
+            df = df.with_columns(pl.col("delay").cast(pl.Float64).alias("delay"))
 
         return df
 
@@ -2120,22 +2141,36 @@ def prepare_predictions_df(df_pred):
         if "stimulus" not in df.columns:
             if "Side" in df.columns:
                 df["stimulus"] = df["Side"].astype(int)
+            elif "stim" in df.columns:
+                df["stimulus"] = pd.to_numeric(df["stim"], errors="coerce")
             else:
                 raise ValueError("No 'Side' or 'stimulus' column found.")
         if "Side" not in df.columns:
+            df["Side"] = df["stimulus"].astype(int)
+        _stim_unique = set(pd.to_numeric(df["stimulus"], errors="coerce").dropna().unique().tolist())
+        if _stim_unique.issubset({-1, 1, -1.0, 1.0}):
+            df["stimulus"] = (pd.to_numeric(df["stimulus"], errors="coerce") > 0).astype(int)
             df["Side"] = df["stimulus"].astype(int)
 
         if "response" not in df.columns:
             if "Choice" in df.columns:
                 df["response"] = df["Choice"].astype(int)
+            elif "choices" in df.columns:
+                df["response"] = pd.to_numeric(df["choices"], errors="coerce")
             else:
                 raise ValueError("No 'Choice' or 'response' column found.")
         if "Choice" not in df.columns:
+            df["Choice"] = df["response"].astype(int)
+        _resp_unique = set(pd.to_numeric(df["response"], errors="coerce").dropna().unique().tolist())
+        if _resp_unique.issubset({-1, 1, -1.0, 1.0}):
+            df["response"] = (pd.to_numeric(df["response"], errors="coerce") > 0).astype(int)
             df["Choice"] = df["response"].astype(int)
 
         if "correct_bool" not in df.columns:
             if "Hit" in df.columns:
                 df["correct_bool"] = df["Hit"].astype(bool)
+            elif "hit" in df.columns:
+                df["correct_bool"] = df["hit"].astype(bool)
             elif "performance" in df.columns:
                 df["correct_bool"] = df["performance"].astype(bool)
             else:
@@ -2146,6 +2181,12 @@ def prepare_predictions_df(df_pred):
 
         df["p_pred"] = df["pR"]
         df["p_model_correct"] = df.apply(lambda row: row["pL"] if row["stimulus"] == 0 else row["pR"], axis=1)
+        if "delays" in df.columns:
+            df["delay"] = pd.to_numeric(df["delays"], errors="coerce")
+        elif "delay_raw" in df.columns:
+            df["delay"] = pd.to_numeric(df["delay_raw"], errors="coerce")
+        elif "delay" in df.columns:
+            df["delay"] = pd.to_numeric(df["delay"], errors="coerce")
 
         return df
 
@@ -2780,6 +2821,7 @@ def plot_session_deepdive(
         performance_candidates=("correct_bool", "performance"),
         stim_candidates=("ILD", "stimulus"),
         response_candidates=("response", "Choice"),
+        **kwargs,
     )
 
 
@@ -2788,10 +2830,77 @@ def plot_session_deepdive(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _delay_accuracy_summary(
+    df_pd: pd.DataFrame,
+    *,
+    delay_col: str = "delay",
+    weight_col: str | None = None,
+    model_col: str = "p_model_correct",
+) -> pd.DataFrame:
+    rows: list[dict[str, float]] = []
+    for delay_value in sorted(pd.to_numeric(df_pd[delay_col], errors="coerce").dropna().unique()):
+        group = df_pd[pd.to_numeric(df_pd[delay_col], errors="coerce") == delay_value].copy()
+        if group.empty:
+            continue
+        if weight_col is None:
+            weights = np.ones(len(group), dtype=float)
+        else:
+            weights = pd.to_numeric(group[weight_col], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+        weight_sum = float(weights.sum())
+        if weight_sum <= 0:
+            continue
+        correct = pd.to_numeric(group["correct_bool"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+        model_vals = pd.to_numeric(group[model_col], errors="coerce").fillna(np.nan).to_numpy(dtype=float)
+        rows.append(
+            {
+                "delay": float(delay_value),
+                "data_acc": float(np.average(correct, weights=weights)),
+                "model_acc": float(np.average(model_vals, weights=weights)),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("delay").reset_index(drop=True)
+
+
+def _plot_delay_accuracy_panel(
+    ax: plt.Axes,
+    df_pd: pd.DataFrame,
+    *,
+    title: str,
+    color: str,
+    delay_col: str = "delay",
+    weight_col: str | None = None,
+    ylabel: str = "Accuracy",
+) -> None:
+    summary = _delay_accuracy_summary(df_pd, delay_col=delay_col, weight_col=weight_col)
+    if summary.empty:
+        ax.text(0.5, 0.5, "No valid delay data", ha="center", va="center", transform=ax.transAxes)
+        ax.set_axis_off()
+        return
+    ax.plot(summary["delay"], summary["model_acc"], color=color, lw=2.0, label="Model")
+    ax.scatter(
+        summary["delay"],
+        summary["data_acc"],
+        color=color,
+        edgecolor=color,
+        s=45,
+        linewidth=1.5,
+        zorder=3,
+        label="Data",
+    )
+    ax.axhline(0.5, color="#888888", lw=0.8, ls="--", zorder=0)
+    ax.set_title(title)
+    ax.set_xlabel("Delay")
+    ax.set_ylabel(ylabel)
+    ax.set_ylim(0, 1)
+    ax.set_yticks([0, 0.5, 1.0])
+    ax.legend(frameon=False, fontsize=8)
+    sns.despine(ax=ax)
+
+
 def plot_categorical_performance_all(
     df,
     model_name: str,
-    ild_col: str = "ILD",
+    ild_col: str = "delay",
     choice_col: str = "response",
     pred_col: str = "p_pred",
     subj_col: str = "subject",
@@ -2802,148 +2911,51 @@ def plot_categorical_performance_all(
     ild_max: Optional[float] = None,
     background_style: str = "data",
 ) -> plt.Figure:
-    """Overall psychometric + by-condition + by-experiment panels.
-
-    2AFC equivalent of plots.plot_categorical_performance_all.
-
-    Panels
-    ------
-    a) Overall      - P(right) vs ILD, all trials pooled
-    b) By condition - separate curves per rest / saline / drug
-                      (skipped if 'condition' column absent)
-    c) By experiment - separate curves per experiment batch
-
-    Parameters
-    ----------
-    df         : Polars or pandas DataFrame with Trial-level predictions.
-                 Must contain: ILD, response/Choice (0/1), p_pred, subject.
-                 The default model overlay is ``p_pred`` because this figure
-                 shows psychometrics, i.e. P(rightward choice), not accuracy.
-    model_name : String for figure suptitle.
-    ild_max    : Optional explicit normalisation scale. When omitted, the
-                 maximum absolute ILD in ``df[ild_col]`` is used.
-
-    Returns
-    -------
-    fig
-    """
+    """Plot task accuracy as a function of delay, ignoring stimulus sign."""
+    del ild_col, choice_col, pred_col, subj_col, views, X_cols, ild_max, background_style
     if hasattr(df, "to_pandas"):
         df_pd = df.to_pandas()
     else:
         df_pd = df.copy()
-    ild_max = _resolve_ild_max(df_pd, ild_col, ild_max)
-    ild_ticks = (
-        sorted(pd.to_numeric(df_pd[ild_col], errors="coerce").dropna().unique()) if ild_col in df_pd.columns else []
-    )
 
     has_cond = cond_col in df_pd.columns
     has_exp = exp_col in df_pd.columns
     n_panels = 1 + int(has_cond) + int(has_exp)
-
-    # Pre-compute smooth GLM sigmoid averaged over all subjects
-    _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
-
-    # Build arrays_store-compatible dict for _mean_glm_curve.
-    # Reorder axes so that state index == rank (0=Engaged, …) for consistency.
-    def _rank_ordered_as(v):
-        _order = sorted(v.state_rank_by_idx, key=lambda ki: v.state_rank_by_idx[ki])
-        return {
-            "emission_weights": v.emission_weights[_order],
-            "X_cols": v.feat_names,
-            "X": v.X,
-            "smoothed_probs": v.smoothed_probs[:, _order],
-            "lapse_rates": v.lapse_rates,
-        }
-
-    _as = {s: _rank_ordered_as(v) for s, v in views.items()} if views is not None else None
-    _smooth_all = _mean_glm_curve(_as, _all_subjects, X_cols, ild_max=ild_max) if _as is not None else None
-    _subject_curves_all = (
-        _subject_glm_curves(_as, _all_subjects, X_cols, ild_max=ild_max) if _as is not None and background_style == "model" else None
-    )
-
     fig, axes = plt.subplots(1, n_panels, figsize=(4 * n_panels, 4), sharey=True)
     axes = np.atleast_1d(axes)
     ax_idx = 0
 
-    # a) Overall
-    _psych_panel(
+    _plot_delay_accuracy_panel(
         axes[ax_idx],
         df_pd,
-        ild_col=ild_col,
-        choice_col=choice_col,
-        pred_col=pred_col,
-        subj_col=subj_col,
-        title="a) Overall psychometric",
-        xlabel="ILD (dB)",
-        ylabel="P(Right)",
+        title="a) Accuracy by delay",
         color="#2b7bba",
-        smooth_curve=_smooth_all,
-        background_style=background_style,
-        subject_curves=_subject_curves_all,
-        tick_ilds=ild_ticks,
     )
     ax_idx += 1
 
-    # b) By condition
     if has_cond:
         conds = sorted(df_pd[cond_col].dropna().unique())
         cond_colors = {"rest": "#444444", "saline": "#1f77b4", "drug": "#d62728"}
         for cond in conds:
-            _cond_subjs = list(df_pd[df_pd[cond_col] == cond][subj_col].unique())
-            _smooth_cond = _mean_glm_curve(_as, _cond_subjs, X_cols, ild_max=ild_max) if _as is not None else None
-            _subject_curves_cond = (
-                _subject_glm_curves(_as, _cond_subjs, X_cols, ild_max=ild_max)
-                if _as is not None and background_style == "model"
-                else None
-            )
-            _psych_panel(
+            _plot_delay_accuracy_panel(
                 axes[ax_idx],
                 df_pd[df_pd[cond_col] == cond],
-                ild_col=ild_col,
-                choice_col=choice_col,
-                pred_col=pred_col,
-                subj_col=subj_col,
                 title=f"b) {cond}",
-                xlabel="ILD (dB)",
                 color=cond_colors.get(cond, "k"),
-                smooth_curve=_smooth_cond,
-                background_style=background_style,
-                subject_curves=_subject_curves_cond,
-                tick_ilds=ild_ticks,
             )
         ax_idx += 1
 
-    # c) By experiment
     if has_exp:
         exps = sorted(df_pd[exp_col].dropna().unique())
         exp_palette = sns.color_palette("Set2", len(exps))
         for ei, exp in enumerate(exps):
-            _exp_subjs = list(df_pd[df_pd[exp_col] == exp][subj_col].unique())
-            _smooth_exp = _mean_glm_curve(_as, _exp_subjs, X_cols, ild_max=ild_max) if _as is not None else None
-            _subject_curves_exp = (
-                _subject_glm_curves(_as, _exp_subjs, X_cols, ild_max=ild_max)
-                if _as is not None and background_style == "model"
-                else None
-            )
-            _psych_panel(
+            _plot_delay_accuracy_panel(
                 axes[ax_idx],
                 df_pd[df_pd[exp_col] == exp],
-                ild_col=ild_col,
-                choice_col=choice_col,
-                pred_col=pred_col,
-                subj_col=subj_col,
                 title=f"c) {exp}",
-                xlabel="ILD (dB)",
                 color=exp_palette[ei],
-                smooth_curve=_smooth_exp,
-                background_style=background_style,
-                subject_curves=_subject_curves_exp,
-                tick_ilds=ild_ticks,
             )
 
-    for ax in axes:
-        ax.legend(frameon=False, fontsize=8)
-    sns.despine(fig=fig)
     fig.suptitle(model_name, y=1.02)
     fig.tight_layout()
     return fig, None
@@ -2953,7 +2965,7 @@ def plot_categorical_performance_all_by_state(
     df,
     views: dict,
     model_name: str,
-    ild_col: str = "ILD",
+    ild_col: str = "delay",
     choice_col: str = "response",
     pred_col: str = "p_pred",
     subj_col: str = "subject",
@@ -2968,35 +2980,13 @@ def plot_categorical_performance_all_by_state(
     model_line_mode: str = "smooth",
     state_assignment_mode: str = "weighted",
 ) -> plt.Figure:
-    """Per-state psychometric grid (K panels, one per state).
-
-    2AFC equivalent of plots.plot_categorical_performance_by_state.
-
-    Each state gets its own panel showing P(right) vs ILD; data (markers) and
-    model prediction (lines) are drawn in the state's colour.
-
-    Parameters
-    ----------
-    df     : Trial-level DataFrame (polars or pandas). Must contain a
-             ``state_rank`` column (rank 0 = Engaged) produced by
-             :func:`~glmhmmt.postprocess.build_trial_df`.
-    views  : {subj: SubjectFitView} as produced by build_views.
-    model_name : string used as figure suptitle.
-    ild_max : Optional explicit normalisation scale. When omitted, the
-              maximum absolute ILD in ``df[ild_col]`` is used.
-
-    Returns
-    -------
-    (fig, None)
-    """
+    """Per-state accuracy by delay, ignoring stimulus sign."""
+    del ild_col, choice_col, pred_col, X_cols, ild_max, background_style
+    del show_weighted_points, show_data_smooth, show_model_smooth, model_line_mode
     if hasattr(df, "to_pandas"):
         df_pd = df.to_pandas().reset_index(drop=True)
     else:
         df_pd = df.reset_index(drop=True)
-    ild_max = _resolve_ild_max(df_pd, ild_col, ild_max)
-    ild_ticks = (
-        sorted(pd.to_numeric(df_pd[ild_col], errors="coerce").dropna().unique()) if ild_col in df_pd.columns else []
-    )
 
     K = next(iter(views.values())).K if views else 2
 
@@ -3021,40 +3011,7 @@ def plot_categorical_performance_all_by_state(
             rank = v.state_rank_by_idx.get(int(k), int(k))
             slbls.setdefault(rank, lbl)
 
-    # Build arrays_store-compatible dict for _mean_glm_curve.
-    # Reorder axes so that state index == rank (0=Engaged, 1=Disengaged, …)
-    # so that state_k=0 means Engaged for every subject regardless of fit order.
-    def _rank_ordered_as(v):
-        _order = sorted(v.state_rank_by_idx, key=lambda ki: v.state_rank_by_idx[ki])
-        return {
-            "emission_weights": v.emission_weights[_order],
-            "X_cols": v.feat_names,
-            "X": v.X,
-            "smoothed_probs": v.smoothed_probs[:, _order],
-        }
-
-    _as = {s: _rank_ordered_as(v) for s, v in views.items()}
-
     panel_w = 4
-
-    # ── K-panel grid ──────────────────────────────────────────────────────────
-    _all_subjects = list(df_pd[subj_col].unique()) if subj_col in df_pd.columns else []
-
-    # Pre-compute per-state smooth sigmoid curves from views
-    _smooth_by_k: dict[int, Optional[Tuple[np.ndarray, np.ndarray]]] = {}
-    _test_W = next((v.emission_weights for v in views.values()), None)
-    _K_fit = int(np.asarray(_test_W).shape[0]) if _test_W is not None else 1
-    _smooth_single = _mean_glm_curve(_as, _all_subjects, X_cols, ild_max=ild_max, state_k=None)
-    for k in range(K):
-        if _K_fit == 1:
-            _smooth_by_k[k] = _smooth_single
-        else:
-            _smooth_by_k[k] = _mean_glm_curve(_as, _all_subjects, X_cols, ild_max=ild_max, state_k=k)
-    _subject_curves_by_k = (
-        {k: _subject_glm_curves(_as, _all_subjects, X_cols, ild_max=ild_max, state_k=None if _K_fit == 1 else k) for k in range(K)}
-        if background_style == "model"
-        else {}
-    )
 
     _include_overlay = K > 1
     if overlay_only:
@@ -3075,31 +3032,14 @@ def plot_categorical_performance_all_by_state(
                 f"_p_state_rank_{k}" if state_assignment_mode == "weighted" and f"_p_state_rank_{k}" in df_pd.columns else None
             )
             _df_state = df_pd if _weight_col is not None else df_pd[df_pd["_state_k"] == k]
-            _psych_state_panel(
+            _plot_delay_accuracy_panel(
                 _ax_overlay,
                 _df_state,
-                ild_col,
-                choice_col,
-                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
-                subj_col=subj_col,
+                title="",
                 color=color,
-                label=lbl,
-                smooth_curve=_smooth_by_k[k],
-                show_subject_traces=False,
-                background_style=background_style,
-                subject_curves=_subject_curves_by_k.get(k),
                 weight_col=_weight_col,
-                tick_ilds=ild_ticks,
-                show_weighted_points=show_weighted_points,
-                show_data_smooth=show_data_smooth,
-                show_model_smooth=show_model_smooth,
-                model_line_mode=model_line_mode,
             )
-        _ax_overlay.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
-        _ax_overlay.axvline(0.0, color="gray", lw=0.8, ls="--", alpha=0.5)
-        _ax_overlay.set_ylim(0, 1)
-        _ax_overlay.set_yticks([0, 0.5, 1])
-        _ax_overlay.set_xlabel("Stimulus ILD (dB)")
+        _ax_overlay.set_xlabel("Delay")
         _ax_overlay.set_title("")
         _ax_overlay.legend(frameon=False, fontsize=8)
 
@@ -3111,36 +3051,20 @@ def plot_categorical_performance_all_by_state(
                 f"_p_state_rank_{k}" if state_assignment_mode == "weighted" and f"_p_state_rank_{k}" in df_pd.columns else None
             )
             _df_state = df_pd if _weight_col is not None else df_pd[df_pd["_state_k"] == k]
-            _psych_state_panel(
+            _plot_delay_accuracy_panel(
                 ax,
                 _df_state,
-                ild_col,
-                choice_col,
-                pred_col=f"_pR_state_rank_{k}" if state_assignment_mode == "weighted" else pred_col,
-                subj_col=subj_col,
+                title=lbl,
                 color=color,
-                label=lbl,
-                smooth_curve=_smooth_by_k[k],
-                background_style=background_style,
-                subject_curves=_subject_curves_by_k.get(k),
                 weight_col=_weight_col,
-                tick_ilds=ild_ticks,
-                show_weighted_points=show_weighted_points,
-                show_data_smooth=show_data_smooth,
-                show_model_smooth=show_model_smooth,
-                model_line_mode=model_line_mode,
             )
-            ax.axhline(0.5, color="gray", lw=0.8, ls="--", alpha=0.5)
-            ax.set_ylim(0, 1)
-            ax.set_yticks([0, 0.5, 1])
-            ax.set_xlabel("ILD (dB)")
-            ax.set_title(lbl)
+            ax.set_xlabel("Delay")
             if k == 0:
-                ax.set_ylabel("P(Right)")
+                ax.set_ylabel("Accuracy")
             else:
                 ax.set_ylabel("")
 
-    # fig.suptitle(model_name, y=1.02)
+    fig.suptitle(model_name, y=1.02)
     sns.despine(fig=fig)
     fig.tight_layout()
     return fig, None

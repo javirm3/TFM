@@ -4,9 +4,8 @@ import argparse
 import json
 import hashlib
 from pathlib import Path
-from scipy.special import log_softmax, softmax
-from scipy.optimize import minimize
 
+from glmhmmt.glm import fit_glm
 from glmhmmt.runtime import (
     add_runtime_path_args,
     configure_paths_from_args,
@@ -26,7 +25,7 @@ def fit_subject(
     lapse_max: float = 0.2,
 ) -> dict:
     """Fit a GLM (K=1) to a single subject."""
-    
+
     # Force binary for 2AFC
     adapter = get_adapter(task)
     num_classes = adapter.num_classes
@@ -38,107 +37,25 @@ def fit_subject(
     if len(df_sub) == 0:
         return None
     y, X, _, names = adapter.load_subject(df_sub, tau=tau, emission_cols=emission_cols)
-
-    # 2. Minimize Negative Log Likelihood
-    T, M = X.shape
-    y_np = np.asarray(y, dtype=int)
-    X_np = np.asarray(X, dtype=float)
-
-    # Use lapse model only for 2AFC
-    fit_lapse = lapse and (num_classes == 2)
-
-    if fit_lapse:
-        # Parameters: [w (M,), gamma_L, gamma_R]
-        # gamma_L = P(right | truly left), gamma_R = P(left | truly right)
-        # Convention: w = W_L (weight for P(Left)); last class (R) is reference.
-        # P(right) = sigmoid(-W_L @ x) = 1 / (1 + exp(W_L @ x))
-        def neg_log_likelihood(w_flat):
-            w      = w_flat[:M]
-            gL     = w_flat[M]       # lapse → right when stimulus is left
-            gR     = w_flat[M + 1]   # lapse → left  when stimulus is right
-            p_right_base = 1.0 / (1.0 + np.exp(X_np @ w))
-            p_right = gL + (1.0 - gL - gR) * p_right_base
-            p_right = np.clip(p_right, 1e-10, 1 - 1e-10)
-            log_p_R = np.log(p_right)
-            log_p_L = np.log(1.0 - p_right)
-            return -np.sum(np.where(y_np == 1, log_p_R, log_p_L))
-
-        n_params = M + 2
-        bounds   = [(-np.inf, np.inf)] * M + [(0.0, lapse_max), (0.0, lapse_max)]
-        x0       = np.zeros(n_params)
-    else:
-        # Convention: last class is always the softmax reference (logit=0).
-        # For 3-class: W_pair=[W_L, W_R], logits=[W_L@x, 0, W_R@x]  (C=middle=ref)
-        # For 2-class: W_pair=[W_L],       logits=[W_L@x, 0]          (R=ref)
-        def neg_log_likelihood(w_flat):
-            W_pair = w_flat.reshape(num_classes - 1, M)
-            if num_classes == 3:
-                logits = np.stack([X_np @ W_pair[0], np.zeros(T), X_np @ W_pair[1]], axis=1)
-            else:
-                logits = np.stack([X_np @ W_pair[0], np.zeros(T)], axis=1)
-            log_p = log_softmax(logits, axis=1)
-            return -np.sum(log_p[np.arange(T), y_np])
-
-        n_params = (num_classes - 1) * M
-        bounds   = None
-        x0       = np.zeros(n_params)
-
-    if T > 0:
-        res = minimize(
-            neg_log_likelihood,
-            x0,
-            method="L-BFGS-B",
-            bounds=bounds,
-            options={"maxiter": 2000, "ftol": 1e-9}
-        )
-        success = res.success
-        w_flat  = res.x
-        nll     = res.fun
-    else:
-        success = False
-        w_flat  = np.zeros(n_params)
-        nll     = np.nan
-
-    # Extract lapse rates
-    if fit_lapse:
-        lapse_rates = np.array([w_flat[M], w_flat[M + 1]])  # [gamma_L, gamma_R]
-        w_flat_w    = w_flat[:M]
-    else:
-        lapse_rates = np.zeros(2)
-        w_flat_w    = w_flat
-
-    # Reconstruct W_full (C, M); last class is reference (weight=0).
-    W_pair = w_flat_w.reshape(num_classes - 1, M)
-    if num_classes == 3:
-        W_full = np.stack([W_pair[0], np.zeros(M), W_pair[1]], axis=0)  # [L, C=0=ref, R]
-    else:
-        W_full = np.stack([W_pair[0], np.zeros(M)], axis=0)  # [L, R=0=ref]
-
-    # Predict (with lapses if fitted)
-    if num_classes == 3:
-        logits = np.stack([X_np @ W_pair[0], np.zeros(T), X_np @ W_pair[1]], axis=1)
-        p_pred = softmax(logits, axis=1)
-    else:
-        # W_pair[0] = W_L; P(right) = sigmoid(-W_L @ x)
-        p_right_base = 1.0 / (1.0 + np.exp(X_np @ W_pair[0]))
-        if fit_lapse:
-            gL, gR = lapse_rates
-            p_right = gL + (1.0 - gL - gR) * p_right_base
-        else:
-            p_right = p_right_base
-        p_pred = np.stack([1.0 - p_right, p_right], axis=1)
+    fit = fit_glm(
+        X,
+        y,
+        num_classes=num_classes,
+        lapse=lapse and (num_classes == 2),
+        lapse_max=lapse_max,
+    )
 
     return {
         "subject": subject,
-        "W": W_full,              # (C, M)
-        "p_pred": p_pred,         # (T, C)
-        "lapse_rates": lapse_rates,  # [gamma_L, gamma_R]
-        "nll": nll,
-        "success": success,
-        "y": y_np,
-        "X": X_np,
+        "W": fit.weights,              # (C, M)
+        "p_pred": fit.predictive_probs,         # (T, C)
+        "lapse_rates": fit.lapse_rates,  # [gamma_L, gamma_R]
+        "nll": fit.negative_log_likelihood,
+        "success": fit.success,
+        "y": fit.y,
+        "X": fit.X,
         "names": names,
-        "T": T
+        "T": fit.num_trials
     }
 
 def save_results(result: dict, out_dir: Path, tau: float):
@@ -304,7 +221,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_classes", type=int, default=3)
     parser.add_argument("--model_alias", type=str, default=None)
     parser.add_argument("--lapse", action="store_true", default=False,
-                        help="Fit symmetric lapse rates γ_L, γ_R ∈ [0, lapse_max]")
+                        help="Fit lapse rates γ_L, γ_R with 0 <= γ <= lapse_max and γ_L + γ_R <= 1")
     parser.add_argument("--lapse_max", type=float, default=0.2,
                         help="Upper bound for each lapse rate (default 0.20)")
 

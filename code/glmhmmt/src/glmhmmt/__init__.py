@@ -4,6 +4,8 @@ from importlib import import_module
 
 __all__ = [
     "SoftmaxGLMHMM",
+    "GLMFitResult",
+    "fit_glm",
     "SubjectFitView",
     "build_views",
     "_LABEL_RANK",
@@ -21,6 +23,8 @@ __all__ = [
 
 _LAZY_IMPORTS = {
     "SoftmaxGLMHMM": ("glmhmmt.model", "SoftmaxGLMHMM"),
+    "GLMFitResult": ("glmhmmt.glm", "GLMFitResult"),
+    "fit_glm": ("glmhmmt.glm", "fit_glm"),
     "SubjectFitView": ("glmhmmt.views", "SubjectFitView"),
     "build_views": ("glmhmmt.views", "build_views"),
     "_LABEL_RANK": ("glmhmmt.views", "_LABEL_RANK"),

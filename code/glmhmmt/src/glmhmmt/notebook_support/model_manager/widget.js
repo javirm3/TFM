@@ -634,10 +634,10 @@ function render({ model, el }) {
               <div class="mm-slider-wrap tight ${!currentLapse ? "disabled" : ""}">
                 <span class="mm-label inline">Max Lapse:</span>
                 <input type="range" class="mm-range" id="inp-lapse-max-range"
-                       min="0.01" max="0.5" value="${currentLapseMax}" step="0.01"
+                       min="0.01" max="1.0" value="${currentLapseMax}" step="0.01"
                        ${!currentLapse ? "disabled" : ""}>
                 <input type="number" class="mm-num-input" id="inp-lapse-max-num"
-                       min="0.01" max="0.5" value="${currentLapseMax}" step="0.01"
+                       min="0.01" max="1.0" value="${currentLapseMax}" step="0.01"
                        ${!currentLapse ? "disabled" : ""}>
               </div>
             </div>

@@ -1181,15 +1181,30 @@ def _(mo, pl, trial_df, ui_session_subj, views):
         value=str(_sess_opts[0]),
         label="Session",
     )
+    _win_opts = [1, 5, 10, 20, 50]
+    ui_engaged_window = mo.ui.dropdown(
+        options=[str(w) for w in _win_opts],
+        value="20",
+        label="P(engaged) window",
+    )
+    ui_engaged_trace_mode = mo.ui.radio(
+        options={
+            "Rolling": "rolling",
+            "Raw": "raw",
+        },
+        value="Rolling",
+        inline=False,
+        label="P(engaged) trace",
+    )
     mo.vstack([
         mo.md("### Session deep-dive"),
-        mo.hstack([ui_session_subj, ui_session_id]),
+        mo.hstack([ui_session_subj, ui_session_id, ui_engaged_window, ui_engaged_trace_mode]),
     ])
-    return (ui_session_id,)
+    return (ui_engaged_trace_mode, ui_engaged_window, ui_session_id)
 
 
 @app.cell
-def _(K, THRESH_ui, mo, plots, trial_df, ui_session_id, ui_session_subj, views):
+def _(K, THRESH_ui, mo, plots, trial_df, ui_engaged_trace_mode, ui_engaged_window, ui_session_id, ui_session_subj, views):
     # ── Session deep-dive plot ─────────────────────────────────────────────────
     _subj = ui_session_subj.value
     mo.stop(
@@ -1206,6 +1221,8 @@ def _(K, THRESH_ui, mo, plots, trial_df, ui_session_id, ui_session_subj, views):
         session_col="session",
         sort_col="trial_idx",
         switch_posterior_threshold=THRESH_ui.amount,
+        engaged_window=int(ui_engaged_window.value),
+        engaged_trace_mode=ui_engaged_trace_mode.value,
     )
     mo.vstack([
         mo.md(f"### Session deep-dive  (K={K})"),
