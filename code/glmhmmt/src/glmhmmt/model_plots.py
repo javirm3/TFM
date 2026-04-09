@@ -5,13 +5,15 @@ import polars as pl
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import t
+from scipy.stats import sem, t, ttest_1samp, ttest_rel
 from scipy.special import softmax as _softmax
 from matplotlib import cm, colors
-from typing import Tuple
+from matplotlib.lines import Line2D
+from typing import Callable, Sequence, Tuple
 from glmhmmt.runtime import load_app_config
-from glmhmmt.views import _LABEL_RANK, get_state_palette as _get_config_state_palette
+from glmhmmt.views import build_state_palette, get_state_color, get_state_palette, get_state_rank
 from glmhmmt.plots_common import (
+    custom_boxplot,
     plot_state_accuracy as _plot_state_accuracy_common,
     plot_change_triggered_posteriors_by_subject as _plot_change_triggered_posteriors_by_subject_common,
     plot_change_triggered_posteriors_summary as _plot_change_triggered_posteriors_summary_common,
@@ -28,6 +30,7 @@ sns.set_style("ticks")
 
 cfg = load_app_config()
 CI_BAND_ERR_KWS = {"edgecolor": "none", "linewidth": 0}
+_state_color = get_state_color
 
 def truncate_colormap(cmap_name, minval=0.2, maxval=0.9, n=256):
     """Trunca un colormap a un subrango."""
@@ -272,7 +275,7 @@ def plot_categorical_performance_by_state(
     df = df.with_columns(pl.col("state_rank").cast(pl.Int64).alias("_state_k"))
 
     _state_colors = {
-        k: _state_color(state_labels.get(k, f"State {k}"), k)
+        k: get_state_color(state_labels.get(k, f"State {k}"), k, K=K)
         for k in range(K)
     }
     
@@ -735,39 +738,6 @@ _AG_GROUPS = [
 ]
 
 
-# ── canonical state colours from config (rank-indexed) ───────────────────────
-_STATE_HEX: list[str] = _get_config_state_palette()
-
-
-def _state_color(label: str, fallback_idx: int = 0, palette: list[str] | None = None) -> str:
-    """Return the config-defined hex colour for a state label."""
-    _palette = list(palette) if palette else _STATE_HEX
-    rank = _LABEL_RANK.get(label, fallback_idx)
-    return _palette[rank % len(_palette)]
-
-
-def _build_state_palette(
-    state_labels_per_subj: dict,
-    K: int | None = None,
-) -> tuple[dict[str, str], list[str]]:
-    """
-    Build a (palette_dict, hue_order) pair from a {subj: {k: label}} mapping.
-
-    Both are rank-ordered (Engaged first) so every seaborn plot that receives
-    them uses the same colour and ordering regardless of K or subject set.
-    When an exact-K palette is configured in ``config.toml``, it is preferred.
-    """
-    seen: dict[str, int] = {}
-    for _slbls in state_labels_per_subj.values():
-        for _k, _lbl in _slbls.items():
-            if _lbl not in seen:
-                seen[_lbl] = _LABEL_RANK.get(_lbl, _k)
-    ordered = sorted(seen, key=lambda l: seen[l])
-    _palette = _get_config_state_palette(K if K is not None else len(ordered))
-    pal = {lbl: _state_color(lbl, seen[lbl], palette=_palette) for lbl in ordered}
-    return pal, ordered
-
-
 def _collect_emission_weight_frames(
     arrays_store: dict,
     state_labels: dict,
@@ -837,7 +807,7 @@ def _collect_emission_weight_frames(
     _df_w     = pd.DataFrame(_records)
     _df_ag    = pd.DataFrame(_ag_records)
     _ag_order = [g for g, _ in _AG_GROUPS if g in _df_ag["feature"].values]
-    _state_pal, _state_hue_order = _build_state_palette(state_labels)
+    _state_pal, _state_hue_order = build_state_palette(state_labels)
     return _df_w, _df_ag, _feat_names, _ag_order, _state_pal, _state_hue_order, _CLS_LABELS
 
 
@@ -1296,6 +1266,783 @@ def plot_emission_weights(
     return fig_ag, fig_cls
 
 
+def _resolve_transition_matrix_from_arrays(arrays_store: dict, subj: str) -> np.ndarray | None:
+    arr = arrays_store.get(subj, {})
+    if "transition_matrix" in arr:
+        return np.asarray(arr["transition_matrix"])
+    if "transition_bias" in arr:
+        bias = np.asarray(arr["transition_bias"])
+        exp_bias = np.exp(bias - bias.max(axis=-1, keepdims=True))
+        return exp_bias / exp_bias.sum(axis=-1, keepdims=True)
+    return None
+
+
+def _apply_label_priority(labels: Sequence[str], priority: Sequence[str] | None) -> list[int]:
+    if not priority:
+        return list(range(len(labels)))
+
+    remaining = list(range(len(labels)))
+    ordered: list[int] = []
+    lower_labels = [label.lower() for label in labels]
+    for desired in priority:
+        desired_lower = desired.lower()
+        matched = [idx for idx in remaining if lower_labels[idx] == desired_lower]
+        ordered.extend(matched)
+        remaining = [idx for idx in remaining if idx not in matched]
+    ordered.extend(remaining)
+    return ordered
+
+
+def _reorder_binary_state_weights(
+    weights: np.ndarray,
+    state_labels: Sequence[str],
+    *,
+    state_label_order: Sequence[str] | None = None,
+) -> tuple[np.ndarray, list[str]]:
+    labels = list(state_labels)
+    if not labels:
+        return np.asarray(weights), labels
+
+    order = _apply_label_priority(labels, state_label_order)
+    ordered_weights = np.take(np.asarray(weights), order, axis=0)
+    ordered_labels = [labels[idx] for idx in order]
+    return ordered_weights, ordered_labels
+
+
+def _reorder_binary_feature_weights(
+    weights: np.ndarray,
+    feature_names: Sequence[str],
+    *,
+    feature_order: Sequence[str] | None = None,
+    abs_features: Sequence[str] = (),
+) -> tuple[np.ndarray, list[str]]:
+    names = list(feature_names)
+    if not names:
+        return np.asarray(weights), names
+
+    desired = [name for name in (feature_order or ()) if name in names]
+    ordered_names = desired + [name for name in names if name not in desired]
+    order = [names.index(name) for name in ordered_names]
+    ordered_weights = np.take(np.asarray(weights), order, axis=-1).copy()
+
+    abs_feature_set = set(abs_features)
+    for idx, name in enumerate(ordered_names):
+        if name in abs_feature_set:
+            ordered_weights[..., idx] = np.abs(ordered_weights[..., idx])
+
+    return ordered_weights, ordered_names
+
+
+def _prepare_binary_emission_subject(
+    view,
+    *,
+    weight_sign: float,
+    state_label_order: Sequence[str] | None,
+    feature_order: Sequence[str] | None,
+    abs_features: Sequence[str],
+) -> tuple[np.ndarray, list[str], list[str]]:
+    weights = np.asarray(view.emission_weights, dtype=float) * float(weight_sign)
+    state_indices = list(view.state_idx_order)
+    state_labels = [view.state_name_by_idx.get(k, f"State {k}") for k in state_indices]
+    weights = weights[state_indices]
+    weights, state_labels = _reorder_binary_state_weights(
+        weights,
+        state_labels,
+        state_label_order=state_label_order,
+    )
+    weights, feature_names = _reorder_binary_feature_weights(
+        weights,
+        view.feat_names or [],
+        feature_order=feature_order,
+        abs_features=abs_features,
+    )
+    return weights, state_labels, feature_names
+
+
+def _draw_binary_emission_weights_by_subject(
+    ax,
+    *,
+    weights: np.ndarray,
+    feature_names: Sequence[str],
+    state_labels: Sequence[str],
+    feature_labeler: Callable[[str], str] | None,
+    K: int,
+    title: str,
+) -> None:
+    plot_weights = np.asarray(weights, dtype=float)
+    if plot_weights.ndim == 2:
+        plot_weights = plot_weights[:, None, :]
+    x = np.arange(plot_weights.shape[-1])
+    bar_width = 0.8 / max(1, len(state_labels))
+    colors = [get_state_color(label, idx, K=K) for idx, label in enumerate(state_labels)]
+    tick_labels = [feature_labeler(name) if feature_labeler else name for name in feature_names]
+
+    for state_idx, state_label in enumerate(state_labels):
+        offset = (state_idx - (len(state_labels) - 1) / 2) * bar_width
+        ax.bar(
+            x + offset,
+            plot_weights[state_idx].mean(axis=0),
+            bar_width,
+            label=state_label,
+            color=colors[state_idx],
+            alpha=0.85,
+        )
+
+    ax.axhline(0, color="k", lw=0.8, ls="--")
+    ax.set_xticks(x)
+    ax.set_xticklabels(tick_labels, rotation=0, ha="center")
+    ax.set_ylabel("Weight")
+    ax.set_title(title)
+
+
+def _prepare_binary_emission_summary_arrays(
+    views: dict,
+    *,
+    K: int,
+    weight_sign: float,
+    state_label_order: Sequence[str] | None,
+    feature_order: Sequence[str] | None,
+    abs_features: Sequence[str],
+) -> tuple[np.ndarray | None, list[str], list[str], list[str]]:
+    if not views:
+        return None, [], [], []
+
+    all_weights: list[np.ndarray] = []
+    hue_order: list[str] | None = None
+    feature_names: list[str] = []
+
+    for view in views.values():
+        weights, state_labels, subject_feature_names = _prepare_binary_emission_subject(
+            view,
+            weight_sign=weight_sign,
+            state_label_order=state_label_order,
+            feature_order=feature_order,
+            abs_features=abs_features,
+        )
+        if weights.ndim == 2:
+            weights = weights[:, None, :]
+        all_weights.append(weights)
+        feature_names = list(subject_feature_names)
+        if hue_order is None:
+            hue_order = list(state_labels)
+
+    if not all_weights:
+        return None, [], [], []
+
+    stacked = np.stack(all_weights, axis=0)
+    resolved_hue_order = hue_order or [f"State {idx}" for idx in range(K)]
+    state_colors = [get_state_color(label, idx, K=K) for idx, label in enumerate(resolved_hue_order)]
+    return stacked, feature_names, resolved_hue_order, state_colors
+
+
+def plot_binary_emission_weights_by_subject(
+    views: dict,
+    K: int,
+    *,
+    weight_sign: float = 1.0,
+    state_label_order: Sequence[str] | None = None,
+    feature_order: Sequence[str] | None = None,
+    abs_features: Sequence[str] = (),
+    feature_labeler: Callable[[str], str] | None = None,
+    save_path=None,
+) -> plt.Figure:
+    valid_subjs = list(views.keys())
+    if not valid_subjs:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    exemplar = next(iter(views.values()))
+    feature_names = list(exemplar.feat_names or [])
+    n_cols = min(3, len(valid_subjs))
+    n_rows = int(math.ceil(len(valid_subjs) / n_cols))
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(max(5, 0.7 * max(1, len(feature_names))) * n_cols, 3.5 * n_rows),
+        sharey=True,
+        squeeze=False,
+    )
+
+    for idx, subj in enumerate(valid_subjs):
+        ax = axes[idx // n_cols, idx % n_cols]
+        weights, state_labels, ordered_feature_names = _prepare_binary_emission_subject(
+            views[subj],
+            weight_sign=weight_sign,
+            state_label_order=state_label_order,
+            feature_order=feature_order,
+            abs_features=abs_features,
+        )
+        _draw_binary_emission_weights_by_subject(
+            ax,
+            weights=weights,
+            feature_names=ordered_feature_names,
+            state_labels=state_labels,
+            feature_labeler=feature_labeler,
+            K=K,
+            title=f"Subject {subj}",
+        )
+
+    for idx in range(len(valid_subjs), n_rows * n_cols):
+        axes[idx // n_cols, idx % n_cols].set_visible(False)
+
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    if handles:
+        axes[0, 0].legend(handles, labels, frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    fig.suptitle(f"Emission weights  (K={K})", y=1.01)
+    fig.tight_layout()
+    sns.despine(fig=fig)
+    if save_path is not None:
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    return fig
+
+
+def plot_binary_emission_weights_summary_lineplot(
+    views: dict,
+    K: int,
+    *,
+    weight_sign: float = 1.0,
+    state_label_order: Sequence[str] | None = None,
+    feature_order: Sequence[str] | None = None,
+    abs_features: Sequence[str] = (),
+    feature_labeler: Callable[[str], str] | None = None,
+) -> plt.Figure:
+    stacked, feature_names, hue_order, state_colors = _prepare_binary_emission_summary_arrays(
+        views,
+        K=K,
+        weight_sign=weight_sign,
+        state_label_order=state_label_order,
+        feature_order=feature_order,
+        abs_features=abs_features,
+    )
+    if stacked is None:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    averaged = stacked.mean(axis=2)
+    display_features = [feature_labeler(name) if feature_labeler else name for name in feature_names]
+    records = []
+    for subj_idx in range(averaged.shape[0]):
+        for state_idx, state_name in enumerate(hue_order):
+            for feature_idx, feature_name in enumerate(display_features):
+                records.append(
+                    {
+                        "Subject": subj_idx,
+                        "State": state_name,
+                        "Feature": feature_name,
+                        "Weight": averaged[subj_idx, state_idx, feature_idx],
+                    }
+                )
+    df = pd.DataFrame(records)
+    palette = {label: color for label, color in zip(hue_order, state_colors, strict=False)}
+
+    fig, ax = plt.subplots(figsize=(max(6.0, 1.6 * max(1, len(display_features))), 4.2))
+    sns.lineplot(
+        data=df,
+        x="Feature",
+        y="Weight",
+        hue="State",
+        hue_order=hue_order,
+        palette=palette,
+        ax=ax,
+        markers=True,
+        marker="o",
+        markersize=8,
+        markeredgewidth=0,
+        alpha=0.85,
+        errorbar="se",
+        err_kws={"edgecolor": "none", "linewidth": 0},
+    )
+    ax.axhline(0, color="k", lw=0.8, ls="--")
+    ax.set_ylabel("Weight")
+    ax.set_xlabel("")
+    ax.set_title(f"Emission weights - line summary  (K={K})")
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles, labels, frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    sns.despine(fig=fig)
+    fig.tight_layout()
+    return fig
+
+
+def plot_binary_emission_weights_summary_boxplot(
+    views: dict,
+    K: int,
+    *,
+    weight_sign: float = 1.0,
+    state_label_order: Sequence[str] | None = None,
+    feature_order: Sequence[str] | None = None,
+    abs_features: Sequence[str] = (),
+    feature_labeler: Callable[[str], str] | None = None,
+) -> plt.Figure:
+    from scipy.stats import ttest_rel
+    import itertools
+
+    stacked, feature_names, hue_order, state_colors = _prepare_binary_emission_summary_arrays(
+        views,
+        K=K,
+        weight_sign=weight_sign,
+        state_label_order=state_label_order,
+        feature_order=feature_order,
+        abs_features=abs_features,
+    )
+    if stacked is None:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        return fig
+
+    averaged = stacked.mean(axis=2)
+    n_subjects, n_states, _, n_features = stacked.shape
+    display_features = [feature_labeler(name) if feature_labeler else name for name in feature_names]
+    fig, ax = plt.subplots(figsize=(max(6.0, 1.6 * max(1, len(display_features))), 4.2))
+
+    hue_width = 0.8 / max(1, n_states)
+    positions = []
+    grouped_weights = []
+    for feature_idx in range(n_features):
+        for state_idx in range(n_states):
+            positions.append(feature_idx + (state_idx - (n_states - 1) / 2) * hue_width)
+            grouped_weights.append(averaged[:, state_idx, feature_idx])
+
+    box = ax.boxplot(
+        grouped_weights,
+        positions=positions,
+        widths=hue_width * 0.9,
+        patch_artist=True,
+        showfliers=False,
+        showcaps=False,
+        zorder=0,
+    )
+    for patch in box["boxes"]:
+        patch.set(facecolor="white", edgecolor="#666666", linewidth=1.1)
+    for elem in ("whiskers", "caps"):
+        for artist in box[elem]:
+            artist.set(color="#666666", linewidth=1.0)
+    for idx, median in enumerate(box["medians"]):
+        median.set(color=state_colors[idx % n_states], linewidth=3)
+
+    for feature_idx in range(n_features):
+        for subj_idx in range(n_subjects):
+            xs = []
+            ys = []
+            for state_idx in range(n_states):
+                xs.append(feature_idx + (state_idx - (n_states - 1) / 2) * hue_width)
+                ys.append(averaged[subj_idx, state_idx, feature_idx])
+            ax.plot(xs, ys, color="#7A7A7A", alpha=0.125, lw=1.5, zorder=5)
+
+    ax.axhline(0, color="k", lw=0.8, ls="--")
+
+    def _star(pval: float) -> str:
+        if pval < 0.001:
+            return "***"
+        if pval < 0.01:
+            return "**"
+        if pval < 0.05:
+            return "*"
+        return "ns"
+
+    y_range = averaged.max() - averaged.min()
+    if y_range == 0:
+        y_range = 1
+
+    state_pairs = list(itertools.combinations(range(n_states), 2))
+    for feature_idx in range(n_features):
+        y_max = averaged[:, :, feature_idx].max()
+        y_offset_step = y_range * 0.05
+        current_y_offset = y_max + y_offset_step
+        for p1, p2 in state_pairs:
+            try:
+                _, pval = ttest_rel(averaged[:, p1, feature_idx], averaged[:, p2, feature_idx])
+                star = _star(pval)
+            except Exception:
+                star = ""
+            if not star:
+                continue
+
+            offset_1 = (p1 - (n_states - 1) / 2) * hue_width
+            offset_2 = (p2 - (n_states - 1) / 2) * hue_width
+            x1 = feature_idx + offset_1
+            x2 = feature_idx + offset_2
+            ax.plot([x1, x1, x2, x2], [current_y_offset, current_y_offset, current_y_offset, current_y_offset], lw=1, c="k")
+            ax.text((x1 + x2) / 2, current_y_offset, star, ha="center", va="bottom", color="k")
+            current_y_offset += y_offset_step * 1.5
+
+    ax.set_xticks(range(n_features))
+    ax.set_xticklabels(display_features, rotation=0, ha="center")
+    ax.set_ylabel("Weight")
+    ax.set_xlabel("")
+    ax.set_title(f"Emission weights - box summary  (K={K})")
+
+    legend_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="",
+            markerfacecolor=state_colors[state_idx],
+            markeredgecolor="none",
+            markersize=7,
+            label=hue_order[state_idx],
+        )
+        for state_idx in range(n_states)
+    ]
+    ax.legend(legend_handles, hue_order[:n_states], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    sns.despine(fig=fig)
+    fig.tight_layout()
+    return fig
+
+
+def plot_binary_emission_weights_summary(
+    views: dict,
+    K: int,
+    *,
+    weight_sign: float = 1.0,
+    state_label_order: Sequence[str] | None = None,
+    feature_order: Sequence[str] | None = None,
+    abs_features: Sequence[str] = (),
+    feature_labeler: Callable[[str], str] | None = None,
+) -> plt.Figure:
+    if len(views) > 1:
+        return plot_binary_emission_weights_summary_boxplot(
+            views,
+            K,
+            weight_sign=weight_sign,
+            state_label_order=state_label_order,
+            feature_order=feature_order,
+            abs_features=abs_features,
+            feature_labeler=feature_labeler,
+        )
+    return plot_binary_emission_weights_by_subject(
+        views,
+        K,
+        weight_sign=weight_sign,
+        state_label_order=state_label_order,
+        feature_order=feature_order,
+        abs_features=abs_features,
+        feature_labeler=feature_labeler,
+    )
+
+
+def plot_binary_emission_weights(
+    views: dict,
+    K: int,
+    *,
+    weight_sign: float = 1.0,
+    state_label_order: Sequence[str] | None = None,
+    feature_order: Sequence[str] | None = None,
+    abs_features: Sequence[str] = (),
+    feature_labeler: Callable[[str], str] | None = None,
+    save_path=None,
+) -> tuple[plt.Figure, plt.Figure]:
+    return (
+        plot_binary_emission_weights_by_subject(
+            views,
+            K,
+            weight_sign=weight_sign,
+            state_label_order=state_label_order,
+            feature_order=feature_order,
+            abs_features=abs_features,
+            feature_labeler=feature_labeler,
+            save_path=save_path,
+        ),
+        plot_binary_emission_weights_summary(
+            views,
+            K,
+            weight_sign=weight_sign,
+            state_label_order=state_label_order,
+            feature_order=feature_order,
+            abs_features=abs_features,
+            feature_labeler=feature_labeler,
+        ),
+    )
+
+
+def _default_state_labels(K: int) -> list[str]:
+    if K == 1:
+        return ["State 0"]
+    if K == 2:
+        return ["Disengaged", "Engaged"]
+    if K == 3:
+        return ["Engaged", "Biased L", "Biased R"]
+    return [f"State {k}" for k in range(K)]
+
+
+def plot_trans_mat(
+    trans_mat: np.ndarray,
+    state_labels: Sequence[str] | None = None,
+    title: str = "Transition matrix",
+    ax: plt.Axes | None = None,
+    figsize: Tuple[float, float] | None = None,
+) -> plt.Figure:
+    """Heatmap of a transition matrix."""
+    A = np.asarray(trans_mat, dtype=float)
+    if A.ndim == 3:
+        A = A.mean(axis=0)
+    K = A.shape[0]
+    labels = list(state_labels) if state_labels else _default_state_labels(K)
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize or (3 + 0.4 * K, 3 + 0.4 * K))
+    else:
+        fig = ax.figure
+
+    im = ax.imshow(A, vmin=0, vmax=1, cmap="bone", origin="lower")
+    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    for i in range(K):
+        for j in range(K):
+            ax.text(
+                j,
+                i,
+                f"{A[i, j]:.2f}",
+                ha="center",
+                va="center",
+                color="w" if A[i, j] < 0.5 else "k",
+                fontsize=9,
+            )
+    ticks = range(K)
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(labels)
+    ax.set_yticks(ticks)
+    ax.set_yticklabels(labels)
+    ax.set_ylabel("State $t$")
+    ax.set_xlabel("State $t+1$")
+    ax.set_title(title)
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+    fig.tight_layout()
+    return fig
+
+
+def plot_trans_mat_boxplots(
+    all_trans_mats: np.ndarray,
+    state_labels: Sequence[str] | None = None,
+    title: str = "Diagonal transitions",
+    figsize: Tuple[float, float] | None = None,
+) -> plt.Figure:
+    """Boxplot of diagonal transition probabilities across subjects."""
+    A = np.asarray(all_trans_mats, dtype=float)
+    K = A.shape[1]
+    labels = list(state_labels) if state_labels else _default_state_labels(K)
+    colors = get_state_palette(K)[:K]
+    diag = np.stack([A[:, k, k] for k in range(K)], axis=1)
+
+    fig, ax = plt.subplots(figsize=figsize or (2 + 0.8 * K, 3.5))
+    for idx, color in enumerate(colors):
+        custom_boxplot(
+            ax,
+            diag[:, idx],
+            positions=[idx],
+            widths=0.5,
+            median_colors=color,
+            box_edgecolor=color,
+            whisker_color=color,
+            showfliers=False,
+            showcaps=False,
+        )
+    ax.set_xticks(range(K))
+    ax.set_xticklabels(labels)
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("P(stay)")
+    ax.set_title(title)
+    sns.despine(ax=ax)
+    fig.tight_layout()
+    return fig
+
+
+def plot_occupancy(
+    smoothed_probs: np.ndarray,
+    state_labels: Sequence[str] | None = None,
+    trial_range: Tuple[int, int] | None = None,
+    title: str = "Posterior state probabilities",
+    figsize: Tuple[float, float] | None = None,
+) -> plt.Figure:
+    """Line plot of posterior state occupancy over trials."""
+    P = np.asarray(smoothed_probs, dtype=float)
+    if trial_range is not None:
+        P = P[trial_range[0] : trial_range[1]]
+    _, K = P.shape
+    labels = list(state_labels) if state_labels else _default_state_labels(K)
+    colors = get_state_palette(K)[:K]
+
+    fig, ax = plt.subplots(figsize=figsize or (14, 2.5))
+    for k in range(K):
+        ax.plot(P[:, k], color=colors[k], label=labels[k], lw=1)
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_xlabel("Trial")
+    ax.set_ylabel("P(state)")
+    ax.set_title(title)
+    ax.legend(frameon=False, bbox_to_anchor=(1, 1))
+    sns.despine(ax=ax)
+    fig.tight_layout()
+    return fig
+
+
+def plot_occupancy_boxplot(
+    all_smoothed_probs: Sequence[np.ndarray],
+    state_labels: Sequence[str] | None = None,
+    title: str = "State occupancy",
+    figsize: Tuple[float, float] | None = None,
+) -> tuple[plt.Figure, np.ndarray]:
+    """Boxplot of fractional state occupancy across subjects."""
+    P_list = [np.asarray(p, dtype=float) for p in all_smoothed_probs]
+    K = P_list[0].shape[1]
+    labels = list(state_labels) if state_labels else _default_state_labels(K)
+    colors = get_state_palette(K)[:K]
+    occupancies = np.array([p.mean(axis=0) for p in P_list], dtype=float)
+
+    fig, ax = plt.subplots(figsize=figsize or (2 + 0.8 * K, 3.5))
+    for idx, color in enumerate(colors):
+        custom_boxplot(
+            ax,
+            occupancies[:, idx],
+            positions=[idx],
+            widths=0.5,
+            median_colors=color,
+            box_edgecolor=color,
+            whisker_color=color,
+            showfliers=False,
+            showcaps=False,
+        )
+    ax.set_xticks(range(K))
+    ax.set_xticklabels(labels)
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("Occupancy")
+    ax.set_title(title)
+    sns.despine(ax=ax)
+    fig.tight_layout()
+    return fig, occupancies
+
+
+def norm_ll(
+    lls: Sequence[float],
+    n_trials: Sequence[int],
+    ll_null: Sequence[float] | None = None,
+    to_bits: bool = True,
+) -> np.ndarray:
+    """Normalise log-likelihoods to bits or nats per trial."""
+    lls_arr = np.asarray(lls, dtype=float)
+    n_arr = np.asarray(n_trials, dtype=float)
+    if ll_null is not None:
+        lls_arr = lls_arr - np.asarray(ll_null, dtype=float)
+    else:
+        lls_arr = lls_arr - np.log(0.5) * n_arr
+    ll_norm = lls_arr / n_arr
+    if to_bits:
+        ll_norm = ll_norm / np.log(2)
+    return ll_norm
+
+
+def plot_ll(
+    lls: Sequence[float],
+    n_trials: Sequence[int],
+    ll_null: Sequence[float] | None = None,
+    to_bits: bool = True,
+    ax: plt.Axes | None = None,
+    color: str = "k",
+    label: str | None = None,
+    figsize: Tuple[float, float] | None = None,
+) -> tuple[plt.Figure, np.ndarray]:
+    """Boxplot of normalised log-likelihoods."""
+    ll_norm = norm_ll(lls, n_trials, ll_null, to_bits)
+    ylabel = f"LL ({'bits' if to_bits else 'nats'}/Trial)"
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize or (2, 3.5))
+    else:
+        fig = ax.figure
+
+    custom_boxplot(
+        ax,
+        ll_norm,
+        positions=[0],
+        widths=0.5,
+        median_colors=color,
+        box_edgecolor=color,
+        whisker_color=color,
+        showfliers=False,
+        showcaps=False,
+    )
+    jitter = np.linspace(-0.06, 0.06, len(ll_norm)) if len(ll_norm) > 1 else np.array([0.0])
+    ax.scatter(jitter, ll_norm, color=color, alpha=0.45, s=20, zorder=3, linewidths=0)
+    ax.axhline(0, color="k", ls="--", lw=0.8)
+    ax.set_xticks([0])
+    ax.set_xticklabels([label or "model"])
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel("")
+    sns.despine(ax=ax)
+    fig.tight_layout()
+    return fig, ll_norm
+
+
+def plot_model_comparison(
+    all_lls: dict,
+    all_n_trials: Sequence[int],
+    ll_null: Sequence[float] | None = None,
+    to_bits: bool = True,
+    title: str = "Model comparison",
+    figsize: Tuple[float, float] | None = None,
+) -> plt.Figure:
+    """Line plot of mean +/- SEM normalised LL vs number of states."""
+    ns_list = sorted(all_lls.keys())
+    means = []
+    sems = []
+    for ns in ns_list:
+        ll_n = norm_ll(all_lls[ns], all_n_trials, ll_null, to_bits)
+        means.append(ll_n.mean())
+        sems.append(sem(ll_n))
+
+    fig, ax = plt.subplots(figsize=figsize or (4, 3))
+    ax.errorbar(ns_list, means, yerr=sems, fmt="o-", color="k", capsize=4)
+    ax.set_xlabel("N states")
+    ax.set_ylabel(f"LL ({'bits' if to_bits else 'nats'}/Trial)")
+    ax.set_title(title)
+    ax.set_xticks(ns_list)
+    sns.despine(ax=ax)
+    fig.tight_layout()
+    return fig
+
+
+def plot_model_comparison_diffs(
+    all_lls: dict,
+    all_n_trials: Sequence[int],
+    ll_null: Sequence[float] | None = None,
+    to_bits: bool = True,
+    title: str = "ΔLL per state step",
+    figsize: Tuple[float, float] | None = None,
+) -> plt.Figure:
+    """Strip plot of consecutive ΔLL values."""
+    ns_list = sorted(all_lls.keys())
+    norms = {ns: norm_ll(all_lls[ns], all_n_trials, ll_null, to_bits) for ns in ns_list}
+    diffs = [norms[ns_list[i + 1]] - norms[ns_list[i]] for i in range(len(ns_list) - 1)]
+    labels = [f"{ns_list[i + 1]}s-{ns_list[i]}s" for i in range(len(ns_list) - 1)]
+
+    df = pd.DataFrame(
+        {
+            "ΔLL": np.concatenate(diffs),
+            "comparison": np.repeat(labels, [len(diff) for diff in diffs]),
+        }
+    )
+
+    fig, ax = plt.subplots(figsize=figsize or (2.5 * len(diffs), 3.5))
+    sns.stripplot(x="comparison", y="ΔLL", data=df, color="k", alpha=0.5, jitter=True, ax=ax)
+    ax.axhline(0, color="k", ls="--", lw=0.8)
+
+    for i, diff in enumerate(diffs):
+        _, pval = ttest_1samp(diff, 0)
+        ymax = ax.get_ylim()[1]
+        star = "***" if pval < 0.001 else "**" if pval < 0.01 else "*" if pval < 0.05 else "n.s."
+        ax.text(i, ymax * 0.95, star, ha="center", va="top", fontsize=11)
+
+    ax.set_xlabel("N states comparison")
+    ax.set_ylabel(f"ΔLL ({'bits' if to_bits else 'nats'}/Trial)")
+    ax.set_title(title)
+    sns.despine(ax=ax)
+    fig.tight_layout()
+    return fig
+
+
 def plot_transition_matrix_by_subject(
     arrays_store: dict,
     state_labels: dict,
@@ -1303,17 +2050,7 @@ def plot_transition_matrix_by_subject(
     subjects: list,
 ):
     """Per-subject transition-matrix heatmaps."""
-    def _resolve_matrix(subj: str) -> np.ndarray | None:
-        _arr = arrays_store.get(subj, {})
-        if "transition_matrix" in _arr:
-            return np.asarray(_arr["transition_matrix"])
-        if "transition_bias" in _arr:
-            _bias = np.asarray(_arr["transition_bias"])
-            _exp = np.exp(_bias - _bias.max(axis=-1, keepdims=True))
-            return _exp / _exp.sum(axis=-1, keepdims=True)
-        return None
-
-    _selected = [s for s in subjects if _resolve_matrix(s) is not None]
+    _selected = [s for s in subjects if _resolve_transition_matrix_from_arrays(arrays_store, s) is not None]
     if not _selected:
         raise ValueError("No transition matrices found for selected subjects.")
 
@@ -1328,7 +2065,7 @@ def plot_transition_matrix_by_subject(
 
     for idx, subj in enumerate(_selected):
         ax = axes[idx // _n_cols, idx % _n_cols]
-        _A = _resolve_matrix(subj)
+        _A = _resolve_transition_matrix_from_arrays(arrays_store, subj)
         _slbl = state_labels.get(subj, {k: f"S{k}" for k in range(K)})
         _tick_labels = [_slbl.get(k, f"S{k}") for k in range(K)]
         sns.heatmap(
@@ -1364,21 +2101,11 @@ def plot_transition_matrix(
     subjects: list,
 ):
     """Mean transition-matrix heatmap across selected subjects."""
-    def _resolve_matrix(subj: str) -> np.ndarray | None:
-        _arr = arrays_store.get(subj, {})
-        if "transition_matrix" in _arr:
-            return np.asarray(_arr["transition_matrix"])
-        if "transition_bias" in _arr:
-            _bias = np.asarray(_arr["transition_bias"])
-            _exp = np.exp(_bias - _bias.max(axis=-1, keepdims=True))
-            return _exp / _exp.sum(axis=-1, keepdims=True)
-        return None
-
-    _selected = [s for s in subjects if _resolve_matrix(s) is not None]
+    _selected = [s for s in subjects if _resolve_transition_matrix_from_arrays(arrays_store, s) is not None]
     if not _selected:
         raise ValueError("No transition matrices found for selected subjects.")
 
-    _A_mean = np.mean([_resolve_matrix(s) for s in _selected], axis=0)
+    _A_mean = np.mean([_resolve_transition_matrix_from_arrays(arrays_store, s) for s in _selected], axis=0)
     _first_labels = state_labels.get(_selected[0], {k: f"S{k}" for k in range(K)})
     _tick_labels = [_first_labels.get(k, f"S{k}") for k in range(K)]
     fig, ax = plt.subplots(figsize=(4.4, 3.8))
@@ -1422,7 +2149,7 @@ def plot_posterior_probs(
     if not _selected:
         raise ValueError("No fitted arrays for selected subjects.")
 
-    _colors        = _STATE_HEX
+    _colors        = get_state_palette(K)
     _choice_colors = {0: "royalblue", 1: "gold", 2: "tomato"}
     _choice_labels = {0: "L", 1: "C", 2: "R"}
 
@@ -1439,7 +2166,7 @@ def plot_posterior_probs(
         _bottom = np.zeros(_T_w)
         _slbl   = state_labels.get(_subj, {k: f"State {k}" for k in range(K)})
         for _k in range(K):
-            _rank = _LABEL_RANK.get(_slbl.get(_k, ""), _k)
+            _rank = get_state_rank(_slbl.get(_k, ""), _k)
             _ax.fill_between(
                 _x, _bottom, _bottom + _probs[:, _k],
                 alpha=0.7, color=_colors[_rank % len(_colors)],
@@ -1487,19 +2214,16 @@ def plot_state_accuracy(
     views: dict,
     trial_df,
     thresh: float = 0.5,
-    session_col: str = "Session",
-    sort_col: str = "Trial",
     performance_col: str = "correct_bool",
-    stim_col: str = "stimd_n",
+    chance_level: float | None = None,
     **kwargs,
 ) -> Tuple[plt.Figure, pd.DataFrame]:
     return _plot_state_accuracy_common(
         views,
         trial_df,
         thresh=thresh,
-        performance_candidates=(performance_col, "performance"),
-        stim_candidates=(stim_col, "stimulus", "ILD"),
-        stim_label="nonzero stimulus",
+        performance_col=performance_col,
+        chance_level=chance_level,
     )
 
 
@@ -1665,9 +2389,10 @@ def plot_session_deepdive(
     session_col: str = "session",
     sort_col: str = "trial_idx",
     switch_posterior_threshold: float | None = None,
-    stimd_col: str = "stimd_n",
-    perf_col: str = "performance",
-    resp_col: str = "response",
+    performance_col: str = "correct_bool",
+    response_col: str = "response",
+    trace_x_cols: Tuple[str, ...] = ("A_R", "A_L", "A_C"),
+    trace_u_cols: Tuple[str, ...] = ("A_plus", "A_minus"),
     **kwargs,
 ):
     return _plot_session_deepdive_common(
@@ -1678,9 +2403,10 @@ def plot_session_deepdive(
         session_col=session_col,
         sort_col=sort_col,
         switch_posterior_threshold=switch_posterior_threshold,
-        performance_candidates=(perf_col, "correct_bool", "performance"),
-        stim_candidates=(stimd_col, "stimulus", "ILD"),
-        response_candidates=(resp_col, "response", "Choice"),
+        performance_col=performance_col,
+        response_col=response_col,
+        trace_x_cols=trace_x_cols,
+        trace_u_cols=trace_u_cols,
         **kwargs,
     )
 
@@ -1745,6 +2471,368 @@ def plot_tau_sweep(sweep_path, subjects: list, K: int):
     return fig, best_df
 
 
+def _sig_label(pvalue: float) -> str:
+    if pvalue < 0.001:
+        return "***"
+    if pvalue < 0.01:
+        return "**"
+    if pvalue < 0.05:
+        return "*"
+    return "ns"
+
+
+def _transition_feature_names(feature_names, D: int) -> list[str]:
+    cols = list(feature_names or [])
+    if cols:
+        return cols[:D]
+    return [f"u{idx}" for idx in range(D)]
+
+
+def _standardize_transition_weights(weights: np.ndarray) -> np.ndarray:
+    weights_avg = np.asarray(weights, dtype=float).mean(axis=0)
+    baseline = -np.mean(
+        np.vstack([weights_avg, np.zeros((1, weights_avg.shape[1]), dtype=float)]),
+        axis=0,
+    )
+    return weights_avg + baseline
+
+
+def _resolve_transition_weight_inputs(
+    arrays_store: dict | None,
+    names: dict | None,
+    K: int | None,
+    subjects: list | None,
+    state_labels: dict | None,
+    views: dict | None,
+):
+    selected = list(subjects or [])
+
+    if views is not None:
+        if not selected:
+            selected = list(views.keys())
+        selected = [
+            subj
+            for subj in selected
+            if subj in views and getattr(views[subj], "transition_weights", None) is not None
+        ]
+        if not selected:
+            raise ValueError("No transition weights found for selected subjects.")
+        if K is None:
+            K = int(views[selected[0]].K)
+
+        label_map = {subj: dict(views[subj].state_name_by_idx) for subj in selected}
+
+        def get_tw(subj: str) -> np.ndarray:
+            return np.asarray(views[subj].transition_weights, dtype=float)
+
+        def get_ucols(subj: str, D: int) -> list[str]:
+            return _transition_feature_names(getattr(views[subj], "U_cols", []), D)
+
+    else:
+        if arrays_store is None:
+            raise ValueError("Provide either views or arrays_store.")
+        if not selected:
+            selected = list(arrays_store.keys())
+        selected = [
+            subj
+            for subj in selected
+            if subj in arrays_store and "transition_weights" in arrays_store[subj]
+        ]
+        if not selected:
+            raise ValueError("No transition weights found for selected subjects.")
+        if K is None:
+            K = int(np.asarray(arrays_store[selected[0]]["transition_weights"]).shape[0])
+        names = names or {}
+        state_labels = state_labels or {}
+        label_map = {
+            subj: dict(state_labels.get(subj) or {k: f"State {k}" for k in range(K)})
+            for subj in selected
+        }
+
+        def get_tw(subj: str) -> np.ndarray:
+            return np.asarray(arrays_store[subj]["transition_weights"], dtype=float)
+
+        def get_ucols(subj: str, D: int) -> list[str]:
+            return _transition_feature_names(
+                arrays_store[subj].get("U_cols") or names.get("U_cols"),
+                D,
+            )
+
+    state_palette, states_order = build_state_palette(label_map, K=K)
+    return selected, int(K), label_map, state_palette, states_order, get_tw, get_ucols
+
+
+def _build_transition_weight_df(
+    selected: list[str],
+    K: int,
+    label_map: dict,
+    get_tw,
+    get_ucols,
+) -> tuple[pd.DataFrame, list[str]]:
+    feature_order: list[str] | None = None
+    records: list[dict[str, object]] = []
+
+    for subj in selected:
+        weights_std = _standardize_transition_weights(get_tw(subj))
+        D = weights_std.shape[1]
+        feature_names = get_ucols(subj, D)
+        if feature_order is None:
+            feature_order = list(feature_names)
+        elif list(feature_names) != feature_order:
+            raise ValueError("Transition feature columns differ across subjects.")
+
+        for state_idx in range(min(K, weights_std.shape[0])):
+            state_name = label_map[subj].get(state_idx, f"State {state_idx}")
+            for feature_idx, feature_name in enumerate(feature_names):
+                records.append(
+                    {
+                        "subject": subj,
+                        "state": state_name,
+                        "feature": feature_name,
+                        "weight": float(weights_std[state_idx, feature_idx]),
+                    }
+                )
+
+    feature_order = feature_order or []
+    df_std = pd.DataFrame.from_records(records)
+    if not feature_order:
+        raise ValueError("No transition feature columns found.")
+    df_std["feature"] = pd.Categorical(
+        df_std["feature"],
+        categories=feature_order,
+        ordered=True,
+    )
+    return df_std, feature_order
+
+
+def _paired_transition_weight_pvalues(
+    df_std: pd.DataFrame,
+    feature_order: Sequence[str],
+    states_order: Sequence[str],
+) -> dict[tuple[str, str, str], float]:
+    pvalues: dict[tuple[str, str, str], float] = {}
+    state_pairs = [
+        (state_a, state_b)
+        for idx, state_a in enumerate(states_order)
+        for state_b in states_order[idx + 1 :]
+    ]
+
+    for feature_name in feature_order:
+        feat_df = df_std[df_std["feature"] == feature_name]
+        pivot = feat_df.pivot(index="subject", columns="state", values="weight").reindex(
+            columns=list(states_order)
+        )
+        for state_a, state_b in state_pairs:
+            paired = pivot[[state_a, state_b]].dropna()
+            if len(paired) >= 2:
+                pvalue = float(ttest_rel(paired[state_a], paired[state_b]).pvalue)
+            else:
+                pvalue = float("nan")
+            pvalues[(feature_name, state_a, state_b)] = pvalue
+
+    return pvalues
+
+
+def _transition_weight_y_range(df_std: pd.DataFrame) -> float:
+    y_range = float(df_std["weight"].max() - df_std["weight"].min())
+    return y_range if np.isfinite(y_range) and y_range > 0 else 1.0
+
+
+def _plot_transition_weight_lineplot(
+    df_std: pd.DataFrame,
+    selected: Sequence[str],
+    K: int,
+    feature_order: Sequence[str],
+    states_order: Sequence[str],
+    state_palette: dict[str, str],
+    pvalues: dict[tuple[str, str, str], float],
+) -> plt.Figure:
+    fig, ax = plt.subplots(figsize=(max(4, len(feature_order) * 1.1), max(3, K * 1.0)))
+    sns.lineplot(
+        data=df_std,
+        x="feature",
+        y="weight",
+        hue="state",
+        ax=ax,
+        markers=True,
+        marker="o",
+        markersize=9,
+        markeredgewidth=0,
+        alpha=0.85,
+        errorbar="se",
+        palette=state_palette,
+        hue_order=states_order,
+        sort=False,
+    )
+
+    for subj in selected:
+        subj_df = df_std[df_std["subject"] == subj]
+        for state_name in states_order:
+            state_df = subj_df[subj_df["state"] == state_name].sort_values("feature")
+            if state_df.empty:
+                continue
+            ax.plot(
+                state_df["feature"].tolist(),
+                state_df["weight"].to_numpy(),
+                color=state_palette[state_name],
+                alpha=0.25,
+                linewidth=0.8,
+            )
+
+    y_range = _transition_weight_y_range(df_std)
+    state_pairs = [
+        (state_a, state_b)
+        for idx, state_a in enumerate(states_order)
+        for state_b in states_order[idx + 1 :]
+    ]
+    feature_xpos = {feature_name: idx for idx, feature_name in enumerate(feature_order)}
+    for pair_idx, (state_a, state_b) in enumerate(state_pairs):
+        for feature_name in feature_order:
+            star = _sig_label(pvalues[(feature_name, state_a, state_b)])
+            if star == "ns":
+                continue
+            feat_df = df_std[df_std["feature"] == feature_name]
+            means = feat_df.groupby("state", observed=False)["weight"].mean()
+            y_base = max(means.get(state_a, float("nan")), means.get(state_b, float("nan")))
+            if not np.isfinite(y_base):
+                continue
+            ax.text(
+                feature_xpos[feature_name],
+                y_base + y_range * 0.06 * (pair_idx + 1),
+                star,
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                color="black",
+            )
+
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
+    ax.set_xticks(range(len(feature_order)))
+    ax.set_xticklabels(feature_order, rotation=20, ha="right")
+    ax.set_xlabel("")
+    ax.set_ylabel("Transition weight")
+    ax.set_title(f"glmhmm-t K={K} — transition weights by state ({' / '.join(states_order)})")
+    if ax.get_legend() is not None:
+        ax.get_legend().set_title("")
+    fig.tight_layout()
+    sns.despine(fig=fig)
+    return fig
+
+
+def _plot_transition_weight_boxplot(
+    df_std: pd.DataFrame,
+    K: int,
+    feature_order: Sequence[str],
+    states_order: Sequence[str],
+    state_palette: dict[str, str],
+    pvalues: dict[tuple[str, str, str], float],
+) -> plt.Figure:
+    fig, ax = plt.subplots(
+        figsize=(max(5, len(feature_order) * 1.4), max(3, K * 1.0))
+    )
+    n_states = max(1, len(states_order))
+    group_width = 0.8
+    hue_width = group_width / n_states
+
+    for state_idx, state_name in enumerate(states_order):
+        color = state_palette[state_name]
+        offset = (state_idx - (n_states - 1) / 2) * hue_width
+        positions = [feat_idx + offset for feat_idx in range(len(feature_order))]
+        values = [
+            df_std[
+                (df_std["feature"] == feature_name) & (df_std["state"] == state_name)
+            ]["weight"].to_numpy(dtype=float)
+            for feature_name in feature_order
+        ]
+        custom_boxplot(
+            ax,
+            values,
+            positions=positions,
+            widths=hue_width * 0.78,
+            median_colors=color,
+            box_edgecolor=color,
+            whisker_color=color,
+            box_facecolor="white",
+            box_alpha=0.85,
+            showfliers=False,
+            showcaps=False,
+        )
+        for pos, vals in zip(positions, values, strict=False):
+            if len(vals) == 0:
+                continue
+            jitter = (
+                np.linspace(-hue_width * 0.12, hue_width * 0.12, len(vals))
+                if len(vals) > 1
+                else np.array([0.0])
+            )
+            ax.scatter(
+                pos + jitter,
+                vals,
+                color=color,
+                alpha=0.35,
+                s=18,
+                zorder=3,
+                linewidths=0,
+            )
+
+    y_range = _transition_weight_y_range(df_std)
+    state_pairs = [
+        (state_a, state_b)
+        for idx, state_a in enumerate(states_order)
+        for state_b in states_order[idx + 1 :]
+    ]
+    for feat_idx, feature_name in enumerate(feature_order):
+        feat_df = df_std[df_std["feature"] == feature_name]
+        if feat_df.empty:
+            continue
+        current_y = float(feat_df["weight"].max()) + y_range * 0.05
+        for state_a, state_b in state_pairs:
+            star = _sig_label(pvalues[(feature_name, state_a, state_b)])
+            if star == "ns":
+                continue
+            idx_a = states_order.index(state_a)
+            idx_b = states_order.index(state_b)
+            x1 = feat_idx + (idx_a - (n_states - 1) / 2) * hue_width
+            x2 = feat_idx + (idx_b - (n_states - 1) / 2) * hue_width
+            h = y_range * 0.02
+            ax.plot(
+                [x1, x1, x2, x2],
+                [current_y, current_y + h, current_y + h, current_y],
+                lw=1,
+                c="k",
+            )
+            ax.text(
+                (x1 + x2) / 2,
+                current_y + h,
+                star,
+                ha="center",
+                va="bottom",
+                color="k",
+            )
+            current_y += y_range * 0.075
+
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
+    ax.set_xticks(range(len(feature_order)))
+    ax.set_xticklabels(feature_order, rotation=20, ha="right")
+    ax.set_xlabel("")
+    ax.set_ylabel("Transition weight")
+    ax.set_title(f"glmhmm-t K={K} — transition weight boxplots ({' / '.join(states_order)})")
+    ax.legend(
+        [
+            Line2D([0], [0], color=state_palette[state_name], lw=2, label=state_name)
+            for state_name in states_order
+        ],
+        list(states_order),
+        title="State",
+        bbox_to_anchor=(1.01, 1),
+        loc="upper left",
+        frameon=False,
+    )
+    fig.tight_layout()
+    sns.despine(fig=fig)
+    return fig
+
+
 def plot_transition_weights(
     arrays_store: dict | None = None,
     names: dict | None = None,
@@ -1753,237 +2841,44 @@ def plot_transition_weights(
     state_labels: dict | None = None,
     views: dict | None = None,
 ):
-    """
-    Input-dependent transition weights (glmhmm-t only).
-
-    Produces two figures:
-      fig_line – standardised lineplot (mean-centred across states)
-      fig_box  – standardised boxplot by feature and state
-
-    Parameters
-    ----------
-    state_labels : {subj: {state_idx: label_str}} – if provided, semantic
-                   labels (e.g. "Engaged") and config-driven colours are used
-                   consistently across all three figures.
-    views : {subj: SubjectFitView} – preferred source. When provided, state
-            labels, transition weights, and transition feature names are read
-            directly from the views.
-
-    Returns
-    -------
-    fig_line, fig_box
-    """
-    import itertools as _it
-    from scipy import stats as _stats
-
-    _selected = list(subjects or [])
-    if views is not None:
-        if not _selected:
-            _selected = list(views.keys())
-        _selected = [
-            s for s in _selected
-            if s in views and getattr(views[s], "transition_weights", None) is not None
-        ]
-        if K is None and _selected:
-            K = int(views[_selected[0]].K)
-        _slbls_map = {
-            s: dict(views[s].state_name_by_idx) for s in _selected
-        }
-        _state_pal, _states_order = _build_state_palette(_slbls_map, K=K)
-        _D_first = views[_selected[0]].transition_weights.shape[2]
-        _U_cols = list(views[_selected[0]].U_cols)[:_D_first]
-
-        def _get_tw(subj: str) -> np.ndarray:
-            return np.asarray(views[subj].transition_weights)
-
-        def _get_ucols(subj: str, D: int) -> list[str]:
-            return list(views[subj].U_cols)[:D]
-    else:
-        if arrays_store is None:
-            raise ValueError("Provide either views or arrays_store.")
-        _selected = [
-            s for s in _selected
-            if s in arrays_store and "transition_weights" in arrays_store[s]
-        ]
-        if K is None:
-            raise ValueError("K is required when views are not provided.")
-        if names is None:
-            names = {}
-
-        _slbls_map: dict = {}
-        for _subj in _selected:
-            _slbls_map[_subj] = (
-                (state_labels or {}).get(_subj) or {k: f"State {k}" for k in range(K)}
-            )
-
-        _state_pal, _states_order = _build_state_palette(_slbls_map, K=K)
-        _D_first = arrays_store[_selected[0]]["transition_weights"].shape[2]
-        _U_cols = (arrays_store[_selected[0]].get("U_cols") or names.get("U_cols", []))[:_D_first]
-
-        def _get_tw(subj: str) -> np.ndarray:
-            return np.asarray(arrays_store[subj]["transition_weights"])
-
-        def _get_ucols(subj: str, D: int) -> list[str]:
-            return list((arrays_store[subj].get("U_cols") or names.get("U_cols", []))[:D])
-
-    if not _selected:
-        raise ValueError("No transition weights found for selected subjects.")
-
-    _state_pairs = list(_it.combinations(_states_order, 2))
-
-    # ── standardised records ──────────────────────────────────────────────────
-    _std_records = []
-    for _subj in _selected:
-        _W_raw    = _get_tw(_subj)                              # (K, K, D)
-        _D        = _W_raw.shape[2]
-        _U_cols_s = _get_ucols(_subj, _D)
-        _W_avg    = _W_raw.mean(axis=0)                         # (K, D)
-        _W_aug    = np.vstack([_W_avg, np.zeros((1, _W_avg.shape[1]))])
-        _v1       = -np.mean(_W_aug, axis=0)
-        _W_std    = np.array(_W_aug, copy=True)
-        _W_std[-1] = _v1
-        for _k in range(K):
-            _W_std[_k] = _v1 + _W_avg[_k]
-        for _k in range(K):
-            _lbl_k = _slbls_map[_subj].get(_k, f"State {_k}")
-            for _fi, _fname in enumerate(_U_cols_s):
-                _std_records.append({
-                    "subject": _subj, "state": _lbl_k,
-                    "feature": _fname, "weight": float(_W_std[_k, _fi]),
-                })
-
-    _df_std = pd.DataFrame(_std_records)
-
-    def _sig_label(p):
-        if p < 0.001: return "***"
-        if p < 0.01:  return "**"
-        if p < 0.05:  return "*"
-        return "ns"
-
-    _sig_results = {}
-    for _feat in _U_cols:
-        for _st_a, _st_b in _state_pairs:
-            _va = (_df_std[(_df_std["feature"] == _feat) & (_df_std["state"] == _st_a)]
-                   .set_index("subject")["weight"])
-            _vb = (_df_std[(_df_std["feature"] == _feat) & (_df_std["state"] == _st_b)]
-                   .set_index("subject")["weight"])
-            _common = _va.index.intersection(_vb.index)
-            if len(_common) >= 2:
-                _, _p = _stats.ttest_rel(_va[_common], _vb[_common])
-            else:
-                _p = float("nan")
-            _sig_results[(_feat, _st_a, _st_b)] = _p
-
-    _feat_xpos = {f: i for i, f in enumerate(_U_cols)}
-    _states_str = " / ".join(_states_order)
-
-    # ── fig_line: standardised lineplot ───────────────────────────────────────
-    fig_line, ax_line = plt.subplots(figsize=(4, max(3, K * 1.0)))
-    sns.lineplot(
-        data=_df_std, x="feature", y="weight", hue="state", ax=ax_line,
-        markers=True, marker="o", markersize=9, markeredgewidth=0,
-        alpha=0.85, errorbar="se",
-        palette=_state_pal, hue_order=_states_order,
-    )
-    for _subj_s in _selected:
-        _sub_df = _df_std[_df_std["subject"] == _subj_s]
-        for _st in _states_order:
-            _sub_st = _sub_df[_sub_df["state"] == _st]
-            ax_line.plot(_sub_st["feature"].tolist(), _sub_st["weight"].tolist(),
-                         color=_state_pal[_st], alpha=0.25, linewidth=0.8)
-    _lxr   = abs(ax_line.get_xlim()[1] - ax_line.get_xlim()[0])
-    for _pi, (_st_a, _st_b) in enumerate(_state_pairs):
-        for _feat in _U_cols:
-            _lbl = _sig_label(_sig_results[(_feat, _st_a, _st_b)])
-            if _lbl == "ns":
-                continue
-            _xp  = _feat_xpos[_feat]
-            _va_m = _df_std[(_df_std["feature"] == _feat) & (_df_std["state"] == _st_a)]["weight"].mean()
-            _vb_m = _df_std[(_df_std["feature"] == _feat) & (_df_std["state"] == _st_b)]["weight"].mean()
-            ax_line.text(_xp, max(_va_m, _vb_m) + _lxr * 0.04 * (_pi + 1),
-                         _lbl, ha="center", va="bottom", fontsize=10, color="black")
-    ax_line.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
-    ax_line.set_xticks(range(len(_U_cols)))
-    ax_line.set_xticklabels(_U_cols, rotation=20, ha="right")
-    ax_line.set_xlabel("")
-    ax_line.set_ylabel("Transition weight")
-    ax_line.set_title(f"glmhmm-t K={K} — transition weights by state ({_states_str})")
-    if ax_line.get_legend() is not None:
-        ax_line.get_legend().set_title("")
-    fig_line.tight_layout()
-    sns.despine(fig=fig_line)
-
-    # ── fig_box: emission-style boxplot with paired significance ─────────────
-    fig_box, ax_box = plt.subplots(figsize=(max(5, len(_U_cols) * 1.4), max(3, K * 1.0)))
-    sns.boxplot(
-        data=_df_std, x="feature", y="weight", hue="state", ax=ax_box,
-        palette=_state_pal, hue_order=_states_order,
-        width=0.8, showfliers=False, boxprops={"alpha": 0.75},
-    )
-    sns.stripplot(
-        data=_df_std, x="feature", y="weight", hue="state", ax=ax_box,
-        palette=_state_pal, hue_order=_states_order,
-        dodge=True, alpha=0.4, zorder=1, legend=False,
-    )
-    _n_states = max(1, len(_states_order))
-    _state_pairs_idx = list(_it.combinations(range(_n_states), 2))
-    _hue_width = 0.8 / _n_states
-    _y_range = _df_std["weight"].max() - _df_std["weight"].min()
-    if pd.isna(_y_range) or _y_range == 0:
-        _y_range = 1.0
-    for _m, _feat in enumerate(_U_cols):
-        _feat_df = _df_std[_df_std["feature"] == _feat]
-        if _feat_df.empty:
-            continue
-        _y_max = _feat_df["weight"].max()
-        _y_offset_step = _y_range * 0.05
-        _current_y_offset = _y_max + _y_offset_step
-        for _p1, _p2 in _state_pairs_idx:
-            _s1 = _states_order[_p1]
-            _s2 = _states_order[_p2]
-            _df1 = _feat_df[_feat_df["state"] == _s1].set_index("subject")["weight"]
-            _df2 = _feat_df[_feat_df["state"] == _s2].set_index("subject")["weight"]
-            _common = _df1.index.intersection(_df2.index)
-            if len(_common) < 2:
-                continue
-            _, _pval = _stats.ttest_rel(_df1.loc[_common].values, _df2.loc[_common].values)
-            _star = _sig_label(_pval)
-            _offset_1 = (_p1 - (_n_states - 1) / 2) * _hue_width
-            _offset_2 = (_p2 - (_n_states - 1) / 2) * _hue_width
-            _x1 = _m + _offset_1
-            _x2 = _m + _offset_2
-            _h = _y_range * 0.02
-            ax_box.plot(
-                [_x1, _x1, _x2, _x2],
-                [_current_y_offset, _current_y_offset + _h, _current_y_offset + _h, _current_y_offset],
-                lw=1,
-                c="k",
-            )
-            ax_box.text(
-                (_x1 + _x2) / 2,
-                _current_y_offset + _h,
-                _star,
-                ha="center",
-                va="bottom",
-                color="k",
-            )
-            _current_y_offset += _y_offset_step * 1.5
-    ax_box.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
-    ax_box.set_xticks(range(len(_U_cols)))
-    ax_box.set_xticklabels(_U_cols, rotation=20, ha="right")
-    ax_box.set_xlabel("")
-    ax_box.set_ylabel("Transition weight")
-    ax_box.set_title(f"glmhmm-t K={K} — transition weight boxplots ({_states_str})")
-    _handles_box, _labels_box = ax_box.get_legend_handles_labels()
-    if len(_handles_box) >= len(_states_order):
-        ax_box.legend(
-            _handles_box[: len(_states_order)],
-            _labels_box[: len(_states_order)],
-            title="State",
-            bbox_to_anchor=(1.01, 1),
-            loc="upper left",
-            frameon=False,
+    """Plot standardized glmhmm-t transition weights as summary line and box plots."""
+    selected, K, label_map, state_palette, states_order, get_tw, get_ucols = (
+        _resolve_transition_weight_inputs(
+            arrays_store=arrays_store,
+            names=names,
+            K=K,
+            subjects=subjects,
+            state_labels=state_labels,
+            views=views,
         )
-    fig_box.tight_layout()
-    sns.despine(fig=fig_box)
+    )
+    df_std, feature_order = _build_transition_weight_df(
+        selected=selected,
+        K=K,
+        label_map=label_map,
+        get_tw=get_tw,
+        get_ucols=get_ucols,
+    )
+    pvalues = _paired_transition_weight_pvalues(
+        df_std=df_std,
+        feature_order=feature_order,
+        states_order=states_order,
+    )
+    fig_line = _plot_transition_weight_lineplot(
+        df_std=df_std,
+        selected=selected,
+        K=K,
+        feature_order=feature_order,
+        states_order=states_order,
+        state_palette=state_palette,
+        pvalues=pvalues,
+    )
+    fig_box = _plot_transition_weight_boxplot(
+        df_std=df_std,
+        K=K,
+        feature_order=feature_order,
+        states_order=states_order,
+        state_palette=state_palette,
+        pvalues=pvalues,
+    )
     return fig_line, fig_box

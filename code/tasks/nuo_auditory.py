@@ -403,7 +403,7 @@ class NuoAuditoryAdapter(TaskAdapter):
         }
 
     def get_plots(self) -> types.ModuleType:
-        import tasks.plots.nuo_auditory as plots
+        from .plots import nuo_auditory as plots
 
         return plots
 

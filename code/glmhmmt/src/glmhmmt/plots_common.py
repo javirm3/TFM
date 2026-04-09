@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,11 +28,10 @@ def _subject_df(trial_df, subj: str):
     return trial_df[trial_df["subject"] == subj]
 
 
-def _pick_col(columns: Sequence[str], candidates: Iterable[str]) -> str:
-    for cand in candidates:
-        if cand in columns:
-            return cand
-    raise ValueError(f"None of the candidate columns exist: {list(candidates)}")
+def _require_columns(df, required: Sequence[str], *, source: str = "trial_df") -> None:
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        raise KeyError(f"{source} is missing required columns: {missing}")
 
 
 def _default_choice_meta(num_classes: int):
@@ -584,10 +583,8 @@ def plot_state_accuracy(
     trial_df,
     *,
     thresh: float = 0.5,
-    performance_candidates: Sequence[str] = ("correct_bool", "performance"),
-    stim_candidates: Sequence[str] = ("stimd_n", "stimulus", "ILD"),
+    performance_col: str = "correct_bool",
     chance_level: float | None = None,
-    stim_label: str = "nonzero stimulus",
 ) -> tuple[plt.Figure, pd.DataFrame]:
     subjects = list(views.keys())
     if not subjects:
@@ -612,13 +609,11 @@ def plot_state_accuracy(
         view = views[subj]
         P = np.asarray(view.smoothed_probs)
         df_sub = _subject_df(trial_df, subj)
-        perf_col = _pick_col(df_sub.columns, performance_candidates)
-        stim_col = _pick_col(df_sub.columns, stim_candidates)
-        hits = np.asarray(df_sub[perf_col]).astype(float)
-        stim = np.asarray(df_sub[stim_col]).astype(float)
-        T = min(len(P), len(hits), len(stim))
-        P, hits, stim = P[:T], hits[:T], stim[:T]
-        valid = np.isfinite(hits) & np.isfinite(stim) & (np.abs(stim) > 0)
+        _require_columns(df_sub, [performance_col], source=f"trial_df[{subj!r}]")
+        hits = np.asarray(df_sub[performance_col]).astype(float)
+        T = min(len(P), len(hits))
+        P, hits = P[:T], hits[:T]
+        valid = np.isfinite(hits)
 
         if valid.sum() > 0:
             records.append(
@@ -788,6 +783,7 @@ def plot_session_trajectories(
         palette = get_state_palette(views[subj].K)
         P = np.asarray(views[subj].smoothed_probs)
         df_sub = _subject_df(trial_df, subj)
+        _require_columns(df_sub, [session_col], source=f"trial_df[{subj!r}]")
         sess_arr = np.asarray(df_sub[session_col])
         T = min(len(P), len(sess_arr))
         P, sess_arr = P[:T], sess_arr[:T]
@@ -1093,8 +1089,9 @@ def _subject_state_occupancy_summary(
     switch_posterior_threshold: float | None,
 ) -> dict | None:
     df_sub = _sort_subject_trials(_subject_df(trial_df, subj), session_col, sort_col)
-    if df_sub is None or session_col not in df_sub.columns:
+    if df_sub is None:
         return None
+    _require_columns(df_sub, [session_col], source=f"trial_df[{subj!r}]")
 
     P = np.asarray(view.smoothed_probs)
     sess_arr = np.asarray(df_sub[session_col])
@@ -1347,8 +1344,9 @@ def _prepare_state_dwell_entries(
             continue
 
         df_sub = _sort_subject_trials(_subject_df(trial_df, subj), session_col, sort_col)
-        if df_sub is None or session_col not in df_sub.columns:
+        if df_sub is None:
             continue
+        _require_columns(df_sub, [session_col], source=f"trial_df[{subj!r}]")
 
         session_arr = np.asarray(df_sub[session_col])
         map_states = np.asarray(view.map_states(), dtype=int)
@@ -1624,11 +1622,10 @@ def plot_session_deepdive(
     session_col: str = "session",
     sort_col: str | Sequence[str] | None = None,
     switch_posterior_threshold: float | None = None,
-    performance_candidates: Sequence[str] = ("correct_bool", "performance"),
-    stim_candidates: Sequence[str] = ("stimd_n", "ILD", "stimulus"),
-    response_candidates: Sequence[str] = ("response", "Choice"),
-    trace_x_candidates: Sequence[str] = ("A_R", "A_L", "A_C"),
-    trace_u_candidates: Sequence[str] = ("A_plus", "A_minus"),
+    performance_col: str = "correct_bool",
+    response_col: str = "response",
+    trace_x_cols: Sequence[str] = ("A_R", "A_L", "A_C"),
+    trace_u_cols: Sequence[str] = ("A_plus", "A_minus"),
     choice_colors: dict[int, str] | None = None,
     choice_labels: dict[int, str] | None = None,
     engaged_window: int = 20,
@@ -1652,22 +1649,20 @@ def plot_session_deepdive(
     df_sub_all = _subject_df(trial_df, subj)
     df_sub_all = df_sub_all.with_row_index("_align_idx")
     df_sub_all = _sort_subject_trials(df_sub_all, session_col, sort_col)
+    _require_columns(df_sub_all, [session_col], source=f"trial_df[{subj!r}]")
     sess_row_indices = (
         df_sub_all.filter(pl.col(session_col) == sess)["_align_idx"].to_numpy()
     )
     df_sess = df_sub_all.filter(pl.col(session_col) == sess).drop("_align_idx")
 
-    perf_col = _pick_col(df_sess.columns, performance_candidates)
-    stim_col = _pick_col(df_sess.columns, stim_candidates)
-    response_col = _pick_col(df_sess.columns, response_candidates)
-    hits = np.asarray(df_sess[perf_col]).astype(float)
-    stim = np.asarray(df_sess[stim_col]).astype(float)
+    _require_columns(df_sess, [performance_col, response_col], source=f"trial_df[{subj!r}]")
+    hits = np.asarray(df_sess[performance_col]).astype(float)
     response = np.asarray(df_sess[response_col]).astype(int)
 
     probs_all = np.asarray(views[subj].smoothed_probs)
     probs = probs_all[sess_row_indices]
-    T = min(probs.shape[0], len(hits))
-    probs, hits, stim, response = probs[:T], hits[:T], stim[:T], response[:T]
+    T = min(probs.shape[0], len(hits), len(response))
+    probs, hits, response = probs[:T], hits[:T], response[:T]
     change_idx = _confident_change_event_indices(probs, switch_posterior_threshold)
     n_changes = int(len(change_idx))
     x = np.arange(T)
@@ -1678,21 +1673,21 @@ def plot_session_deepdive(
     if views[subj].U is not None:
         U_sess = np.asarray(views[subj].U)[sess_row_indices][:T]
         U_idx = {f: i for i, f in enumerate(views[subj].U_cols)}
-        for name in trace_u_candidates:
+        for name in trace_u_cols:
             if name in U_idx:
                 trace_sources[name] = (U_sess, U_idx[name])
-    for name in trace_x_candidates:
+    for name in trace_x_cols:
         if name in X_idx and name not in trace_sources:
             trace_sources[name] = (X_sess, X_idx[name])
 
     rolling_acc = np.full(T, np.nan)
     window = 20
-    nz = np.abs(stim) > 0
     for ti in range(T):
         start = max(0, ti - window + 1)
-        window_mask = nz[start : ti + 1]
-        if np.any(window_mask):
-            rolling_acc[ti] = 100.0 * hits[start : ti + 1][window_mask].mean()
+        window_hits = hits[start : ti + 1]
+        valid_hits = window_hits[np.isfinite(window_hits)]
+        if valid_hits.size:
+            rolling_acc[ti] = 100.0 * valid_hits.mean()
 
     if choice_colors is None or choice_labels is None:
         choice_colors, choice_labels = _default_choice_meta(views[subj].num_classes)

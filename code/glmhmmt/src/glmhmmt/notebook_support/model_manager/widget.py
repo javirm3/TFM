@@ -18,6 +18,11 @@ import polars as pl
 import traitlets
 
 from glmhmmt.model import prune_frozen_emissions, serialize_frozen_emissions
+from glmhmmt.notebook_support.analysis_common import (
+    load_model_config,
+    model_aliases_for_kind,
+    remote_fits_enabled,
+)
 from glmhmmt.runtime import get_runtime_paths
 from glmhmmt.tasks import get_adapter, get_task_options
 
@@ -425,6 +430,16 @@ class ModelManagerWidget(anywidget.AnyWidget):
 
     def _find_model_dir(self, display_name: str) -> tuple[Path, dict[str, Any]] | None:
         fits_path = self._fits_path()
+        if remote_fits_enabled():
+            cfg = load_model_config(
+                task_name=self.task,
+                model_kind=self.model_type,
+                alias=display_name,
+                local_root=fits_path,
+            )
+            if cfg:
+                return fits_path / display_name, cfg
+            return None
         if not fits_path.exists():
             return None
         for d in fits_path.iterdir():
@@ -608,33 +623,36 @@ class ModelManagerWidget(anywidget.AnyWidget):
         names: list[str]      = []
         info_list: list[dict] = []
 
-        if fits_path.exists():
-            for d in fits_path.iterdir():
-                if not (d.is_dir() and (d / "config.json").exists()):
-                    continue
-                try:
-                    cfg = json.loads((d / "config.json").read_text())
-                except Exception:
-                    continue
-                if not _is_displayable(cfg):
-                    continue
-                display_name = _get_display_name(cfg)
-                n_subjects   = _count_fitted_subjects(d)
-                cv_mode = _normalize_cv_mode(cfg.get("cv_mode", "none"))
-                cv_repeats = int(cfg.get("cv_repeats", 0))
-                cv_label = f"{cv_mode}×{cv_repeats}" if cv_mode != "none" and cv_repeats > 0 else cv_mode
-                info_list.append({
-                    "id":       display_name,
-                    "name":     display_name,
-                    # prefer file-based count; fall back to config list length
-                    "subjects": n_subjects if n_subjects > 0 else len(cfg.get("subjects", [])),
-                    "K":        _get_K_from_config(cfg),
-                    "tau":      cfg.get("tau", ""),
-                    "cv":       cv_label,
-                    "regressors": ", ".join(cfg.get("emission_cols", [])),
-                    "transition_regressors": ", ".join(cfg.get("transition_cols", [])),
-                })
-                names.append(display_name)
+        aliases = model_aliases_for_kind(
+            task_name=self.task,
+            model_kind=self.model_type,
+            local_root=fits_path,
+        )
+        for display_name in aliases:
+            cfg = load_model_config(
+                task_name=self.task,
+                model_kind=self.model_type,
+                alias=display_name,
+                local_root=fits_path,
+            )
+            if not cfg or not _is_displayable(cfg):
+                continue
+            model_dir = fits_path / display_name
+            n_subjects = _count_fitted_subjects(model_dir) if model_dir.exists() else 0
+            cv_mode = _normalize_cv_mode(cfg.get("cv_mode", "none"))
+            cv_repeats = int(cfg.get("cv_repeats", 0))
+            cv_label = f"{cv_mode}×{cv_repeats}" if cv_mode != "none" and cv_repeats > 0 else cv_mode
+            info_list.append({
+                "id":       display_name,
+                "name":     display_name,
+                "subjects": n_subjects if n_subjects > 0 else len(cfg.get("subjects", [])),
+                "K":        _get_K_from_config(cfg),
+                "tau":      cfg.get("tau", ""),
+                "cv":       cv_label,
+                "regressors": ", ".join(cfg.get("emission_cols", [])),
+                "transition_regressors": ", ".join(cfg.get("transition_cols", [])),
+            })
+            names.append(display_name)
 
         info_list.sort(key=lambda x: x["name"])
         names.sort()

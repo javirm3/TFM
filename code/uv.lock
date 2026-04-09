@@ -836,7 +836,6 @@ dependencies = [
     { name = "simplejson" },
     { name = "six" },
     { name = "soupsieve" },
-    { name = "ssm" },
     { name = "stack-data" },
     { name = "starlette" },
     { name = "statsmodels" },
@@ -1040,7 +1039,6 @@ requires-dist = [
     { name = "simplejson", specifier = "==3.20.2" },
     { name = "six", specifier = "==1.17.0" },
     { name = "soupsieve", specifier = "==2.8.3" },
-    { name = "ssm", specifier = "==0.0.1" },
     { name = "stack-data", specifier = "==0.6.3" },
     { name = "starlette", specifier = "==0.52.1" },
     { name = "statsmodels", specifier = ">=0.14.6" },
@@ -1719,7 +1717,6 @@ dependencies = [
     { name = "pyarrow" },
     { name = "scipy" },
     { name = "seaborn" },
-    { name = "ssm" },
     { name = "tfp-nightly" },
     { name = "wigglystuff" },
 ]
@@ -1731,7 +1728,6 @@ notebooks = [
     { name = "plotly" },
     { name = "sbi" },
     { name = "scikit-learn" },
-    { name = "ssm" },
     { name = "torch" },
     { name = "traitlets" },
     { name = "wigglystuff" },
@@ -1761,8 +1757,6 @@ requires-dist = [
     { name = "scikit-learn", marker = "extra == 'notebooks'", specifier = "==1.8.0" },
     { name = "scipy", specifier = ">=1.17.1" },
     { name = "seaborn", specifier = ">=0.13.2" },
-    { name = "ssm", specifier = ">=0.0.1" },
-    { name = "ssm", marker = "extra == 'notebooks'", specifier = "==0.0.1" },
     { name = "tfp-nightly", specifier = "==0.26.0.dev20260205" },
     { name = "torch", marker = "extra == 'notebooks'", specifier = "==2.5.1" },
     { name = "traitlets", marker = "extra == 'notebooks'", specifier = "==5.14.3" },
@@ -5461,20 +5455,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/26/8c/f9290339ef6d79bad
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f8/7f/3de5402f39890ac5660b86bcf5c03f9d855dad5c4ed764866d7b592b46fd/sse_starlette-3.3.4-py3-none-any.whl", hash = "sha256:84bb06e58939a8b38d8341f1bc9792f06c2b53f48c608dd207582b664fc8f3c1", size = 14330, upload-time = "2026-03-29T09:00:21.846Z" },
 ]
-
-[[package]]
-name = "ssm"
-version = "0.0.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "autograd" },
-    { name = "matplotlib" },
-    { name = "numpy" },
-    { name = "scikit-learn" },
-    { name = "scipy" },
-    { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b0/87/f836d23ea3afcc860e8a31e4f04193735140c4fe86cfd0106ca5e81071db/ssm-0.0.1.tar.gz", hash = "sha256:b3eca53d3049306097de5977bb5c663f0c5f11db14e77ad7515c2902067f0458", size = 309185, upload-time = "2019-07-19T02:14:41.275Z" }
 
 [[package]]
 name = "stack-data"

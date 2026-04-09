@@ -181,7 +181,7 @@ class MCDRAccuracyAdapter(TaskAdapter):
         }
 
     def get_plots(self) -> types.ModuleType:
-        import tasks.plots.mcdr_accuracy as plots
+        from .plots import mcdr_accuracy as plots
         return plots
 
     def label_states(

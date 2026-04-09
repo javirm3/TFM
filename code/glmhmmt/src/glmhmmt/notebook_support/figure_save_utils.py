@@ -11,88 +11,62 @@ from glmhmmt.runtime import load_app_config
 from .anywidget_compat import wrap_anywidget
 
 
+_ASSET_DIR = Path(__file__).parent
+
+
+def _read_asset(name: str) -> str:
+    return (_ASSET_DIR / name).read_text(encoding="utf-8")
+
+
+def _get_save_figure_config(config_path: Path | None) -> dict[str, str]:
+    cfg = load_app_config(config_path)
+    section = cfg.get("widgets", {}).get("save_figure", {})
+    if not isinstance(section, dict):
+        return {}
+    return {str(key): str(value) for key, value in section.items()}
+
+
+def _save_figure_theme_tokens(save_cfg: dict[str, str]) -> dict[str, str]:
+    token_keys = (
+        "radius",
+        "padding_y",
+        "padding_x",
+        "font_size",
+        "light_border",
+        "light_background",
+        "light_text",
+        "light_hover_background",
+        "light_hover_border",
+        "light_disabled_background",
+        "light_disabled_border",
+        "dark_border",
+        "dark_background",
+        "dark_text",
+        "dark_hover_background",
+        "dark_hover_border",
+        "dark_disabled_background",
+        "dark_disabled_border",
+    )
+    return {
+        key.replace("_", "-"): value
+        for key in token_keys
+        if (value := save_cfg.get(key))
+    }
+
+
+def _toast_detail_html(detail: str, save_cfg: dict[str, str]) -> str:
+    color = save_cfg.get("toast_detail_color", "#6b7280")
+    return f"<span style='color:{color}'>{detail}</span>"
+
+
 class SaveFigureAnyWidget(anywidget.AnyWidget):
-    _esm = """
-    function render({ model, el }) {
-      el.innerHTML = "";
-
-      const wrap = document.createElement("div");
-      wrap.className = "save-figure-wrap";
-
-      const button = document.createElement("button");
-      button.className = "save-figure-btn";
-
-      const updateButton = () => {
-        button.textContent = model.get("label");
-        button.disabled = !!model.get("disabled");
-      };
-
-      button.addEventListener("click", () => {
-        if (button.disabled) return;
-        const clicks = model.get("clicks") || 0;
-        model.set("clicks", clicks + 1);
-        model.save_changes();
-      });
-
-      model.on("change:label", updateButton);
-      model.on("change:disabled", updateButton);
-
-      updateButton();
-
-      wrap.appendChild(button);
-      el.appendChild(wrap);
-    }
-
-    export default { render };
-    """
-    _css = """
-    .save-figure-wrap {
-      display: inline-flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.35rem;
-    }
-    .save-figure-btn {
-      border: 1px solid rgba(107, 114, 128, 0.35);
-      background: rgba(249, 250, 251, 0.95);
-      color: #111827;
-      border-radius: 8px;
-      padding: 0.45rem 0.9rem;
-      font-size: 0.9rem;
-      line-height: 1;
-      cursor: pointer;
-      transition: background 120ms ease, border-color 120ms ease;
-    }
-    .save-figure-btn:hover {
-      background: rgba(243, 244, 246, 1);
-      border-color: rgba(107, 114, 128, 0.55);
-    }
-    .save-figure-btn:disabled {
-      cursor: not-allowed;
-      opacity: 0.55;
-      background: rgba(229, 231, 235, 0.9);
-      border-color: rgba(156, 163, 175, 0.35);
-    }
-    @media (prefers-color-scheme: dark) {
-      .save-figure-btn {
-        background: rgba(31, 41, 55, 0.95);
-        color: #f3f4f6;
-        border-color: rgba(156, 163, 175, 0.35);
-      }
-      .save-figure-btn:hover {
-        background: rgba(55, 65, 81, 1);
-        border-color: rgba(209, 213, 219, 0.45);
-      }
-      .save-figure-btn:disabled {
-        background: rgba(55, 65, 81, 0.8);
-        border-color: rgba(107, 114, 128, 0.35);
-      }
-    }
-    """
+    _esm = _read_asset("figure_save_widget.js")
+    _css = _read_asset("figure_save_widget.css")
 
     clicks = traitlets.Int(0).tag(sync=True)
     label = traitlets.Unicode("Save").tag(sync=True)
     disabled = traitlets.Bool(False).tag(sync=True)
+    theme_tokens = traitlets.Dict(default_value={}).tag(sync=True)
 
 
 def get_plot_save_format(config_path: Path | None) -> str:
@@ -172,10 +146,13 @@ class PlotSaver:
         self.task_name = task_name
         self.model_id = model_id
         self.fmt = get_plot_save_format(config_path)
+        self.save_cfg = _get_save_figure_config(config_path)
+        self.theme_tokens = _save_figure_theme_tokens(self.save_cfg)
         self._registry: dict[str, dict[str, object]] = {}
         self._save_all = SaveFigureAnyWidget(
-            label="Save all model plots",
+            label=self.save_cfg.get("save_all_label", "Save all model plots"),
             disabled=True,
+            theme_tokens=self.theme_tokens,
         )
         self._save_all.observe(self._handle_save_all_click, names="clicks")
         self._save_all._save_observer = self._handle_save_all_click
@@ -228,30 +205,45 @@ class PlotSaver:
             return
         if not self._registry:
             self.mo.status.toast(
-                "No plots available",
-                "<span style='color:#6b7280'>Render the notebook plots first.</span>",
+                self.save_cfg.get("empty_title", "No plots available"),
+                _toast_detail_html(
+                    self.save_cfg.get("empty_detail", "Render the notebook plots first."),
+                    self.save_cfg,
+                ),
                 kind="danger",
             )
             return
 
         saved_paths, errors = self.save_all()
         if errors:
-            _msg = self._saved_message(saved_paths)
-            _detail = f"{_msg}; {len(errors)} failed" if saved_paths else f"{len(errors)} failed"
+            detail = self._saved_message(saved_paths)
+            if saved_paths:
+                detail = f"{detail}; {len(errors)} failed"
+            else:
+                detail = f"{len(errors)} failed"
             self.mo.status.toast(
-                "Saved with errors" if saved_paths else "Could not save plots",
-                f"<span style='color:#6b7280'>{_detail}</span>",
+                self.save_cfg.get(
+                    "saved_error_title" if saved_paths else "failed_title",
+                    "Saved with errors" if saved_paths else "Could not save plots",
+                ),
+                _toast_detail_html(detail, self.save_cfg),
                 kind="danger",
             )
             return
 
+        count = len(saved_paths)
+        title = (
+            self.save_cfg.get("saved_title", "Saved")
+            if count == 1
+            else self.save_cfg.get("saved_many_title", "Saved {count} plots").format(count=count)
+        )
         self.mo.status.toast(
-            f"Saved {len(saved_paths)} plot{'s' if len(saved_paths) != 1 else ''}",
-            f"<span style='color:#6b7280'>{self._saved_message(saved_paths)}</span>",
+            title,
+            _toast_detail_html(self._saved_message(saved_paths), self.save_cfg),
         )
 
-    def save_all_widget(self, label: str = "Save all model plots"):
-        self._save_all.label = label
+    def save_all_widget(self, label: str | None = None):
+        self._save_all.label = label or self.save_cfg.get("save_all_label", "Save all model plots")
         if self._save_all_ui is None:
             self._save_all_ui = wrap_anywidget(self._save_all)
         return self._save_all_ui
@@ -267,27 +259,27 @@ class PlotSaver:
     ):
         if location is not None:
             row, col = (int(location[0]), int(location[1]))
-            _default_stem = f"{sanitize_stem(name.lower())}_r{row}_c{col}"
+            default_stem = f"{sanitize_stem(name.lower())}_r{row}_c{col}"
         else:
-            _default_stem = sanitize_stem(name.lower())
-        _stem = stem or _default_stem
-        button_label = label or f"Save .{self.fmt}"
-        self._register(fig, name=name, stem=_stem, location=location)
-        widget = SaveFigureAnyWidget(label=button_label)
+            default_stem = sanitize_stem(name.lower())
+        resolved_stem = stem or default_stem
+        button_label = label or f"{self.save_cfg.get('default_label', 'Save')} .{self.fmt}"
+        self._register(fig, name=name, stem=resolved_stem, location=location)
+        widget = SaveFigureAnyWidget(label=button_label, theme_tokens=self.theme_tokens)
 
         def _handle_click(change):
             if int(change["new"]) <= int(change["old"]):
                 return
             try:
-                out_path = self._save_one(fig, stem=_stem, location=location)
+                out_path = self._save_one(fig, stem=resolved_stem, location=location)
                 self.mo.status.toast(
-                    "Saved",
-                    f"<span style='color:#6b7280'>{out_path.name}</span>",
+                    self.save_cfg.get("saved_title", "Saved"),
+                    _toast_detail_html(out_path.name, self.save_cfg),
                 )
             except Exception as exc:
                 self.mo.status.toast(
-                    "Could not save figure",
-                    f"<span style='color:#6b7280'>{type(exc).__name__}: {exc}</span>",
+                    self.save_cfg.get("failed_title", "Could not save plots"),
+                    _toast_detail_html(f"{type(exc).__name__}: {exc}", self.save_cfg),
                     kind="danger",
                 )
 
@@ -315,10 +307,11 @@ def save_button(
     task_name: str,
     model_id: str,
     stem: str,
-    label: str = "Save",
+    label: str | None = None,
     location: tuple[int, int] | None = None,
 ):
     fmt = get_plot_save_format(config_path)
+    default_label = label or _get_save_figure_config(config_path).get("default_label", "Save")
     return make_plot_saver(
         mo,
         results_dir=results_dir,
@@ -327,8 +320,8 @@ def save_button(
         model_id=model_id,
     )(
         fig,
-        name=label,
+        name=default_label,
         stem=stem,
-        label=f"{label} .{fmt}",
+        label=f"{default_label} .{fmt}",
         location=location,
     )

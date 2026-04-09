@@ -19,11 +19,20 @@ def _():
     from glmhmmt.runtime import get_runtime_paths
 
     paths = get_runtime_paths()
+    from glmhmmt.notebook_support.analysis_common import (
+        load_fit_bundle,
+        load_metrics_dir,
+        load_model_config,
+        model_aliases_for_kind,
+    )
     from glmhmmt.postprocess import build_trial_df
     from glmhmmt.views import build_views, get_state_palette
     from glmhmmt.tasks import get_adapter, get_task_options
 
     sns.set_style("ticks")
+    shared_load_fit_bundle = load_fit_bundle
+    shared_load_metrics_dir = load_metrics_dir
+    shared_load_model_config = load_model_config
     return (
         Line2D,
         build_trial_df,
@@ -32,12 +41,16 @@ def _():
         get_state_palette,
         get_task_options,
         json,
+        model_aliases_for_kind,
         mo,
         np,
         paths,
         pd,
         pl,
         plt,
+        shared_load_fit_bundle,
+        shared_load_metrics_dir,
+        shared_load_model_config,
         sns,
         ttest_rel,
     )
@@ -57,53 +70,32 @@ def _(get_task_options, mo):
 
 
 @app.cell
-def _(json, paths, pl):
+def _(model_aliases_for_kind, paths, pl, shared_load_metrics_dir, shared_load_model_config):
     def model_aliases(task: str) -> list[str]:
-        fit_root = paths.RESULTS / "fits" / task / "glmhmm"
-        if not fit_root.exists():
-            return []
-        return sorted([child.name for child in fit_root.iterdir() if child.is_dir()])
+        return model_aliases_for_kind(
+            task_name=task,
+            model_kind="glmhmm",
+            local_root=paths.RESULTS / "fits" / task / "glmhmm",
+        )
 
     def load_model_config(task: str, alias: str | None):
-        if not alias:
-            return {}
-        cfg_path = paths.RESULTS / "fits" / task / "glmhmm" / alias / "config.json"
-        if not cfg_path.exists():
-            return {}
-        try:
-            return json.loads(cfg_path.read_text())
-        except Exception:
-            return {}
+        return shared_load_model_config(
+            task_name=task,
+            model_kind="glmhmm",
+            alias=alias,
+            local_root=paths.RESULTS / "fits" / task / "glmhmm",
+        )
 
     def load_metrics_dir(task: str, alias: str | None):
-        if not alias:
+        df = shared_load_metrics_dir(
+            task_name=task,
+            model_kind="glmhmm",
+            alias=alias,
+            local_root=paths.RESULTS / "fits" / task / "glmhmm",
+            label_map={"glmhmm": "GLMHMM"},
+        )
+        if df is None:
             return None
-        fit_dir = paths.RESULTS / "fits" / task / "glmhmm" / alias
-        if not fit_dir.exists():
-            return None
-
-        files = sorted(fit_dir.glob("*_metrics.parquet"))
-        if not files:
-            return None
-
-        frames = []
-        for _path in files:
-            try:
-                frames.append(pl.read_parquet(_path))
-            except Exception:
-                pass
-        if not frames:
-            return None
-
-        df = pl.concat(frames, how="diagonal")
-        if "nll" in df.columns and "ll_per_trial" not in df.columns:
-            df = df.with_columns(
-                (-pl.col("nll") / pl.col("n_trials")).alias("ll_per_trial")
-            )
-        if "K" not in df.columns:
-            df = df.with_columns(pl.lit(1, dtype=pl.Int64).alias("K"))
-        else:
-            df = df.with_columns(pl.col("K").cast(pl.Int64))
         return df.with_columns(
             [
                 pl.lit(alias).alias("model_alias"),
@@ -209,27 +201,19 @@ def _(
 
 
 @app.cell
-def _(build_views, get_adapter, np, paths):
+def _(build_views, get_adapter, paths, shared_load_fit_bundle):
     def load_fit_bundle(task: str, alias: str, K: int, subjects: list[str], scoring_key: str | None):
-        adapter = get_adapter(task)
-        fit_dir = paths.RESULTS / "fits" / task / "glmhmm" / alias
-        arrays_store = {}
-
-        for _subject in subjects:
-            candidates = [
-                fit_dir / f"{_subject}_K{K}_glmhmm_arrays.npz",
-                fit_dir / f"{_subject}_glmhmm_arrays.npz",
-            ]
-            for _path in candidates:
-                if not _path.exists():
-                    continue
-                _data = dict(np.load(_path, allow_pickle=True))
-                arrays_store[_subject] = _data
-                break
-
-        if scoring_key is not None and hasattr(adapter, "scoring_key"):
-            adapter.scoring_key = scoring_key
-        views = build_views(arrays_store, adapter, K, list(arrays_store.keys())) if arrays_store else {}
+        adapter, _arrays_store, _names, views = shared_load_fit_bundle(
+            task_name=task,
+            model_kind="glmhmm",
+            alias=alias,
+            k=K,
+            subjects=list(subjects),
+            get_adapter=get_adapter,
+            build_views=build_views,
+            scoring_key=scoring_key,
+            local_root=paths.RESULTS / "fits" / task / "glmhmm",
+        )
         return adapter, views
 
     return (load_fit_bundle,)

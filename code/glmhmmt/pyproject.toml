@@ -25,7 +25,6 @@ dependencies = [
     "pyarrow>=23.0.1",
     "scipy>=1.17.1",
     "seaborn>=0.13.2",
-    "ssm>=0.0.1",
     "tfp-nightly==0.26.0.dev20260205",
     "wigglystuff>=0.3.1",
 ]
@@ -37,7 +36,6 @@ notebooks = [
     "plotly==6.5.2",
     "scikit-learn==1.8.0",
     "sbi==0.25.0",
-    "ssm==0.0.1",
     "torch==2.5.1",
     "traitlets==5.14.3",
     "wigglystuff==0.3.1",
@@ -68,9 +66,6 @@ include = [
     "README.md",
     "pyproject.toml",
 ]
-
-[tool.uv.extra-build-dependencies]
-ssm = ["Cython", "numpy"]
 
 [tool.marimo.runtime]
 output_max_bytes = 100_000_000

@@ -23,6 +23,9 @@ def fit_subject(
     task: str = "MCDR",
     lapse: bool = False,
     lapse_max: float = 0.2,
+    n_restarts: int = 5,
+    restart_noise_scale: float = 0.05,
+    seed: int = 0,
 ) -> dict:
     """Fit a GLM (K=1) to a single subject."""
 
@@ -43,6 +46,9 @@ def fit_subject(
         num_classes=num_classes,
         lapse=lapse and (num_classes == 2),
         lapse_max=lapse_max,
+        n_restarts=n_restarts,
+        restart_noise_scale=restart_noise_scale,
+        seed=seed,
     )
 
     return {
@@ -120,7 +126,16 @@ def save_results(result: dict, out_dir: Path, tau: float):
     }).write_parquet(str(prefix) + "_metrics.parquet")
 
 
-def generate_model_id(task, tau, emission_cols, lapse: bool = False):
+def generate_model_id(
+    task,
+    tau,
+    emission_cols,
+    lapse: bool = False,
+    lapse_max: float = 0.2,
+    n_restarts: int = 5,
+    restart_noise_scale: float = 0.05,
+    seed: int | None = 0,
+):
     cols = sorted(emission_cols) if emission_cols else []
     config = {
         "task": task,
@@ -129,6 +144,11 @@ def generate_model_id(task, tau, emission_cols, lapse: bool = False):
     }
     if get_adapter(task).num_classes == 2:
         config["lapse"] = lapse
+        if lapse:
+            config["lapse_max"] = float(lapse_max)
+            config["n_restarts"] = int(n_restarts)
+            config["restart_noise_scale"] = float(restart_noise_scale)
+            config["seed"] = None if seed is None else int(seed)
     config_str = json.dumps(config, sort_keys=True)
     return hashlib.md5(config_str.encode()).hexdigest()[:8]
 
@@ -142,12 +162,24 @@ def main(
     model_alias: str | None = None,
     lapse: bool = False,
     lapse_max: float = 0.2,
+    n_restarts: int = 5,
+    restart_noise_scale: float = 0.05,
+    seed: int = 0,
 ):
     # Compute base output directory
     base_out_dir = get_results_dir() / "fits" / task / "glm"
 
     # Generate Hash
-    model_hash = generate_model_id(task, tau, emission_cols, lapse=lapse)
+    model_hash = generate_model_id(
+        task,
+        tau,
+        emission_cols,
+        lapse=lapse,
+        lapse_max=lapse_max,
+        n_restarts=n_restarts,
+        restart_noise_scale=restart_noise_scale,
+        seed=seed,
+    )
     out_dirs = [base_out_dir / model_hash]
 
     if model_alias:
@@ -175,6 +207,9 @@ def main(
                  "num_classes": num_classes,
                  "lapse": lapse,
                  "lapse_max": lapse_max,
+                 "n_restarts": n_restarts,
+                 "restart_noise_scale": restart_noise_scale,
+                 "seed": seed,
                  "model_id": d.name
              }, f, indent=4)
         
@@ -201,6 +236,9 @@ def main(
                 task=task,
                 lapse=lapse,
                 lapse_max=lapse_max,
+                n_restarts=n_restarts,
+                restart_noise_scale=restart_noise_scale,
+                seed=seed,
             )
             for d in out_dirs:
                 save_results(res, d, tau)
@@ -224,6 +262,12 @@ if __name__ == "__main__":
                         help="Fit lapse rates γ_L, γ_R with 0 <= γ <= lapse_max and γ_L + γ_R <= 1")
     parser.add_argument("--lapse_max", type=float, default=0.2,
                         help="Upper bound for each lapse rate (default 0.20)")
+    parser.add_argument("--n_restarts", type=int, default=5,
+                        help="Number of noisy restarts for lapse fits (default 5)")
+    parser.add_argument("--restart_noise_scale", type=float, default=0.05,
+                        help="Stddev of Gaussian noise added to each parameter at each lapse-fit restart")
+    parser.add_argument("--seed", type=int, default=0,
+                        help="Random seed for lapse-fit restart initialization noise")
 
     args = parser.parse_args()
     configure_paths_from_args(args, include_alexis_dir=True)
@@ -237,4 +281,7 @@ if __name__ == "__main__":
         model_alias=args.model_alias,
         lapse=args.lapse,
         lapse_max=args.lapse_max,
+        n_restarts=args.n_restarts,
+        restart_noise_scale=args.restart_noise_scale,
+        seed=args.seed,
     )

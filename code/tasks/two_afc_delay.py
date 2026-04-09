@@ -305,7 +305,7 @@ class TwoAFCDelayAdapter(TaskAdapter):
         }
 
     def get_plots(self) -> types.ModuleType:
-        import tasks.plots.two_afc_delay as plots
+        from .plots import two_afc_delay as plots
 
         return plots
 

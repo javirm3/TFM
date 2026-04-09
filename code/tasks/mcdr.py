@@ -262,7 +262,7 @@ class MCDRAdapter(TaskAdapter):
     # ── plots ────────────────────────────────────────────────────────────────
 
     def get_plots(self) -> types.ModuleType:
-        import tasks.plots.mcdr as plots
+        from .plots import mcdr as plots
         return plots
     # ── state labelling ─────────────────────────────────────────────────────
 

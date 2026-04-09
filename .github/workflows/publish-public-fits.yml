@@ -1,0 +1,45 @@
+name: Publish Public Fits
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish-public-fits:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: code
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Write R2 environment
+        run: |
+          cat > .env <<'EOF'
+          GLMHMMT_PUBLIC_FITS_BASE_URL=${{ secrets.GLMHMMT_PUBLIC_FITS_BASE_URL }}
+          GLMHMMT_PUBLIC_FITS_MANIFEST_URL=${{ secrets.GLMHMMT_PUBLIC_FITS_MANIFEST_URL }}
+          GLMHMMT_R2_ENDPOINT_URL=${{ secrets.GLMHMMT_R2_ENDPOINT_URL }}
+          GLMHMMT_R2_REGION=${{ secrets.GLMHMMT_R2_REGION }}
+          GLMHMMT_R2_BUCKET=${{ secrets.GLMHMMT_R2_BUCKET }}
+          GLMHMMT_R2_PREFIX=${{ secrets.GLMHMMT_R2_PREFIX }}
+          GLMHMMT_R2_ACCESS_KEY_ID=${{ secrets.GLMHMMT_R2_ACCESS_KEY_ID }}
+          GLMHMMT_R2_SECRET_ACCESS_KEY=${{ secrets.GLMHMMT_R2_SECRET_ACCESS_KEY }}
+          EOF
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Publish public fits
+        run: uv run --with boto3 python scripts/publish_public_fits.py

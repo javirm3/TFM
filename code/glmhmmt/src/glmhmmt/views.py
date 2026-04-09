@@ -23,7 +23,7 @@ view via :func:`build_views`, so this module stays task-agnostic.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Mapping, Optional
 
 import numpy as np
 
@@ -69,6 +69,44 @@ def get_state_palette(K: Optional[int] = None) -> list[str]:
         if len(palette) >= int(K):
             return list(palette)
     return list(_STATE_HEX)
+
+
+def get_state_rank(label: str, fallback_idx: int = 0) -> int:
+    """Return the canonical rank for a state label."""
+    return _LABEL_RANK.get(label, int(fallback_idx))
+
+
+def get_state_color(
+    label: str,
+    fallback_idx: int = 0,
+    *,
+    K: Optional[int] = None,
+    palette: Optional[list[str]] = None,
+) -> str:
+    """Return the configured colour for a state label."""
+    resolved_palette = list(palette) if palette is not None else get_state_palette(K)
+    rank = get_state_rank(label, fallback_idx=fallback_idx)
+    return resolved_palette[rank % len(resolved_palette)]
+
+
+def build_state_palette(
+    state_labels_per_subj: Mapping[object, Mapping[int, str]],
+    K: Optional[int] = None,
+) -> tuple[dict[str, str], list[str]]:
+    """Return a rank-ordered ``(palette_dict, hue_order)`` pair."""
+    seen: dict[str, int] = {}
+    for labels_by_state in state_labels_per_subj.values():
+        for state_idx, label in labels_by_state.items():
+            if label not in seen:
+                seen[label] = get_state_rank(label, fallback_idx=int(state_idx))
+
+    ordered = sorted(seen, key=lambda label: seen[label])
+    resolved_palette = get_state_palette(K if K is not None else len(ordered) or None)
+    palette = {
+        label: get_state_color(label, seen[label], palette=resolved_palette)
+        for label in ordered
+    }
+    return palette, ordered
 
 
 # ── dataclass ─────────────────────────────────────────────────────────────────

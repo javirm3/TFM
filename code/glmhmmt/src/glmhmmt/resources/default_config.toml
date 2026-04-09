@@ -69,6 +69,35 @@ figsize_large = [
 heatmap_cmap = "viridis"
 weights_cmap = "RdBu_r"
 
+[widgets.save_figure]
+default_label = "Save"
+save_all_label = "Save all model plots"
+empty_title = "No plots available"
+empty_detail = "Render the notebook plots first."
+saved_title = "Saved"
+saved_many_title = "Saved {count} plots"
+saved_error_title = "Saved with errors"
+failed_title = "Could not save plots"
+toast_detail_color = "#6b7280"
+radius = "8px"
+padding_y = "0.45rem"
+padding_x = "0.9rem"
+font_size = "0.9rem"
+light_border = "rgba(107, 114, 128, 0.35)"
+light_background = "rgba(249, 250, 251, 0.95)"
+light_text = "#111827"
+light_hover_background = "rgba(243, 244, 246, 1)"
+light_hover_border = "rgba(107, 114, 128, 0.55)"
+light_disabled_background = "rgba(229, 231, 235, 0.9)"
+light_disabled_border = "rgba(156, 163, 175, 0.35)"
+dark_border = "rgba(156, 163, 175, 0.35)"
+dark_background = "rgba(31, 41, 55, 0.95)"
+dark_text = "#f3f4f6"
+dark_hover_background = "rgba(55, 65, 81, 1)"
+dark_hover_border = "rgba(209, 213, 219, 0.45)"
+dark_disabled_background = "rgba(55, 65, 81, 0.8)"
+dark_disabled_border = "rgba(107, 114, 128, 0.35)"
+
 [plots.ttype]
 order = [
     "VG",

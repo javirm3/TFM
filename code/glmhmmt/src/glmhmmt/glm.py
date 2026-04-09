@@ -66,6 +66,16 @@ def _validate_glm_inputs(
     return X_np, y_np, resolved_num_classes
 
 
+def _project_lapse_params(x0: np.ndarray, weight_dim: int, lapse_max: float) -> np.ndarray:
+    projected = np.asarray(x0, dtype=float).copy()
+    lapse_rates = np.clip(projected[weight_dim : weight_dim + 2], 0.0, lapse_max)
+    lapse_sum = float(lapse_rates.sum())
+    if lapse_sum > 1.0:
+        lapse_rates /= lapse_sum
+    projected[weight_dim : weight_dim + 2] = lapse_rates
+    return projected
+
+
 def fit_glm(
     X: ArrayLike,
     y: ArrayLike,
@@ -73,13 +83,18 @@ def fit_glm(
     num_classes: int | None = None,
     lapse: bool = False,
     lapse_max: float = 0.2,
+    n_restarts: int = 5,
+    restart_noise_scale: float = 0.05,
+    seed: int | None = 0,
     maxiter: int = 2000,
     ftol: float = 1e-9,
 ) -> GLMFitResult:
     """Fit a single-state GLM model directly from arrays.
 
     The binary case optionally supports two lapse parameters constrained to
-    ``[0, lapse_max]`` with ``gamma_left + gamma_right <= 1``.
+    ``[0, lapse_max]`` with ``gamma_left + gamma_right <= 1``. Lapse fits are
+    initialized from the no-lapse optimum and refined over multiple noisy
+    restarts, keeping the best final objective.
     """
 
     X_np, y_np, num_classes = _validate_glm_inputs(X, y, num_classes=num_classes)
@@ -89,8 +104,15 @@ def fit_glm(
         raise ValueError("lapse=True is only supported for binary GLMs (num_classes=2).")
     if lapse_max < 0:
         raise ValueError(f"lapse_max must be non-negative; got {lapse_max}.")
+    if int(n_restarts) < 1:
+        raise ValueError(f"n_restarts must be at least 1; got {n_restarts}.")
+    if restart_noise_scale < 0:
+        raise ValueError(
+            f"restart_noise_scale must be non-negative; got {restart_noise_scale}."
+        )
 
     fit_lapse = lapse and num_classes == 2
+    n_restarts = int(n_restarts)
     method = "L-BFGS-B"
     minimize_kwargs = {"options": {"maxiter": maxiter, "ftol": ftol}}
 
@@ -114,7 +136,21 @@ def fit_glm(
         },)
         method = "SLSQP"
         minimize_kwargs["constraints"] = constraints
-        x0 = np.zeros(n_params)
+        base_x0 = np.zeros(n_params, dtype=float)
+        if T > 0:
+            warm_start = fit_glm(
+                X_np,
+                y_np,
+                num_classes=num_classes,
+                lapse=False,
+                lapse_max=lapse_max,
+                n_restarts=1,
+                restart_noise_scale=0.0,
+                seed=seed,
+                maxiter=maxiter,
+                ftol=ftol,
+            )
+            base_x0[:M] = warm_start.weights[0]
     else:
         def neg_log_likelihood(w_flat: np.ndarray) -> float:
             W_pair = w_flat.reshape(num_classes - 1, M)
@@ -130,13 +166,49 @@ def fit_glm(
         x0 = np.zeros(n_params)
 
     if T > 0:
-        res = minimize(
-            neg_log_likelihood,
-            x0,
-            method=method,
-            bounds=bounds,
-            **minimize_kwargs,
-        )
+        if fit_lapse:
+            rng = np.random.default_rng(seed)
+            best_res = None
+            best_fun = float("inf")
+
+            for _ in range(n_restarts):
+                x0 = base_x0.copy()
+                if restart_noise_scale > 0.0:
+                    x0 += rng.normal(0.0, restart_noise_scale, size=n_params)
+                x0 = _project_lapse_params(x0, M, lapse_max)
+                candidate_res = minimize(
+                    neg_log_likelihood,
+                    x0,
+                    method=method,
+                    bounds=bounds,
+                    **minimize_kwargs,
+                )
+                candidate_x = _project_lapse_params(candidate_res.x, M, lapse_max)
+                candidate_fun = float(neg_log_likelihood(candidate_x))
+                candidate_success = bool(candidate_res.success)
+                best_success = False if best_res is None else bool(best_res.success)
+
+                if (
+                    best_res is None
+                    or candidate_fun < best_fun
+                    or (
+                        np.isclose(candidate_fun, best_fun)
+                        and candidate_success
+                        and not best_success
+                    )
+                ):
+                    best_res = candidate_res
+                    best_fun = candidate_fun
+
+            res = best_res
+        else:
+            res = minimize(
+                neg_log_likelihood,
+                x0,
+                method=method,
+                bounds=bounds,
+                **minimize_kwargs,
+            )
         success = bool(res.success)
         w_flat = np.asarray(res.x, dtype=float)
         nll = float(res.fun)
@@ -146,11 +218,7 @@ def fit_glm(
         nll = float("nan")
 
     if fit_lapse:
-        lapse_rates = np.asarray([w_flat[M], w_flat[M + 1]], dtype=float)
-        lapse_rates = np.clip(lapse_rates, 0.0, lapse_max)
-        lapse_sum = float(lapse_rates.sum())
-        if lapse_sum > 1.0:
-            lapse_rates /= lapse_sum
+        lapse_rates = _project_lapse_params(w_flat, M, lapse_max)[M:M + 2]
         w_flat[M:M + 2] = lapse_rates
         nll = float(neg_log_likelihood(w_flat))
         w_flat_w = w_flat[:M]

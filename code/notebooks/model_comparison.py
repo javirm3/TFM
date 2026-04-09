@@ -14,6 +14,11 @@ def _():
     from glmhmmt.runtime import get_runtime_paths
 
     paths = get_runtime_paths()
+    from glmhmmt.notebook_support.analysis_common import (
+        load_fit_bundle,
+        load_metrics_dir,
+        model_aliases_for_kind,
+    )
     from glmhmmt.tasks import get_adapter, get_task_options
     from glmhmmt.postprocess import build_trial_df
     from glmhmmt.views import build_views
@@ -28,6 +33,9 @@ def _():
         custom_boxplot,
         get_adapter,
         get_task_options,
+        load_fit_bundle,
+        load_metrics_dir,
+        model_aliases_for_kind,
         mo,
         np,
         paths,
@@ -49,7 +57,7 @@ def _(get_task_options, mo):
 
 
 @app.cell
-def _(paths, pl):
+def _(load_metrics_dir, model_aliases_for_kind, paths, pl):
     _MODEL_LABELS = {
         "glm": "GLM",
         "glmhmm": "GLMHMM",
@@ -57,49 +65,22 @@ def _(paths, pl):
     }
 
     def model_aliases(task: str, kind: str) -> list[str]:
-        p = paths.RESULTS / "fits" / task / kind
-        if not p.exists():
-            return []
-        return sorted([d.name for d in p.iterdir() if d.is_dir()])
-
-    def load_metrics_dir(task_name: str, folder_name: str | None, expected_model_kind: str):
-        if not folder_name:
-            return None
-        d = paths.RESULTS / "fits" / task_name / expected_model_kind / folder_name
-        if not d.exists():
-            return None
-        files = list(d.glob("*_metrics.parquet"))
-        if not files:
-            return None
-
-        frames = []
-        for f in files:
-            try:
-                frames.append(pl.read_parquet(f))
-            except Exception:
-                pass
-        if not frames:
-            return None
-
-        df = pl.concat(frames, how="diagonal")
-        if "nll" in df.columns and "ll_per_trial" not in df.columns:
-            df = df.with_columns(
-                (-pl.col("nll") / pl.col("n_trials")).alias("ll_per_trial")
-            )
-        if "K" not in df.columns:
-            df = df.with_columns(pl.lit(1, dtype=pl.Int64).alias("K"))
-        else:
-            df = df.with_columns(pl.col("K").cast(pl.Int64))
-        if "model_kind" not in df.columns:
-            df = df.with_columns(pl.lit(expected_model_kind).alias("model_kind"))
-        df = df.with_columns(
-            [
-                pl.lit(folder_name).alias("model_alias"),
-                pl.lit(
-                    f"{_MODEL_LABELS.get(expected_model_kind, expected_model_kind)} ({folder_name})"
-                ).alias("model_label"),
-            ]
+        return model_aliases_for_kind(
+            task_name=task,
+            model_kind=kind,
+            local_root=paths.RESULTS / "fits" / task / kind,
         )
+
+    def load_metrics_dir_for_notebook(task_name: str, folder_name: str | None, expected_model_kind: str):
+        df = load_metrics_dir(
+            task_name=task_name,
+            model_kind=expected_model_kind,
+            alias=folder_name,
+            local_root=paths.RESULTS / "fits" / task_name / expected_model_kind,
+            label_map=_MODEL_LABELS,
+        )
+        if df is None:
+            return None
         keep = [
             "subject",
             "K",
@@ -113,7 +94,7 @@ def _(paths, pl):
         return df.select([c for c in keep if c in df.columns])
 
     def model_k_options(task: str, kind: str, alias: str | None) -> list[int]:
-        df = load_metrics_dir(task, alias, kind)
+        df = load_metrics_dir_for_notebook(task, alias, kind)
         if df is None or df.is_empty():
             return []
         return sorted(
@@ -123,7 +104,26 @@ def _(paths, pl):
             }
         )
 
-    return load_metrics_dir, model_aliases, model_k_options
+    return load_metrics_dir_for_notebook, model_aliases, model_k_options
+
+
+@app.cell
+def _(build_views, get_adapter, load_fit_bundle, paths):
+    def load_fit_bundle_for_notebook(task_name, model_kind, alias, K, subjects, scoring_key=None):
+        return load_fit_bundle(
+            task_name=task_name,
+            model_kind=model_kind,
+            alias=alias,
+            k=K,
+            subjects=list(subjects),
+            get_adapter=get_adapter,
+            build_views=build_views,
+            scoring_key=scoring_key,
+            local_root=paths.RESULTS / "fits" / task_name / model_kind,
+        )
+
+    load_fit_bundle = load_fit_bundle_for_notebook
+    return (load_fit_bundle,)
 
 
 @app.cell
@@ -940,66 +940,6 @@ def _(agg, plt, sns):
     fig_acc.tight_layout(rect=(0, 0.08, 1, 1))
     fig_acc
     return
-
-
-@app.cell
-def _(build_views, get_adapter, np, paths):
-    def load_fit_bundle(task_name, model_kind, alias, K, subjects, scoring_key=None):
-        adapter = get_adapter(task_name)
-        fit_dir = paths.RESULTS / "fits" / task_name / model_kind / alias
-        suffix = {
-            "glm": "glm",
-            "glmhmm": "glmhmm",
-            "glmhmmt": "glmhmmt",
-            "glmhmm-t": "glmhmmt",
-        }[model_kind]
-
-        arrays_store = {}
-        for _subj in subjects:
-            candidates = []
-            if model_kind == "glm":
-                candidates.append(fit_dir / f"{_subj}_glm_arrays.npz")
-            else:
-                candidates.extend(
-                    [
-                        fit_dir / f"{_subj}_{suffix}_arrays.npz",
-                        fit_dir / f"{_subj}_K{K}_{suffix}_arrays.npz",
-                    ]
-                )
-            for _path in candidates:
-                if not _path.exists():
-                    continue
-                _data = dict(np.load(_path, allow_pickle=True))
-                _saved_names = {}
-                if "names" in _data and getattr(_data["names"], "shape", None) == ():
-                    _saved_names = _data["names"].item()
-                if "X_cols" in _data:
-                    _data["X_cols"] = list(_data["X_cols"])
-                elif "X_cols" in _saved_names:
-                    _data["X_cols"] = list(_saved_names["X_cols"])
-                if "U_cols" in _data:
-                    _data["U_cols"] = list(_data["U_cols"])
-                elif "U_cols" in _saved_names:
-                    _data["U_cols"] = list(_saved_names["U_cols"])
-                arrays_store[_subj] = _data
-                break
-
-        if not arrays_store:
-            return adapter, {}, {}, {}
-
-        _first = next(iter(arrays_store.values()))
-        names = {}
-        if "X_cols" in _first:
-            names["X_cols"] = list(_first["X_cols"])
-        if "U_cols" in _first:
-            names["U_cols"] = list(_first["U_cols"])
-
-        if scoring_key is not None and hasattr(adapter, "scoring_key"):
-            adapter.scoring_key = scoring_key
-        views = build_views(arrays_store, adapter, K, list(arrays_store.keys()))
-        return adapter, arrays_store, names, views
-
-    return (load_fit_bundle,)
 
 
 @app.cell
